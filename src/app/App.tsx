@@ -1,4 +1,5 @@
 import "./App.css";
+import { Link } from "react-router";
 
 function App() {
   return (
@@ -17,7 +18,7 @@ function App() {
           className="mt-6 rounded-lg bg-blue-600
           px-6 py-3 text-white hover:bg-blue-700"
         >
-          Thank you for your patience!
+          <Link to="/staff">Staff Dashboard</Link>
         </p>
       </div>
     </main>
