@@ -126,13 +126,15 @@ function HeaderButton({
   icon,
   label,
   onClick,
+  className,
 }: {
   icon: "menu" | "close" | "back";
   label: string;
   onClick: () => void;
+  className?: string;
 }) {
   return (
-    <button className={`${styles["icon-button"]}`} aria-label={label} onClick={onClick}>
+    <button className={`${styles["icon-button"]} ${className ?? ""}`} aria-label={label} onClick={onClick}>
       <Icon name={icon} />
     </button>
   );
@@ -198,133 +200,134 @@ function MenuScreen({
   }, []);
 
   return (
-    <main className={`${styles["menu-screen"]}`}>
-      <header className={`${styles["menu-header"]}`}>
-        <HeaderButton icon="menu" label="Open menu" onClick={() => setDrawer(true)} />
-      </header>
-
-      <section className={`${styles["hero"]}`} aria-label="Cafe Shop">
-        <span className="absolute right-3 top-3 rounded-full bg-cream/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-berry-alt shadow-sm backdrop-blur-sm">
-          Table {tableNumber}
-        </span>
-      </section>
-
-      <div className={`${styles["search-row"]}`}>
-        <label className={`${styles["search-field"]}`}>
-          <Icon name="search" size={17} />
-          <input
-            aria-label="Search beverages"
-            placeholder="Search item"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-      </div>
-
-      <nav className={`${styles["category-tabs"]}`} aria-label="Browse menu categories">
-        {categories.map((category) => (
-          <button
-            key={category}
-            className={activeCategory === category ? styles["active"] : ""}
-            onClick={() => chooseCategory(category)}
-          >
-            {category}
-          </button>
-        ))}
-      </nav>
-
-      {categories.map((category) => {
-        const categoryProducts = products.filter(
-          (product) =>
-            product.category === category &&
-            product.name.toLowerCase().includes(search.toLowerCase()),
-        );
-
-        return (
-          <section
-            className={`${styles["products-section"]}`}
-            id={`category-${category.toLowerCase().replace(" ", "-")}`}
-            data-category={category}
-            key={category}
-          >
-            <h1>{category}</h1>
-            <div className={`${styles["product-list"]}`}>
-              {categoryProducts.map((product) => (
-                <button
-                  className={`${styles["product-card"]}`}
-                  key={product.name}
-                  onClick={() => onSelect(product)}
-                >
-                  <span className={`${styles["product-copy"]}`}>
-                    <strong>{product.name}</strong>
-                    <span>{product.description}</span>
-                    <em>${product.price.toFixed(2)}</em>
-                  </span>
-                  <ProductPhoto product={product} />
-                </button>
-              ))}
-              {categoryProducts.length === 0 && (
-                <p className={`${styles["empty-search"]}`}>No matching items in this section.</p>
-              )}
-            </div>
-          </section>
-        );
-      })}
-
-      <button className={`${styles["cart-dock"]}`} onClick={onOpenCart}>
-        <span>
-          <strong>Cart</strong>
-          <small>
-            {cartCount
-              ? `${cartCount} item(s) in your cart - Total: $${total.toFixed(2)}`
-              : "Your cart is empty."}
-          </small>
-        </span>
-        <span className={`${styles["cart-icon"]}`}>
-          <Icon name="cart" />
-        </span>
-      </button>
-
+    <>
       {drawer && (
-        <>
-          <button className={`${styles["drawer-shade"]}`} aria-label="Close menu" onClick={() => setDrawer(false)} />
-          <aside className={`${styles["drawer"]}`}>
-            <div className={`${styles["drawer-heading"]}`}>
-              <div>
-                <span className={`${styles["eyebrow"]}`}>CAFÉ SHOP</span>
-                <h2>Welcome</h2>
-              </div>
-              <HeaderButton icon="close" label="Close menu" onClick={() => setDrawer(false)} />
-            </div>
-            <nav className={`${styles["drawer-categories"]}`} aria-label="Menu categories">
-              <span>Menu categories</span>
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  className={activeCategory === category ? styles["active"] : ""}
-                  onClick={() => chooseCategory(category)}
-                >
-                  {category}
-                </button>
-              ))}
-            </nav>
-            <div className={`${styles["drawer-auth"]}`}>
-              <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
-                Sign up
-              </Button>
-              <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
-                Log in
-              </Button>
-            </div>
-            <div className={`${styles["drawer-links"]}`}>
-              <span>Our menu</span>
-              <span>Find a café</span>
-              <span>Help &amp; support</span>
-            </div>
-          </aside>
-        </>
+        <button className={`${styles["drawer-shade"]}`} aria-label="Close menu" onClick={() => setDrawer(false)} />
       )}
-    </main>
+      <aside className={`${styles["drawer"]} ${drawer ? styles["open"] : ""}`}>
+        <div className={`${styles["drawer-heading"]}`}>
+          <div>
+            <span className={`${styles["eyebrow"]}`}>CAFÉ SHOP</span>
+            <h2>Welcome</h2>
+          </div>
+          <HeaderButton className={styles["drawer-close"]} icon="close" label="Close menu" onClick={() => setDrawer(false)} />
+        </div>
+        <nav className={`${styles["drawer-categories"]}`} aria-label="Menu categories">
+          <span>Menu categories</span>
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={activeCategory === category ? styles["active"] : ""}
+              onClick={() => chooseCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </nav>
+        <div className={`${styles["drawer-auth"]}`}>
+          <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
+            Sign up
+          </Button>
+          <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
+            Log in
+          </Button>
+        </div>
+        <div className={`${styles["drawer-links"]}`}>
+          <span>Our menu</span>
+          <span>Find a café</span>
+          <span>Help &amp; support</span>
+        </div>
+      </aside>
+
+      <main className={`${styles["menu-screen"]}`}>
+        <header className={`${styles["menu-header"]}`}>
+          <HeaderButton className={styles["menu-toggle"]} icon="menu" label="Open menu" onClick={() => setDrawer(true)} />
+          <span className={`${styles["menu-brand"]}`}>Café Shop</span>
+        </header>
+
+        <section className={`${styles["hero"]}`} aria-label="Cafe Shop">
+          <span className="absolute right-3 top-3 rounded-full bg-cream/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-berry-alt shadow-sm backdrop-blur-sm">
+            Table {tableNumber}
+          </span>
+        </section>
+
+        <div className={`${styles["search-row"]}`}>
+          <label className={`${styles["search-field"]}`}>
+            <Icon name="search" size={17} />
+            <input
+              aria-label="Search beverages"
+              placeholder="Search item"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <nav className={`${styles["category-tabs"]}`} aria-label="Browse menu categories">
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={activeCategory === category ? styles["active"] : ""}
+              onClick={() => chooseCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </nav>
+
+        {categories.map((category) => {
+          const categoryProducts = products.filter(
+            (product) =>
+              product.category === category &&
+              product.name.toLowerCase().includes(search.toLowerCase()),
+          );
+
+          return (
+            <section
+              className={`${styles["products-section"]}`}
+              id={`category-${category.toLowerCase().replace(" ", "-")}`}
+              data-category={category}
+              key={category}
+            >
+              <h1>{category}</h1>
+              <div className={`${styles["product-list"]}`}>
+                {categoryProducts.map((product) => (
+                  <button
+                    className={`${styles["product-card"]}`}
+                    key={product.name}
+                    onClick={() => onSelect(product)}
+                  >
+                    <span className={`${styles["product-copy"]}`}>
+                      <strong>{product.name}</strong>
+                      <span>{product.description}</span>
+                      <em>${product.price.toFixed(2)}</em>
+                    </span>
+                    <ProductPhoto product={product} />
+                  </button>
+                ))}
+                {categoryProducts.length === 0 && (
+                  <p className={`${styles["empty-search"]}`}>No matching items in this section.</p>
+                )}
+              </div>
+            </section>
+          );
+        })}
+
+        <button className={`${styles["cart-dock"]}`} onClick={onOpenCart}>
+          <span>
+            <strong>Cart</strong>
+            <small>
+              {cartCount
+                ? `${cartCount} item(s) in your cart - Total: $${total.toFixed(2)}`
+                : "Your cart is empty."}
+            </small>
+          </span>
+          <span className={`${styles["cart-icon"]}`}>
+            <Icon name="cart" />
+          </span>
+        </button>
+      </main>
+    </>
   );
 }
 
@@ -637,6 +640,13 @@ function AuthScreen({
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  // Each provider will map to `supabase.auth.signInWithOAuth({ provider })`;
+  // the form below is the email/password path. Both currently just continue the flow.
+  const providers = [
+    { id: "apple", label: "Apple" },
+    { id: "google", label: "Google" },
+    { id: "facebook", label: "Facebook" },
+  ] as const;
 
   return (
     <main className={`${styles["page-screen"]} auth-screen`}>
@@ -647,9 +657,27 @@ function AuthScreen({
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
-          ? "Save your details for quicker ordering next time."
-          : "Welcome back. Enter your account details to continue."}
+          ? "Create your account to order faster next time — with Apple, Google, Facebook, or email."
+          : "Welcome back. Continue with Apple, Google, Facebook, or email."}
       </p>
+      <div className={`${styles["auth-social"]}`}>
+        {providers.map((provider) => (
+          <button
+            key={provider.id}
+            type="button"
+            className={`${styles["auth-social-button"]}`}
+            onClick={onContinue}
+          >
+            <Icon name={provider.id} size={18} />
+            <span>
+              {signup ? "Sign up" : "Log in"} with {provider.label}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className={`${styles["auth-divider"]}`} role="separator">
+        <span>or continue with email</span>
+      </div>
       <form
         className={`${styles["auth-form"]}`}
         onSubmit={(event) => {
@@ -677,12 +705,6 @@ function AuthScreen({
           Email
           <input type="email" autoComplete="email" required />
         </label>
-        {signup && (
-          <label>
-            Phone number
-            <input type="tel" autoComplete="tel" required />
-          </label>
-        )}
         <label>
           Password
           <input
@@ -756,7 +778,7 @@ export default function App() {
   const menu = () => setScreen("menu");
 
   return (
-    <div className={`${styles["app-shell"]}`}>
+    <div className={`${styles["app-shell"]} ${screen === "menu" ? styles["with-sidebar"] : ""}`}>
       {screen === "menu" && (
         <MenuScreen
           cartCount={cartCount}

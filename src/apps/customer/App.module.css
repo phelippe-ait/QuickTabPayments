@@ -18,18 +18,18 @@
 
 .app-shell {
   position: relative;
-  width: min(100%, 430px);
+  width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
   overflow: clip;
   background: var(--ivory);
-  box-shadow: 0 0 0 1px rgba(49, 47, 44, .48), 0 16px 50px rgba(35, 32, 28, .18);
 }
 
 .menu-screen, .page-screen { min-height: 100vh; min-height: 100dvh; background: var(--ivory); }
 .menu-screen { position: relative; padding: 0 calc(17px + var(--safe-right)) calc(92px + var(--safe-bottom)) calc(17px + var(--safe-left)); }
-.menu-header { height: calc(56px + var(--safe-top)); padding-top: var(--safe-top); display: flex; align-items: center; }
+.menu-header { height: calc(56px + var(--safe-top)); padding-top: var(--safe-top); display: flex; align-items: center; gap: 14px; }
+.menu-brand { display: none; color: var(--color-muted-2); font-size: 18px; letter-spacing: .01em; }
 .icon-button {
   width: 34px; height: 34px; padding: 0; border: 0; background: transparent;
   display: grid; place-items: center; cursor: pointer; border-radius: 50%;
@@ -38,9 +38,9 @@
 
 .hero {
   position: relative; height: 157px; border-radius: 11px; overflow: hidden;
-  background-image: url("/assets/reference-home.png");
-  background-size: 430px auto;
-  background-position: -28px -67px;
+  background-image: url("/assets/menu-hero.jpg");
+  background-size: cover;
+  background-position: center;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
 }
 .brand-card {
@@ -71,10 +71,13 @@
   display: grid; grid-template-columns: 59% 41%; text-align: left; background: white; cursor: pointer;
 }
 .product-card:hover { background: var(--color-paper); }
-.product-copy { display: flex; flex-direction: column; min-width: 0; padding: 16px 14px 13px; }
-.product-copy strong { color: var(--berry); font-size: 13px; margin-bottom: 10px; }
-.product-copy > span { font-size: 11.5px; line-height: 1.75; color: var(--color-muted-2); }
-.product-copy em { font-style: normal; color: var(--berry); font-size: 11.5px; margin-top: auto; }
+.product-copy { display: flex; flex-direction: column; min-width: 0; overflow: hidden; padding: 16px 14px 13px; }
+.product-copy strong { flex: 0 0 auto; color: var(--berry); font-size: 13px; margin-bottom: 5px; }
+.product-copy > span {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+  font-size: 11.5px; line-height: 1.75; color: var(--color-muted-2);
+}
+.product-copy em { flex: 0 0 auto; font-style: normal; color: var(--berry); font-size: 11.5px; margin-top: auto; padding-top: 10px; }
 .product-photo {
   height: 100%;
   background-repeat: no-repeat;
@@ -100,7 +103,8 @@
 }
 
 .drawer-shade, .modal-shade { position: fixed; inset: 0; z-index: 30; border: 0; background: rgba(38,37,35,.36); backdrop-filter: blur(2px); }
-.drawer { position: fixed; z-index: 31; top: 0; bottom: 0; left: max(var(--safe-left), calc(50% - 215px)); width: min(calc(86vw - var(--safe-left) - var(--safe-right)), 345px); background: var(--ivory); padding: calc(32px + var(--safe-top)) 25px calc(32px + var(--safe-bottom)); box-shadow: 8px 0 30px rgba(30,27,24,.18); display: flex; flex-direction: column; }
+.drawer { position: fixed; z-index: 31; top: 0; bottom: 0; left: var(--safe-left); width: min(calc(86vw - var(--safe-left) - var(--safe-right)), 345px); background: var(--ivory); padding: calc(32px + var(--safe-top)) 25px calc(32px + var(--safe-bottom)); box-shadow: 8px 0 30px rgba(30,27,24,.18); display: flex; flex-direction: column; visibility: hidden; transform: translateX(-120%); transition: transform .25s ease, visibility .25s ease; }
+.drawer.open { visibility: visible; transform: translateX(0); }
 .drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; }
 .eyebrow { color: var(--berry); font-size: 10px; letter-spacing: .16em; font-weight: 700; }
 .drawer h2 { margin: 5px 0 0; color: var(--color-muted-2); font-size: 25px; }
@@ -224,23 +228,138 @@
 .auth-header h1 { text-align: center; }
 .auth-header-spacer { width: 34px; }
 .auth-intro { margin: 12px 2px 24px; color: var(--color-muted); font-size: 12px; line-height: 1.6; text-align: center; }
+.auth-social { display: flex; flex-direction: column; gap: 10px; }
+.auth-social-button {
+  width: 100%; min-height: 46px; padding: 0 16px; border: 1px solid var(--color-line); border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: #fff; color: var(--color-muted-2); font-size: 13px; font-weight: 600;
+  box-shadow: 0 2px 6px rgba(50,42,36,.05); transition: border-color .18s ease, background .18s ease;
+}
+.auth-social-button:hover { border-color: var(--color-placeholder); background: var(--color-paper); }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--color-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.auth-divider::before, .auth-divider::after { content: ""; height: 1px; flex: 1; background: var(--color-line); }
 .auth-form { padding: 20px 16px; border: 1px solid var(--color-line-2); border-radius: 9px; background: rgba(255,255,255,.35); box-shadow: var(--shadow); }
 .auth-form > label, .auth-name-row label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; color: var(--color-muted-2); font-size: 11px; font-weight: 600; }
 .auth-form input { width: 100%; height: 42px; border: 1px solid var(--color-line); border-radius: 7px; background: white; padding: 0 12px; color: var(--color-muted-2); font-weight: 400; }
 .auth-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .auth-error { margin: -7px 0 14px; color: var(--color-berry-alt); font-size: 11px; }
 
-@media (min-width: 700px) {
-  .app-shell, .menu-screen, .page-screen { min-height: calc(100vh - 48px); }
-  .cart-dock, .checkout-dock { bottom: calc(48px + var(--safe-bottom)); }
-  .category-tabs { top: calc(24px + var(--safe-top)); }
-  .products-section h1 { top: calc(79px + var(--safe-top)); }
+/* Large screens — present the app as a regular responsive page instead of a phone frame.
+   Everything below this breakpoint keeps the phone layout defined above. */
+@media (min-width: 768px) {
+  .app-shell {
+    width: 100%;
+    max-width: 1500px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  /* Menu screen becomes a two-column layout with a persistent sidebar. */
+  .app-shell.with-sidebar {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .menu-screen {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 40px calc(120px + var(--safe-bottom));
+  }
+
+  .page-screen {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: calc(36px + var(--safe-top)) 40px calc(120px + var(--safe-bottom));
+  }
+
+  .menu-header { height: calc(72px + var(--safe-top)); }
+  .menu-brand { display: block; }
+
+  .hero {
+    height: 300px;
+    border-radius: 18px;
+    /* The wide page uses the higher-resolution banner photo. */
+    background-image: url("/assets/cafe-hero.jpg");
+    background-size: cover;
+    background-position: center;
+  }
+
+  .search-row { margin: 24px 0 18px; max-width: 640px; }
+  .search-field { height: 48px; }
+
+  .category-tabs {
+    top: var(--safe-top);
+    margin: 0 -40px 16px;
+    padding: 12px 40px;
+  }
+  .category-tabs button { padding: 10px 8px; font-size: 12px; }
+
+  .products-section { scroll-margin-top: 64px; padding-bottom: 48px; }
+  .products-section h1 {
+    top: calc(64px + var(--safe-top));
+    margin: 0 -40px 16px;
+    padding: 12px 42px;
+    font-size: 20px;
+  }
+
+  .product-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 18px;
+    border-radius: 0;
+    overflow: visible;
+    box-shadow: none;
+  }
+  .product-card {
+    height: 168px;
+    grid-template-columns: 58% 42%;
+    border: 1px solid var(--color-line-2);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 3px 10px rgba(40, 35, 30, .05);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(40, 35, 30, .1); }
+
+  .cart-dock, .checkout-dock { bottom: 32px; width: min(calc(100% - 80px), 460px); }
+
+  /* The drawer stays put as a desktop sidebar instead of sliding over the page. */
+  .with-sidebar .drawer {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    left: auto;
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    visibility: visible;
+    transform: none;
+    background: var(--color-paper);
+    border-right: 1px solid var(--color-line-2);
+    box-shadow: none;
+  }
+  .with-sidebar .menu-screen { grid-column: 2; grid-row: 1; }
+
+  .menu-toggle, .drawer-close, .drawer-shade { display: none; }
+
+  .product-modal { width: min(100%, 440px); }
+
+  .confirmation { max-width: 640px; }
+  .auth-header, .auth-intro, .auth-social, .auth-divider, .auth-form { max-width: 460px; margin-left: auto; margin-right: auto; }
 }
 
 @media (max-width: 360px) {
   .menu-screen { padding-left: 14px; padding-right: 14px; }
   .hero { height: 125px; background-size: 334px auto; background-position: -22px -52px; }
   .category-tabs { margin-bottom: 24px; }
-  .product-card { height: 125px; }
+  .product-card { height: 138px; }
   .product-modal { padding-left: 18px; padding-right: 18px; }
 }
