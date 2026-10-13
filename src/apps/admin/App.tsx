@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import QRCode from "qrcode"
 import styles from "./App.module.css";
 import { Icon } from "@shared/ui/Icon";
+import { buttonVariants } from "@shared/ui/Button";
 
 type Section = "catalog" | "tables" | "users" | "orders"
 type MenuItem = {
@@ -170,10 +171,10 @@ function ConfirmDialog({ confirmation, onClose }: { confirmation: Confirmation; 
         <h2 id="confirmation-title">{confirmation.title}</h2>
         <p className={`${styles["modal-description"]}`}>{confirmation.description}</p>
         <div className={`${styles["modal-actions"]}`}>
-          <button type="button" className={`${styles["secondary-button"]}`} onClick={onClose}>Cancel</button>
+          <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button>
           <button
             type="button"
-            className={`${styles["danger-button"]}`}
+            className={buttonVariants({ variant: "danger" })}
             onClick={() => {
               confirmation.onConfirm()
               onClose()
@@ -410,8 +411,8 @@ function TableQrCode({ tableNumber, onNotify }: { tableNumber: string; onNotify:
             <img src={source} alt={`Large QR code for table ${tableNumber}`} />
             <code>{getTableUrl(tableNumber)}</code>
             <div className={`${styles["modal-actions"]}`}>
-              <button type="button" className={`${styles["secondary-button"]}`} onClick={async () => { await navigator.clipboard.writeText(getTableUrl(tableNumber)); onNotify("Table link copied") }}>Copy link</button>
-              <button type="button" className={`${styles["primary-button"]}`} onClick={downloadQrCode}><Icon name="download" size={15} />Download PNG</button>
+              <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => { await navigator.clipboard.writeText(getTableUrl(tableNumber)); onNotify("Table link copied") }}>Copy link</button>
+              <button type="button" className={buttonVariants({ variant: "primary" })} onClick={downloadQrCode}><Icon name="download" size={15} />Download PNG</button>
             </div>
           </section>
         </div>,
@@ -724,8 +725,8 @@ function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
             )}
             {selectedOrder.status !== "Canceled" && refundableBalance > 0 && !refundMode && (
               <div className={`${styles["refund-actions"]}`}>
-                <button type="button" className={`${styles["secondary-button"]}`} onClick={() => setRefundMode("partial")}>Partial refund</button>
-                <button type="button" className={`${styles["secondary-button"]}`} onClick={() => setRefundMode("custom")}>Other amount</button>
+                <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("partial")}>Partial refund</button>
+                <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("custom")}>Other amount</button>
                 <button type="button" className={`${styles["refund-button"]}`} onClick={() => setRefundMode("full")}>Refund full order</button>
               </div>
             )}
@@ -743,7 +744,7 @@ function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
                   </label>
                 ) : <p>{refundMode === "full" ? `The remaining balance will be returned to ${selectedOrder.payment}.` : "Choose the quantity to refund beside each item."}</p>}
                 <div>
-                  <button type="button" className={`${styles["secondary-button"]}`} onClick={() => { setRefundMode(null); setRefundQuantities({}); setCustomRefundAmount("") }}>Cancel</button>
+                  <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { setRefundMode(null); setRefundQuantities({}); setCustomRefundAmount("") }}>Cancel</button>
                   <button type="button" className={`${styles["refund-button"]}`} disabled={refundAmount <= 0 || refundAmount > refundableBalance} onClick={() => setConfirmingRefund(true)}>Confirm refund</button>
                 </div>
               </div>
@@ -778,7 +779,7 @@ function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
 }
 
 function PageHeader({ eyebrow, title, description, action, onAction }: { eyebrow: string; title: string; description: string; action?: string; onAction?: () => void }) {
-  return <header className={`${styles["page-header"]}`}><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action && <button className={`${styles["primary-button"]}`} onClick={onAction}><Icon name="plus" size={17} />{action}</button>}</header>
+  return <header className={`${styles["page-header"]}`}><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action && <button className={buttonVariants({ variant: "primary" })} onClick={onAction}><Icon name="plus" size={17} />{action}</button>}</header>
 }
 
 function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem | null; sections: string[]; onClose: () => void; onSave: (item: MenuItem) => void }) {
@@ -830,7 +831,7 @@ function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem | null;
           <label className={`${styles["wide"]}`}>Description<textarea required value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="A short description of the item" /></label>
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Available to order</strong><small>Show this item on the customer menu</small></span><input type="checkbox" checked={form.available} onChange={(event) => setForm({ ...form, available: event.target.checked })} /></label>
         </div>
-        <div className={`${styles["modal-actions"]}`}><button type="button" className={`${styles["secondary-button"]}`} onClick={onClose}>Cancel</button><button className={`${styles["primary-button"]}`} type="submit">{item ? "Save changes" : "Add item"}</button></div>
+        <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{item ? "Save changes" : "Add item"}</button></div>
       </form>
     </div>
   )
@@ -901,7 +902,7 @@ function SectionsModal({
             </span>
           </label>
         </div>
-        <div className={`${styles["modal-actions"]}`}><button type="button" className={`${styles["secondary-button"]}`} onClick={onClose}>Cancel</button><button className={`${styles["primary-button"]}`} type="submit">Save sections</button></div>
+        <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">Save sections</button></div>
       </form>
     </div>
   )
@@ -984,7 +985,7 @@ function TableModal({ table, tables, onClose, onSave }: { table: CafeTable | nul
           )}
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Available to guests</strong><small>Mark this table as ready for seating</small></span><input type="checkbox" checked={form.available} onChange={(event) => setForm({ ...form, available: event.target.checked })} /></label>
         </div>
-        <div className={`${styles["modal-actions"]}`}><button type="button" className={`${styles["secondary-button"]}`} onClick={onClose}>Cancel</button><button className={`${styles["primary-button"]}`} type="submit">{table ? "Save changes" : "Add table"}</button></div>
+        <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{table ? "Save changes" : "Add table"}</button></div>
       </form>
     </div>
   )
@@ -1008,7 +1009,7 @@ function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () =
           <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option>Staff</option><option>Manager</option><option>Admin</option></select></label>
           <label>Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as User["status"] })}><option>Active</option><option>Inactive</option></select></label>
         </div>
-        <div className={`${styles["modal-actions"]}`}><button type="button" className={`${styles["secondary-button"]}`} onClick={onClose}>Cancel</button><button className={`${styles["primary-button"]}`} type="submit">{user ? "Save changes" : "Add user"}</button></div>
+        <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{user ? "Save changes" : "Add user"}</button></div>
       </form>
     </div>
   )

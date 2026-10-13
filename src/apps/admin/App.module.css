@@ -47,11 +47,6 @@ main { min-width: 0; background: var(--color-cream-3); }
 .page-header p, .modal-kicker { margin: 0 0 7px; color: var(--color-berry); font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
 .page-header h1 { margin: 0 0 8px; color: var(--color-ink-soft); font-family: "DM Serif Display", serif; font-size: clamp(36px, 4vw, 48px); font-weight: 400; line-height: 1; }
 .page-header span { color: var(--color-muted); font-size: 14px; }
-.primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 17px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 700; transition: .2s ease; }
-.primary-button { color: #fff; background: var(--color-berry); box-shadow: 0 7px 16px rgba(200,77,100,.18); }
-.primary-button:hover { background: var(--color-berry-strong); transform: translateY(-1px); }
-.secondary-button { color: var(--color-ink-mid); border: 1px solid var(--color-line); background: #fff; }
-
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 27px 0 24px; }
 .toolbar.single { justify-content: flex-start; }
 .search-box { display: flex; align-items: center; gap: 10px; width: 310px; height: 42px; padding: 0 14px; color: var(--color-placeholder); border: 1px solid var(--color-line-soft); border-radius: 8px; background: #fff; box-shadow: 0 3px 9px rgba(61,55,47,.04); }
@@ -255,8 +250,6 @@ main { min-width: 0; background: var(--color-cream-3); }
 .modal-description { margin: 6px 0 24px; color: var(--color-muted); font-size: 12px; }
 .confirmation-backdrop { z-index: 70; }
 .confirmation-modal { width: min(430px, 100%); }
-.danger-button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; padding: 0 17px; border: 0; border-radius: 9px; color: #fff; background: var(--color-berry); font-size: 12px; font-weight: 700; }
-.danger-button:hover { background: var(--color-berry-strong); }
 .qr-modal { width: min(470px, 100%); text-align: center; }
 .qr-modal > img { display: block; width: min(280px, 80%); margin: 5px auto 17px; border: 10px solid #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(55,51,58,.1); }
 .qr-modal code { display: block; overflow: hidden; padding: 10px 12px; border-radius: 7px; color: var(--color-muted-2); background: var(--color-cream-2); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
