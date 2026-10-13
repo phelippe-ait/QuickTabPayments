@@ -2,23 +2,9 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import QRCode from "qrcode"
 import styles from "./App.module.css";
+import { Icon } from "@shared/ui/Icon";
 
 type Section = "catalog" | "tables" | "users" | "orders"
-type IconName =
-  | "catalog"
-  | "tables"
-  | "users"
-  | "orders"
-  | "search"
-  | "plus"
-  | "edit"
-  | "trash"
-  | "close"
-  | "chevron"
-  | "logout"
-  | "coffee"
-  | "download"
-
 type MenuItem = {
   id: number
   name: string
@@ -155,24 +141,6 @@ function getRefundStatus(order: { total: string; refundedAmount: number }) {
   return order.refundedAmount >= Number(order.total.replace("$", "")) ? "Refunded" : "Partial refund"
 }
 
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    catalog: <><path d="M4 5.5h16M4 12h16M4 18.5h16" /><circle cx="7" cy="5.5" r=".7" fill="currentColor" /><circle cx="7" cy="12" r=".7" fill="currentColor" /><circle cx="7" cy="18.5" r=".7" fill="currentColor" /></>,
-    tables: <><path d="M4 9h16M6 9V5h12v4M7 9v11M17 9v11M5 20h4M15 20h4" /></>,
-    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
-    orders: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z" /><path d="M9 7h6M9 11h6M9 15h3" /></>,
-    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    plus: <path d="M12 5v14M5 12h14" />,
-    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
-    trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    chevron: <path d="m9 18 6-6-6-6" />,
-    logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /></>,
-    coffee: <><path d="M4 7h13v7a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V7Z" /><path d="M17 9h1a3 3 0 0 1 0 6h-1M7 3v2M11 3v2M15 3v2" /></>,
-    download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
-  }
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
-}
 
 function SelectionBar({ count, children, onClear }: { count: number; children: React.ReactNode; onClear: () => void }) {
   return (
@@ -824,14 +792,14 @@ function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem | null;
         <div className={`${styles["form-grid"]}`}>
           <label className={`${styles["wide"]}`}>
             Item image
-            <span className="mt-2.5 grid grid-cols-[112px_1fr] gap-4 rounded-[10px] border border-[#ded8cf] bg-white p-3.5 max-[480px]:grid-cols-1">
+            <span className="mt-2.5 grid grid-cols-[112px_1fr] gap-4 rounded-[10px] border border-line bg-white p-3.5 max-[480px]:grid-cols-1">
               <img className="h-24 w-28 rounded-lg bg-[#eee8df] object-cover max-[480px]:h-36 max-[480px]:w-full" src={form.image} alt="Menu item preview" />
               <span className="flex min-w-0 flex-col items-start justify-center">
                 <span className="mb-1 block text-[12px] font-bold text-[#5b5661]">{item ? "Replace image" : "Upload an image"}</span>
-                <span className="mb-3 block text-[10px] leading-[1.5] font-normal text-[#969198]">
+                <span className="mb-3 block text-[10px] leading-[1.5] font-normal text-muted">
                   Use a landscape image in a 3:2 ratio, ideally 1200 × 800 px. JPG, PNG, or WebP up to 5 MB. Keep the food centered so it crops well on menu cards.
                 </span>
-                <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-[#d9d3ca] bg-[#f9f6ef] px-3 text-[11px] font-bold text-[#625e68] transition-colors hover:border-[#c84d64] hover:text-[#c84d64]">
+                <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-[#d9d3ca] bg-[#f9f6ef] px-3 text-[11px] font-bold text-[#625e68] transition-colors hover:border-berry hover:text-berry">
                   Choose image
                   <input
                     className="sr-only"

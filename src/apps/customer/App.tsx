@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
+import { Icon } from "@shared/ui/Icon";
 
 type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup";
 type Category = "Hot Beverages" | "Breakfast" | "Lunch";
@@ -120,39 +121,6 @@ const orderStatuses = [
   },
 ] as const;
 
-function Icon({
-  name,
-  size = 20,
-}: {
-  name: "menu" | "search" | "sliders" | "cart" | "close" | "back" | "card";
-  size?: number;
-}) {
-  const paths = {
-    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
-    search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>,
-    sliders: <><path d="M5 7h14M5 12h14M5 17h14" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="11" cy="17" r="2" /></>,
-    cart: <><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L20 8H7" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    back: <path d="m15 18-6-6 6-6M9 12h11" />,
-    card: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h3" /></>,
-  };
-  return (
-    <svg
-      aria-hidden="true"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
-
 function HeaderButton({
   icon,
   label,
@@ -235,7 +203,7 @@ function MenuScreen({
       </header>
 
       <section className={`${styles["hero"]}`} aria-label="Cafe Shop">
-        <span className="absolute right-3 top-3 rounded-full bg-[#f7f4ea]/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#ba4f60] shadow-sm backdrop-blur-sm">
+        <span className="absolute right-3 top-3 rounded-full bg-cream/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-berry-alt shadow-sm backdrop-blur-sm">
           Table {tableNumber}
         </span>
       </section>

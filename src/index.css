@@ -55,6 +55,8 @@
   --color-info-soft: #e3ebf3;
   --color-danger: #9b5252;
   --color-danger-soft: #f3e4e4;
+  --color-neutral: #625d78;
+  --color-neutral-soft: #e8e7ee;
 
   /* Radii */
   --radius-card: 22px;

@@ -2,7 +2,7 @@
 
 .eyebrow,
 .detail-label {
-  color: #969198;
+  color: var(--color-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.17em;
@@ -23,29 +23,7 @@
 
 .nav-button:hover {
   background: #f4eee8;
-  color: #b84057;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 6px 9px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.status-pill.occupied {
-  background: #f6e5e8;
-  color: #b84057;
-}
-
-.status-pill.available {
-  background: #e7eee4;
-  color: #678362;
+  color: var(--color-berry-strong);
 }
 
 @keyframes slide-in {
