@@ -328,6 +328,11 @@
 
   .cart-dock, .checkout-dock { bottom: 32px; width: min(calc(100% - 80px), 460px); }
 
+  /* Centre the cart bar over the menu column (offset by half the sidebar) so it
+     never drifts over the sidebar. The checkout dock has no sidebar, so it stays
+     viewport-centred. */
+  .with-sidebar .cart-dock { left: calc(50% + 132px); }
+
   /* The drawer stays put as a desktop sidebar instead of sliding over the page. */
   .with-sidebar .drawer {
     position: sticky;
