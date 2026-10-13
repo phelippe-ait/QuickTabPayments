@@ -1,21 +1,33 @@
+/* eslint-disable react-refresh/only-export-components -- route configuration file */
+import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter } from "react-router";
+import { cn } from "@shared/lib/cn";
 
-import StaffDashboard from "../features/Staff/StaffDashboard";
-import App from "../app/App";
+const CustomerApp = lazy(() => import("../apps/customer/App"));
+const StaffApp = lazy(() => import("../apps/staff/App"));
+const AdminApp = lazy(() => import("../apps/admin/App"));
+
+function withSuspense(node: ReactNode) {
+  return (
+    <Suspense fallback={<div className={cn("min-h-screen", "bg-sand")} />}>
+      {node}
+    </Suspense>
+  );
+}
 
 const router = createBrowserRouter([
   {
     path: "/",
-    Component: App,
+    element: withSuspense(<CustomerApp />),
   },
   {
     path: "/staff",
-    Component: StaffDashboard,
+    element: withSuspense(<StaffApp />),
   },
-  //   {
-  //     path: "/order/:orderId",
-  //     Component: OrderConfirmation,
-  //   },
+  {
+    path: "/admin",
+    element: withSuspense(<AdminApp />),
+  },
 ]);
 
 export default router;

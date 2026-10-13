@@ -19,4 +19,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Migrated Figma-generated prototype screens. These sizeable stateful
+    // components intentionally synchronise selection/seed state inside
+    // effects; the project-level rule is not enforced for this imported code.
+    files: ['src/apps/**/*.tsx'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
 ])

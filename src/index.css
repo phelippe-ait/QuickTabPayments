@@ -1,1 +1,122 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Design tokens (single source of truth)
+ *
+ * These are Tailwind v4 theme tokens, so they generate utilities:
+ *   --color-*  ->  bg-berry  text-ink  border-line
+ *   --font-*   ->  font-sans  font-serif  font-ui
+ *   --radius-* ->  rounded-card
+ *   --shadow-* ->  shadow-card
+ *
+ * New UI must use these tokens (e.g. `bg-berry`, `text-ink`), never raw hex.
+ * They also enable per-restaurant theming later: override the --color-* values
+ * per tenant instead of editing components.
+ * ------------------------------------------------------------------------- */
+@theme {
+  /* Typography */
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-serif: "DM Serif Display", ui-serif, Georgia, serif;
+  --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Brand — berry */
+  --color-berry: #c84d64;
+  --color-berry-strong: #b84057;
+  --color-berry-soft: #f6e5e8;
+  --color-berry-alt: #ba4f60;
+
+  /* Surfaces — cream / paper */
+  --color-cream: #f7f4ea;
+  --color-cream-2: #f3eee6;
+  --color-cream-3: #f9f6ed;
+  --color-paper: #fffdfa;
+  --color-sand: #e8e4dc;
+
+  /* Text — ink */
+  --color-ink: #332d29;
+  --color-ink-dark: #37333a;
+  --color-ink-soft: #595663;
+  --color-ink-mid: #625e68;
+  --color-muted: #969198;
+  --color-muted-2: #777181;
+  --color-placeholder: #aaa6ad;
+
+  /* Borders / dividers */
+  --color-line: #ded8cf;
+  --color-line-soft: #e6e1d8;
+  --color-line-2: #e4e3e1;
+
+  /* Status */
+  --color-sage: #73956f;
+  --color-sage-strong: #678362;
+  --color-sage-soft: #e7eee4;
+  --color-amber: #a66a25;
+  --color-amber-soft: #f7ead8;
+  --color-info: #4f718f;
+  --color-info-soft: #e3ebf3;
+  --color-danger: #9b5252;
+  --color-danger-soft: #f3e4e4;
+  --color-neutral: #625d78;
+  --color-neutral-soft: #e8e7ee;
+
+  /* Radii */
+  --radius-card: 22px;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 7px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card: 0 5px 12px rgba(50, 42, 36, 0.1);
+  --shadow-float: 0 16px 50px rgba(35, 32, 28, 0.18);
+  --shadow-drawer: 8px 0 30px rgba(30, 27, 24, 0.18);
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: var(--color-ink-soft);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-sand);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+button {
+  cursor: pointer;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(200, 77, 100, 0.38);
+  outline-offset: 2px;
+}

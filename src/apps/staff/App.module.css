@@ -1,0 +1,51 @@
+/* Staff app — component classes (Tailwind utilities + global resets live in src/index.css) */
+
+.eyebrow,
+.detail-label {
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.nav-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--color-ink-mid);
+  font-size: 13px;
+  font-weight: 700;
+  transition: 180ms ease;
+}
+
+.nav-button:hover {
+  background: var(--color-cream-2);
+  color: var(--color-berry-strong);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-scroll {
+  animation: slide-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
