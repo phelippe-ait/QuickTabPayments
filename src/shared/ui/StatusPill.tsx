@@ -2,29 +2,21 @@ import type { ReactNode } from "react";
 import { cn } from "@shared/lib/cn";
 
 /**
- * Status tones shared across the product.
+ * Colour-semantic status tones shared across the product.
  *
- * `occupied`/`available` describe a table's seating state; the rest mirror the
- * kitchen / order lifecycle. Colours come from design tokens, so a restaurant
- * theme only needs to override the tokens.
+ * Tones describe *meaning by colour*, not a specific workflow, so one set
+ * serves every domain: e.g. `success` = completed/available/ready, `primary` =
+ * brand accent, `danger` = cancelled/unavailable.
  */
-export type StatusTone =
-  | "occupied"
-  | "available"
-  | "new"
-  | "preparing"
-  | "ready"
-  | "completed"
-  | "cancelled";
+export type StatusTone = "primary" | "success" | "warning" | "info" | "danger" | "neutral";
 
 const toneClasses: Record<StatusTone, string> = {
-  occupied: "bg-berry-soft text-berry-strong",
-  available: "bg-sage-soft text-sage-strong",
-  new: "bg-neutral-soft text-neutral",
-  preparing: "bg-amber-soft text-amber",
-  ready: "bg-sage-soft text-sage-strong",
-  completed: "bg-info-soft text-info",
-  cancelled: "bg-danger-soft text-danger",
+  primary: "bg-berry-soft text-berry-strong",
+  success: "bg-sage-soft text-sage-strong",
+  warning: "bg-amber-soft text-amber",
+  info: "bg-info-soft text-info",
+  danger: "bg-danger-soft text-danger",
+  neutral: "bg-neutral-soft text-neutral",
 };
 
 export type StatusPillProps = {

@@ -679,7 +679,7 @@ function TableCard({
             {table.id.toString().padStart(2, "0")}
           </p>
         </div>
-        <StatusPill tone={table.status}>{table.status}</StatusPill>
+        <StatusPill tone={table.status === "occupied" ? "primary" : "success"}>{table.status}</StatusPill>
       </div>
       {occupied ? (
         <div className="mt-7 flex items-end justify-between">
@@ -763,7 +763,7 @@ function TableEditor({
               Capacity · {table.seats} guests
             </p>
           </div>
-          <StatusPill tone={status} withDot={false}>
+          <StatusPill tone={status === "occupied" ? "primary" : "success"} withDot={false}>
             {status}
           </StatusPill>
         </div>
@@ -1199,11 +1199,11 @@ function KitchenStatusConfirmation({
 
 function KitchenStatusPill({ status }: { status: KitchenStatus }) {
   const tones: Record<KitchenStatus, StatusTone> = {
-    New: "new",
-    Preparing: "preparing",
-    Ready: "ready",
-    Completed: "completed",
-    Cancelled: "cancelled",
+    New: "neutral",
+    Preparing: "warning",
+    Ready: "success",
+    Completed: "info",
+    Cancelled: "danger",
   }
 
   return <StatusPill tone={tones[status]}>{status}</StatusPill>
@@ -1249,7 +1249,7 @@ function HistoryOrderDrawer({
               {order.table} · {order.guest}
             </p>
           </div>
-          <StatusPill tone={completed ? "available" : "occupied"}>
+          <StatusPill tone={completed ? "success" : "primary"}>
             {order.status}
           </StatusPill>
         </div>
@@ -1684,7 +1684,7 @@ function ReservationDetailDrawer({
               {reservation.date} · {reservation.time}
             </p>
           </div>
-          <StatusPill tone={isCancelled ? "cancelled" : isUpcoming ? "available" : "completed"}>
+          <StatusPill tone={isCancelled ? "danger" : "success"}>
             {isCancelled ? "Cancelled" : isUpcoming ? "Upcoming" : "Completed"}
           </StatusPill>
         </div>

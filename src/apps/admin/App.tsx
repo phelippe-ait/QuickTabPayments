@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import QRCode from "qrcode"
 import styles from "./App.module.css";
 import { Icon } from "@shared/ui/Icon";
+import { StatusPill, type StatusTone } from "@shared/ui/StatusPill";
 import { buttonVariants } from "@shared/ui/Button";
 
 type Section = "catalog" | "tables" | "users" | "orders"
@@ -247,7 +248,7 @@ function Catalog({
               <label className={`${styles["card-select"]}`} aria-label={`Select ${item.name}`}>
                 <input type="checkbox" checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
               </label>
-              <span className={`${styles["availability"]} ${item.available ? "" : styles["unavailable"]}`}>{item.available ? "Available" : "Unavailable"}</span>
+              <StatusPill tone={item.available ? "success" : "neutral"} withDot={false} className="absolute left-[45px] top-3">{item.available ? "Available" : "Unavailable"}</StatusPill>
               <div className={`${styles["card-actions"]}`}>
                 <button aria-label={`Edit ${item.name}`} onClick={() => onEdit(item)}><Icon name="edit" size={16} /></button>
                 <button className={`${styles["danger"]}`} aria-label={`Delete ${item.name}`} onClick={() => onDelete(item.id)}><Icon name="trash" size={16} /></button>
@@ -500,6 +501,12 @@ function UsersView({
   )
 }
 
+const orderTone: Record<string, StatusTone> = {
+  Active: "info",
+  Completed: "success",
+  Canceled: "danger",
+};
+
 function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
   const [orderList, setOrderList] = useState(starterOrders)
   const [query, setQuery] = useState("")
@@ -676,8 +683,8 @@ function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
             <div><span>{order.date}</span>{order.status === "Active" && <small className={`${styles["running-time"]}`}>Running {formatRunningTime(order.date, now)}</small>}</div>
             <strong>{order.total}</strong>
             <div className={`${styles["order-statuses"]}`}>
-              <span className={`${styles["order-status"]} ${styles[order.status.toLowerCase()]}`}>{order.status}</span>
-              {getRefundStatus(order) && <span className={`${styles["order-status"]} ${styles["refund-badge"]} ${getRefundStatus(order) === "Refunded" ? styles["refunded"] : styles["partially"]}`}>{getRefundStatus(order)}</span>}
+              <StatusPill tone={orderTone[order.status] ?? "neutral"}>{order.status}</StatusPill>
+              {getRefundStatus(order) && <StatusPill tone={getRefundStatus(order) === "Refunded" ? "warning" : "neutral"} className="whitespace-nowrap">{getRefundStatus(order)}</StatusPill>}
             </div>
           </div>
         ))}
@@ -689,7 +696,7 @@ function OrdersView({ onNotify }: { onNotify: (message: string) => void }) {
             <p className={`${styles["modal-kicker"]}`}>Order details</p>
             <div className={`${styles["order-detail-title"]}`}>
               <div><h2>{selectedOrder.id}</h2><p>{selectedOrder.date} · Table {selectedOrder.table}{selectedOrder.status === "Active" && <strong className={`${styles["running-time"]}`}>Running {formatRunningTime(selectedOrder.date, now)}</strong>}</p></div>
-              <span className={`${styles["order-status"]} ${styles[selectedOrder.status.toLowerCase()]}`}>{selectedOrder.status}</span>
+              <StatusPill tone={orderTone[selectedOrder.status] ?? "neutral"}>{selectedOrder.status}</StatusPill>
             </div>
             <div className={`${styles["order-customer"]}`}>
               <span>{selectedOrder.customer.split(" ").map((part) => part[0]).join("")}</span>
