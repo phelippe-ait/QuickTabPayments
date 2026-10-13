@@ -653,11 +653,12 @@ function AuthScreen({
   const [pending, setPending] = useState(false);
   const busy = pending || authLoading;
 
-  // Apple and Facebook stay visible but disabled until their providers are
-  // configured in Supabase. Google and email are live.
+  // Social providers stay visible but disabled until each is configured in
+  // Supabase. Email is the only live method for now — flip `enabled` to true
+  // once a provider's credentials are set up.
   const providers = [
     { id: "apple", label: "Apple", enabled: false },
-    { id: "google", label: "Google", enabled: true },
+    { id: "google", label: "Google", enabled: false },
     { id: "facebook", label: "Facebook", enabled: false },
   ] as const;
 
@@ -700,8 +701,8 @@ function AuthScreen({
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
-          ? "Create your account to order faster next time — with Google, email, or another provider."
-          : "Welcome back. Continue with Google, email, or another provider."}
+          ? "Create your account with your email to order faster next time."
+          : "Welcome back. Log in with your email."}
       </p>
       <div className={`${styles["auth-social"]}`}>
         {providers.map((provider) => (

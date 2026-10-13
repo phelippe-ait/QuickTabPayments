@@ -113,8 +113,8 @@ Never put the `service_role`/secret key in a `VITE_` variable. `.env.local` is g
    Providers. Each provider's OAuth redirect URI must be
    `https://<project-ref>.supabase.co/auth/v1/callback`.
 
-In the customer app the Apple and Facebook buttons are shown but disabled until those
-providers are configured; Google and email are live.
+In the customer app the Google, Apple, and Facebook buttons are shown but disabled
+until those providers are configured; email is the live sign-in method.
 
 ## Project Structure
 
