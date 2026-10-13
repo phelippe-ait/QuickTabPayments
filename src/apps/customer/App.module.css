@@ -4,7 +4,7 @@
   --ivory: var(--color-cream);
   --paper: #fff;
   --plum: var(--color-muted-2);
-  --berry: var(--color-berry-alt);
+  --berry: var(--color-berry);
   --line: var(--color-line-2);
   --shadow: 0 5px 12px rgba(50, 42, 36, 0.1);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -104,15 +104,11 @@
 .drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; }
 .eyebrow { color: var(--berry); font-size: 10px; letter-spacing: .16em; font-weight: 700; }
 .drawer h2 { margin: 5px 0 0; color: var(--color-muted-2); font-size: 25px; }
-.primary-button, .outline-button { width: 100%; height: 43px; border-radius: 7px; cursor: pointer; }
-.primary-button { border: 1px solid var(--berry); background: var(--berry); color: white; margin-bottom: 10px; }
-.outline-button { border: 1px solid var(--berry); background: transparent; color: var(--berry); }
 .drawer-categories { margin-top: 32px; display: flex; flex-direction: column; }
 .drawer-categories > span { margin-bottom: 8px; color: var(--color-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .drawer-categories button { padding: 15px 2px; border: 0; border-bottom: 1px solid var(--color-line-soft); background: transparent; color: var(--color-muted-2); text-align: left; font-size: 14px; cursor: pointer; }
 .drawer-categories button.active { color: var(--berry); font-weight: 700; }
 .drawer-auth { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: auto; padding-top: 22px; }
-.drawer-auth .primary-button, .drawer-auth .outline-button { margin: 0; font-size: 11px; }
 .drawer-links { margin-top: 18px; border-top: 1px solid var(--color-line-soft); display: flex; flex-direction: column; }
 .drawer-links span { padding: 17px 2px; border-bottom: 1px solid var(--color-line-soft); font-size: 13px; }
 
@@ -140,7 +136,6 @@
 .modal-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 17px; }
 .quantity { display: flex; align-items: center; gap: 18px; background: white; border-radius: 20px; padding: 4px 6px; font-size: 12px; }
 .quantity button { width: 17px; height: 17px; border-radius: 50%; border: 0; background: var(--berry); color: white; display: grid; place-items: center; line-height: 1; cursor: pointer; }
-.add-button { border: 1px solid var(--berry); color: var(--berry); background: transparent; border-radius: 5px; padding: 6px 10px; font-size: 11px; cursor: pointer; }
 
 .page-screen { padding: calc(22px + var(--safe-top)) calc(16px + var(--safe-right)) calc(95px + var(--safe-bottom)) calc(16px + var(--safe-left)); position: relative; }
 .page-header { min-height: 56px; display: flex; justify-content: space-between; align-items: center; }
@@ -159,7 +154,7 @@
 .qty-pill > span { min-width: 12px; text-align: center; }
 .checkout-dock { display: flex; align-items: center; justify-content: space-between; padding: 15px 17px; }
 .checkout-dock strong { color: var(--berry); font-size: 14px; }
-.checkout-dock button, .pay-button {
+.checkout-dock button {
   color: var(--berry); border: 1px solid var(--berry); background: var(--color-paper); border-radius: 7px; padding: 10px 17px; cursor: pointer; font-weight: 600;
 }
 .checkout-dock button:disabled { opacity: .4; cursor: not-allowed; }
@@ -167,7 +162,6 @@
 .large-cart { width: 70px; height: 70px; border-radius: 50%; display: grid; place-items: center; margin: auto; background: var(--color-danger-soft); color: var(--berry); }
 .empty-cart h2 { color: var(--color-muted-2); font-size: 17px; margin: 18px 0 7px; }
 .empty-cart p { font-size: 12px; margin: 0 0 22px; }
-.empty-cart .outline-button { width: auto; padding: 0 24px; }
 
 .payment-pill { display: inline-flex; align-items: center; height: 46px; padding: 0 14px; border: 1px solid var(--color-ink); border-radius: 15px; color: var(--berry); font-size: 13px; margin: -1px 0 13px; }
 .checkout-field { display: flex; flex-direction: column; gap: 7px; margin: 2px 0 20px; color: var(--color-muted-2); font-size: 11px; font-weight: 600; }
@@ -185,7 +179,7 @@
   cursor: pointer; box-shadow: 0 2px 6px rgba(50,42,36,.06);
 }
 .express-button:hover { border-color: var(--color-placeholder); transform: translateY(-1px); }
-.express-button:disabled, .pay-button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.express-button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .apple-pay { background: #151515; border-color: #151515; color: white; }
 .apple-mark { font-size: 11px; }
 .google-mark { color: #4285f4; font-size: 15px; font-weight: 700; }
@@ -199,8 +193,6 @@
   width: 100%; height: 33px; border: 1px solid var(--color-line-2); border-radius: 5px; background: rgba(255,255,255,.22); padding: 0 11px; color: var(--color-muted-2);
 }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 34px; }
-.cancel-button { border: 1px solid var(--color-line-2); background: var(--color-paper); color: var(--color-muted-2); font-weight: 600; border-radius: 7px; padding: 10px 17px; cursor: pointer; }
-.pay-button { padding: 10px 16px; }
 
 .confirmation { border-radius: 18px 18px 0 0; padding-top: 22px; }
 .confirmation-header { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
@@ -224,11 +216,8 @@
 .order-status .status-message { min-height: 14px; margin: 0; color: var(--color-muted); line-height: 1.5; text-align: center; }
 .confirmation footer { text-align: center; color: var(--berry); font-weight: 600; font-size: 14px; padding-top: 17px; }
 .account-prompt > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-.account-prompt .pay-button, .account-prompt .cancel-button { width: 100%; font-size: 10px; }
 .receipt-form { margin-top: 28px; }
 .receipt-form .receipt-contact { margin-bottom: 10px; }
-.receipt-form .pay-button { width: 100%; }
-.receipt-form .pay-button:disabled { opacity: .45; cursor: not-allowed; }
 .receipt-confirmed { margin: 10px 0 0; color: var(--berry); font-size: 10px; text-align: center; }
 
 .auth-header { display: grid; grid-template-columns: 34px 1fr 34px; }
@@ -240,7 +229,6 @@
 .auth-form input { width: 100%; height: 42px; border: 1px solid var(--color-line); border-radius: 7px; background: white; padding: 0 12px; color: var(--color-muted-2); font-weight: 400; }
 .auth-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .auth-error { margin: -7px 0 14px; color: var(--color-berry-alt); font-size: 11px; }
-.auth-submit { width: 100%; margin-top: 4px; }
 
 @media (min-width: 700px) {
   .app-shell, .menu-screen, .page-screen { min-height: calc(100vh - 48px); }

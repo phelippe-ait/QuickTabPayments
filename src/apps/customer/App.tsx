@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
 import { Icon } from "@shared/ui/Icon";
+import { Button } from "@shared/ui/Button";
 
 type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup";
 type Category = "Hot Beverages" | "Breakfast" | "Lunch";
@@ -308,12 +309,12 @@ function MenuScreen({
               ))}
             </nav>
             <div className={`${styles["drawer-auth"]}`}>
-              <button className={`${styles["primary-button"]}`} onClick={() => onAuth("signup")}>
+              <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
                 Sign up
-              </button>
-              <button className={`${styles["outline-button"]}`} onClick={() => onAuth("login")}>
+              </Button>
+              <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
                 Log in
-              </button>
+              </Button>
             </div>
             <div className={`${styles["drawer-links"]}`}>
               <span>Our menu</span>
@@ -373,7 +374,7 @@ function ProductModal({
             <span>{quantity}</span>
             <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}>+</button>
           </div>
-          <button className={`${styles["add-button"]}`} onClick={() => onAdd(quantity)}>Add to Order</button>
+          <Button variant="outline" size="sm" className="rounded-[5px]" onClick={() => onAdd(quantity)}>Add to Order</Button>
         </div>
       </section>
     </div>
@@ -438,7 +439,7 @@ function CartScreen({
           <span className={`${styles["large-cart"]}`}><Icon name="cart" size={34} /></span>
           <h2>Your cart is empty</h2>
           <p>Add a drink from our hot beverage menu.</p>
-          <button className={`${styles["outline-button"]}`} onClick={onClose}>Browse menu</button>
+          <Button variant="outline" className="w-auto px-6" onClick={onClose}>Browse menu</Button>
         </div>
       )}
       <div className={`${styles["checkout-dock"]}`}>
@@ -505,8 +506,8 @@ function CheckoutScreen({
         <label>Expiration Date:<input defaultValue="MM/YY" required /></label>
         <label>CVV:<input defaultValue="123" inputMode="numeric" required /></label>
         <div className={`${styles["form-actions"]}`}>
-          <button type="button" className={`${styles["cancel-button"]}`} onClick={onClose}>Cancel</button>
-          <button type="submit" className={`${styles["pay-button"]}`} disabled={!hasCustomerName}>Pay ${total.toFixed(2)}</button>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="submit" disabled={!hasCustomerName}>Pay ${total.toFixed(2)}</Button>
         </div>
       </form>
     </main>
@@ -589,12 +590,12 @@ function Confirmation({
         <h2>Save your details</h2>
         <p>Create an account or log in to make your next order faster.</p>
         <div>
-          <button type="button" className={`${styles["pay-button"]}`} onClick={onSignup}>
+          <Button variant="outline" fullWidth className="text-[10px]" onClick={onSignup}>
             Create account
-          </button>
-          <button type="button" className={`${styles["cancel-button"]}`} onClick={onLogin}>
+          </Button>
+          <Button variant="secondary" fullWidth className="text-[10px]" onClick={onLogin}>
             Log in
-          </button>
+          </Button>
         </div>
       </section>
       <footer>Thank you for your order</footer>
@@ -614,9 +615,9 @@ function Confirmation({
             required
           />
         </label>
-        <button type="submit" className={`${styles["pay-button"]}`} disabled={!receiptContact.trim()}>
+        <Button variant="outline" fullWidth type="submit" disabled={!receiptContact.trim()}>
           Send Receipt
-        </button>
+        </Button>
         {receiptConfirmed && <p className={`${styles["receipt-confirmed"]}`}>Receipt contact confirmed.</p>}
       </form>
     </main>
@@ -718,9 +719,9 @@ function AuthScreen({
             {passwordError}
           </p>
         )}
-        <button type="submit" className={`${styles["pay-button"]} ${styles["auth-submit"]}`}>
+        <Button variant="outline" fullWidth type="submit" className="mt-1">
           {signup ? "Create account" : "Log in"}
-        </button>
+        </Button>
       </form>
     </main>
   );
