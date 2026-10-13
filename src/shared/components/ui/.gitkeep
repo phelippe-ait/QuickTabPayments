@@ -1,0 +1,2 @@
+# Reusable UI primitives live here (Button, Card, Modal, StatusPill, ...).
+# Each component gets its own folder or file + CSS module.
