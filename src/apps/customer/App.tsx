@@ -2,8 +2,11 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
 import { Icon } from "@shared/ui/Icon";
 import { Button } from "@shared/ui/Button";
+import { useAuth } from "@shared/auth/AuthContext";
 
-type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup";
+const AUTH_RETURN_KEY = "quicktab:auth-return";
+
+type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup" | "orders";
 type Category = "Hot Beverages" | "Breakfast" | "Lunch";
 
 type Product = {
@@ -158,18 +161,34 @@ function MenuScreen({
   cartCount,
   total,
   onOpenCart,
+  onOpenOrders,
   onSelect,
   onAuth,
 }: {
   cartCount: number;
   total: number;
   onOpenCart: () => void;
+  onOpenOrders: () => void;
   onSelect: (product: Product) => void;
   onAuth: (screen: "login" | "signup") => void;
 }) {
+  const { user, profile, signOut } = useAuth();
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category>("Hot Beverages");
+
+  const accountName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    user?.email?.split("@")[0] ||
+    "";
+  const accountInitials =
+    accountName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "U";
 
   const chooseCategory = (category: Category) => {
     setActiveCategory(category);
@@ -224,14 +243,53 @@ function MenuScreen({
             </button>
           ))}
         </nav>
-        <div className={`${styles["drawer-auth"]}`}>
-          <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
-            Sign up
-          </Button>
-          <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
-            Log in
-          </Button>
-        </div>
+        {user ? (
+          <div className={`${styles["drawer-account"]}`}>
+            <div className={`${styles["drawer-account-head"]}`}>
+              <span className={`${styles["drawer-avatar"]}`} aria-hidden="true">
+                {accountInitials}
+              </span>
+              <span className={`${styles["drawer-account-name"]}`}>
+                <strong>{accountName || "Signed in"}</strong>
+                <small>{user.email}</small>
+              </span>
+              <button
+                type="button"
+                className={`${styles["drawer-edit"]}`}
+                aria-label="Edit name"
+                title="Edit name"
+                onClick={() => setEditingName(true)}
+              >
+                <Icon name="edit" size={15} />
+              </button>
+            </div>
+            <button
+              type="button"
+              className={`${styles["drawer-account-link"]}`}
+              onClick={onOpenOrders}
+            >
+              <Icon name="receipt" size={16} />
+              Order history
+            </button>
+            <button
+              type="button"
+              className={`${styles["drawer-logout"]}`}
+              onClick={() => void signOut()}
+            >
+              <Icon name="logout" size={16} />
+              Log out
+            </button>
+          </div>
+        ) : (
+          <div className={`${styles["drawer-auth"]}`}>
+            <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
+              Sign up
+            </Button>
+            <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
+              Log in
+            </Button>
+          </div>
+        )}
         <div className={`${styles["drawer-links"]}`}>
           <span>Our menu</span>
           <span>Find a café</span>
@@ -327,6 +385,14 @@ function MenuScreen({
           </span>
         </button>
       </main>
+
+      {editingName && (
+        <EditNameDialog
+          defaultFirstName={profile?.first_name ?? ""}
+          defaultLastName={profile?.last_name ?? ""}
+          onClose={() => setEditingName(false)}
+        />
+      )}
     </>
   );
 }
@@ -457,12 +523,14 @@ function CheckoutScreen({
   total,
   onClose,
   onPay,
+  defaultName = "",
 }: {
   total: number;
   onClose: () => void;
   onPay: (customerName: string) => void;
+  defaultName?: string;
 }) {
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(defaultName);
   const hasCustomerName = customerName.trim().length > 0;
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -519,11 +587,13 @@ function CheckoutScreen({
 
 function Confirmation({
   customerName,
+  isLoggedIn,
   onClose,
   onLogin,
   onSignup,
 }: {
   customerName: string;
+  isLoggedIn: boolean;
   onClose: () => void;
   onLogin: () => void;
   onSignup: () => void;
@@ -589,18 +659,20 @@ function Confirmation({
         <p>123 Main St</p>
         <p>Sydney CBD, NSW 2000</p>
       </section>
-      <section className={`${styles["account-prompt"]}`}>
-        <h2>Save your details</h2>
-        <p>Create an account or log in to make your next order faster.</p>
-        <div>
-          <Button variant="outline" fullWidth className="text-[10px]" onClick={onSignup}>
-            Create account
-          </Button>
-          <Button variant="secondary" fullWidth className="text-[10px]" onClick={onLogin}>
-            Log in
-          </Button>
-        </div>
-      </section>
+      {!isLoggedIn && (
+        <section className={`${styles["account-prompt"]}`}>
+          <h2>Save your details</h2>
+          <p>Create an account or log in to make your next order faster.</p>
+          <div>
+            <Button variant="outline" fullWidth className="text-[10px]" onClick={onSignup}>
+              Create account
+            </Button>
+            <Button variant="secondary" fullWidth className="text-[10px]" onClick={onLogin}>
+              Log in
+            </Button>
+          </div>
+        </section>
+      )}
       <footer>Thank you for your order</footer>
       <form className={`${styles["receipt-form"]}`} onSubmit={confirmReceipt}>
         <label className={`${styles["receipt-contact"]}`}>
@@ -627,6 +699,113 @@ function Confirmation({
   );
 }
 
+function EditNameDialog({
+  defaultFirstName,
+  defaultLastName,
+  onClose,
+}: {
+  defaultFirstName: string;
+  defaultLastName: string;
+  onClose: () => void;
+}) {
+  const { updateProfile } = useAuth();
+  const [firstName, setFirstName] = useState(defaultFirstName);
+  const [lastName, setLastName] = useState(defaultLastName);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("Please enter your first and last name.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const { error: saveError } = await updateProfile({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <div className={`${styles["modal-shade"]}`}>
+      <form
+        className={`${styles["product-modal"]}`}
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit name"
+      >
+        <div className={`${styles["modal-close"]}`}>
+          <HeaderButton icon="close" label="Close" onClick={onClose} />
+        </div>
+        <h2>Edit your name</h2>
+        <label className={`${styles["checkout-field"]}`}>
+          <span>First name</span>
+          <input
+            type="text"
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(event) => setFirstName(event.target.value)}
+            required
+          />
+        </label>
+        <label className={`${styles["checkout-field"]}`}>
+          <span>Last name</span>
+          <input
+            type="text"
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(event) => setLastName(event.target.value)}
+            required
+          />
+        </label>
+        {error && (
+          <p className={`${styles["auth-error"]}`} role="alert">
+            {error}
+          </p>
+        )}
+        <div className={`${styles["modal-footer"]}`}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="outline" type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function OrdersScreen({ onClose }: { onClose: () => void }) {
+  return (
+    <main className={`${styles["page-screen"]}`}>
+      <header className={`${styles["page-header"]}`}>
+        <h1>My orders</h1>
+        <HeaderButton icon="close" label="Close order history" onClick={onClose} />
+      </header>
+      <div className={`${styles["empty-cart"]}`}>
+        <span className={`${styles["large-cart"]}`}>
+          <Icon name="receipt" size={34} />
+        </span>
+        <h2>No orders yet</h2>
+        <p>Your past orders will show up here once you place one.</p>
+        <Button variant="outline" className="w-auto px-6" onClick={onClose}>
+          Browse menu
+        </Button>
+      </div>
+    </main>
+  );
+}
+
 function AuthScreen({
   kind,
   onBack,
@@ -637,16 +816,55 @@ function AuthScreen({
   onContinue: () => void;
 }) {
   const signup = kind === "signup";
+  const { signInWithOAuth, signInWithPassword, signUp, loading: authLoading } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  // Each provider will map to `supabase.auth.signInWithOAuth({ provider })`;
-  // the form below is the email/password path. Both currently just continue the flow.
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const busy = pending || authLoading;
+
+  // Social providers stay visible but disabled until each is configured in
+  // Supabase. Email is the only live method for now — flip `enabled` to true
+  // once a provider's credentials are set up.
   const providers = [
-    { id: "apple", label: "Apple" },
-    { id: "google", label: "Google" },
-    { id: "facebook", label: "Facebook" },
+    { id: "apple", label: "Apple", enabled: false },
+    { id: "google", label: "Google", enabled: false },
+    { id: "facebook", label: "Facebook", enabled: false },
   ] as const;
+
+  const handleOAuth = async (provider: "google" | "apple" | "facebook") => {
+    setError("");
+    setPending(true);
+    const { error: oauthError } = await signInWithOAuth(provider);
+    // A successful call redirects the browser away; only errors return here.
+    if (oauthError) {
+      setError(oauthError.message);
+      setPending(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    if (signup && password !== passwordConfirmation) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    setPending(true);
+    const { error: submitError } = signup
+      ? await signUp({ email, password, firstName, lastName })
+      : await signInWithPassword(email, password);
+    if (submitError) {
+      setError(submitError.message);
+      setPending(false);
+      return;
+    }
+    onContinue();
+  };
 
   return (
     <main className={`${styles["page-screen"]} auth-screen`}>
@@ -657,8 +875,8 @@ function AuthScreen({
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
-          ? "Create your account to order faster next time — with Apple, Google, Facebook, or email."
-          : "Welcome back. Continue with Apple, Google, Facebook, or email."}
+          ? "Create your account with your email to order faster next time."
+          : "Welcome back. Log in with your email."}
       </p>
       <div className={`${styles["auth-social"]}`}>
         {providers.map((provider) => (
@@ -666,44 +884,57 @@ function AuthScreen({
             key={provider.id}
             type="button"
             className={`${styles["auth-social-button"]}`}
-            onClick={onContinue}
+            disabled={!provider.enabled || busy}
+            title={provider.enabled ? undefined : "Coming soon"}
+            onClick={() => handleOAuth(provider.id)}
           >
             <Icon name={provider.id} size={18} />
             <span>
               {signup ? "Sign up" : "Log in"} with {provider.label}
             </span>
+            {!provider.enabled && (
+              <span className={`${styles["auth-social-soon"]}`}>Coming soon</span>
+            )}
           </button>
         ))}
       </div>
       <div className={`${styles["auth-divider"]}`} role="separator">
         <span>or continue with email</span>
       </div>
-      <form
-        className={`${styles["auth-form"]}`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (signup && password !== passwordConfirmation) {
-            setPasswordError("Passwords do not match.");
-            return;
-          }
-          onContinue();
-        }}
-      >
+      <form className={`${styles["auth-form"]}`} onSubmit={handleSubmit}>
         {signup && (
           <div className={`${styles["auth-name-row"]}`}>
             <label>
               First name
-              <input type="text" autoComplete="given-name" required />
+              <input
+                type="text"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                required
+              />
             </label>
             <label>
               Last name
-              <input type="text" autoComplete="family-name" required />
+              <input
+                type="text"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                required
+              />
             </label>
           </div>
         )}
         <label>
           Email
-          <input type="email" autoComplete="email" required />
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
         </label>
         <label>
           Password
@@ -741,8 +972,13 @@ function AuthScreen({
             {passwordError}
           </p>
         )}
-        <Button variant="outline" fullWidth type="submit" className="mt-1">
-          {signup ? "Create account" : "Log in"}
+        {error && (
+          <p className={`${styles["auth-error"]}`} role="alert">
+            {error}
+          </p>
+        )}
+        <Button variant="outline" fullWidth type="submit" className="mt-1" disabled={busy}>
+          {busy ? "Please wait…" : signup ? "Create account" : "Log in"}
         </Button>
       </form>
     </main>
@@ -750,11 +986,40 @@ function AuthScreen({
 }
 
 export default function App() {
+  const { user, profile } = useAuth();
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<Product | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
   const [authReturnScreen, setAuthReturnScreen] = useState<"menu" | "confirmation">("menu");
+
+  const openAuth = (authScreen: "login" | "signup", returnTo: "menu" | "confirmation") => {
+    setAuthReturnScreen(returnTo);
+    // Persisted so we can return here after an OAuth redirect reloads the page.
+    window.sessionStorage.setItem(AUTH_RETURN_KEY, returnTo);
+    setScreen(authScreen);
+  };
+
+  const closeAuth = () => {
+    window.sessionStorage.removeItem(AUTH_RETURN_KEY);
+    setScreen(authReturnScreen);
+  };
+
+  // After an OAuth redirect the page reloads with a session; send the user back
+  // to the screen they started from instead of the menu.
+  useEffect(() => {
+    if (!user) return;
+    const pending = window.sessionStorage.getItem(AUTH_RETURN_KEY);
+    if (!pending) return;
+    window.sessionStorage.removeItem(AUTH_RETURN_KEY);
+    setScreen(pending === "confirmation" ? "confirmation" : "menu");
+  }, [user]);
+
+  const profileName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    user?.email?.split("@")[0] ||
+    "";
+
   const cartItems = useMemo(
     () =>
       products
@@ -784,11 +1049,9 @@ export default function App() {
           cartCount={cartCount}
           total={total}
           onOpenCart={() => setScreen("cart")}
+          onOpenOrders={() => setScreen("orders")}
           onSelect={setSelected}
-          onAuth={(authScreen) => {
-            setAuthReturnScreen("menu");
-            setScreen(authScreen);
-          }}
+          onAuth={(authScreen) => openAuth(authScreen, "menu")}
         />
       )}
       {screen === "cart" && (
@@ -821,6 +1084,7 @@ export default function App() {
       {screen === "checkout" && (
         <CheckoutScreen
           total={total}
+          defaultName={profileName}
           onClose={() => setScreen("cart")}
           onPay={(name) => {
             setCustomerName(name);
@@ -831,14 +1095,9 @@ export default function App() {
       {screen === "confirmation" && (
         <Confirmation
           customerName={customerName}
-          onLogin={() => {
-            setAuthReturnScreen("confirmation");
-            setScreen("login");
-          }}
-          onSignup={() => {
-            setAuthReturnScreen("confirmation");
-            setScreen("signup");
-          }}
+          isLoggedIn={Boolean(user)}
+          onLogin={() => openAuth("login", "confirmation")}
+          onSignup={() => openAuth("signup", "confirmation")}
           onClose={() => {
             setCart({});
             setCustomerName("");
@@ -846,11 +1105,12 @@ export default function App() {
           }}
         />
       )}
+      {screen === "orders" && <OrdersScreen onClose={menu} />}
       {(screen === "login" || screen === "signup") && (
         <AuthScreen
           kind={screen}
-          onBack={() => setScreen(authReturnScreen)}
-          onContinue={() => setScreen(authReturnScreen)}
+          onBack={closeAuth}
+          onContinue={closeAuth}
         />
       )}
       {selected && (

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (keep .env.example committed)
+.env
+
 # Local agent/skill tooling (not part of the app)
 .agents/
 skills-lock.json
