@@ -29,9 +29,9 @@ The canonical palette/typography/radii/shadows live in `src/index.css` under
 | --- | --- | --- |
 | Brand | `--color-berry`, `--color-berry-strong`, `--color-berry-soft` | `bg-berry`, `text-berry` |
 | Surfaces | `--color-cream`, `--color-cream-2`, `--color-cream-3`, `--color-paper`, `--color-sand` | `bg-cream` |
-| Text | `--color-ink`, `--color-ink-soft`, `--color-muted` | `text-ink` |
+| Text | `--color-ink`, `--color-ink-dark`, `--color-ink-soft`, `--color-ink-mid`, `--color-muted`, `--color-muted-2`, `--color-placeholder` | `text-ink` |
 | Borders | `--color-line`, `--color-line-soft`, `--color-line-2` | `border-line` |
-| Status | `--color-sage`, `--color-amber`, `--color-info`, `--color-danger` (+ `-soft`) | `bg-sage-soft` |
+| Status | `--color-sage`, `--color-amber`, `--color-info`, `--color-danger`, `--color-neutral` (+ `-soft`) | `bg-sage-soft` |
 | Fonts | `--font-sans`, `--font-serif`, `--font-ui` | `font-sans`, `font-serif` |
 | Radii | `--radius-card`, `--radius-lg`, `--radius-md`, `--radius-sm` | `rounded-card` |
 | Shadows | `--shadow-card`, `--shadow-float`, `--shadow-drawer` | `shadow-card` |

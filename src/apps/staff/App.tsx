@@ -354,8 +354,8 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-cream-2 text-[#2f2b27]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-[#fcfaf4] px-5 py-7 lg:flex">
+    <div className="min-h-screen bg-cream-2 text-ink">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-paper px-5 py-7 lg:flex">
         <div className="flex items-center gap-3 px-2">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-berry font-serif text-xl text-white">
             S
@@ -407,7 +407,7 @@ function App() {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold">Alex Morgan</p>
-                <p className="text-xs text-[#88828b]">Floor manager</p>
+                <p className="text-xs text-muted">Floor manager</p>
               </div>
             </div>
           </div>
@@ -415,7 +415,7 @@ function App() {
       </aside>
 
       <div className="lg:pl-[248px]">
-        <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-line bg-[#fcfaf4]/95 px-5 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-line bg-paper/95 px-5 backdrop-blur md:px-8">
           <div className="flex items-center gap-3 lg:hidden">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-berry font-serif text-lg text-white">
               S
@@ -424,18 +424,18 @@ function App() {
           </div>
           <div className="hidden lg:block">
             <p className="text-sm font-bold">Friday, May 24</p>
-            <p className="mt-0.5 text-xs text-[#88828b]">
+            <p className="mt-0.5 text-xs text-muted">
               Dinner service · 5:00 PM – 11:00 PM
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 text-xs font-bold text-[#57535d] sm:flex">
+            <div className="hidden items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 text-xs font-bold text-ink-soft sm:flex">
               <span className="h-2 w-2 rounded-full bg-sage" />
               Service live
             </div>
             <button
               aria-label="Notifications"
-              className="relative grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-[#57535d] transition hover:border-berry hover:text-berry"
+              className="relative grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink-soft transition hover:border-berry hover:text-berry"
             >
               <Icon name="bell" size={19} />
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-berry" />
@@ -452,7 +452,7 @@ function App() {
                   <h1 className="mt-2 font-serif text-4xl tracking-[-0.025em] md:text-5xl">
                     Good evening, Alex.
                   </h1>
-                  <p className="mt-2 text-sm text-[#77717a]">
+                  <p className="mt-2 text-sm text-muted-2">
                     Here’s what’s happening in the dining room.
                   </p>
                 </div>
@@ -473,13 +473,13 @@ function App() {
               </section>
 
               <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                <div className="flex rounded-full border border-line bg-[#e9e3da] p-1">
+                <div className="flex rounded-full border border-line bg-line-soft p-1">
                   {(["all", "occupied", "available"] as const).map((item) => (
                     <button
                       className={`rounded-full px-4 py-2 text-xs font-bold capitalize transition ${
                         filter === item
                           ? "bg-white text-ink shadow-sm"
-                          : "text-[#77717a] hover:text-ink"
+                          : "text-muted-2 hover:text-ink"
                       }`}
                       key={item}
                       onClick={() => setFilter(item)}
@@ -529,7 +529,7 @@ function App() {
           )}
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-line bg-[#fcfaf4] lg:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-line bg-paper lg:hidden">
           <MobileNav
             active={view === "tables"}
             icon="grid"
@@ -588,7 +588,7 @@ function NavButton({
   return (
     <button
       className={`${styles["nav-button"]} w-full ${
-        active ? "bg-[#f1e9e6] text-berry-strong" : ""
+        active ? "bg-cream-2 text-berry-strong" : ""
       }`}
       onClick={onClick}
     >
@@ -615,7 +615,7 @@ function MobileNav({
   return (
     <button
       className={`flex min-w-20 flex-col items-center gap-1 text-[10px] font-bold ${
-        active ? "text-berry" : "text-[#88828b]"
+        active ? "text-berry" : "text-muted"
       }`}
       onClick={onClick}
     >
@@ -635,7 +635,7 @@ function Stat({
   tone: "rose" | "green"
 }) {
   return (
-    <div className="min-w-28 rounded-2xl border border-line bg-[#fcfaf4] px-4 py-3">
+    <div className="min-w-28 rounded-2xl border border-line bg-paper px-4 py-3">
       <div className="flex items-center gap-2">
         <span
           className={`h-2 w-2 rounded-full ${
@@ -665,10 +665,10 @@ function TableCard({
     <button
       className={`group min-h-[190px] rounded-[22px] border p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#6b5b4b]/5 ${
         selected
-          ? "border-berry bg-[#fffaf7] shadow-md shadow-[#9c4555]/10"
+          ? "border-berry bg-paper shadow-md shadow-[#9c4555]/10"
           : occupied
-            ? "border-line bg-[#fcfaf4]"
-            : "border-dashed border-[#c9cfc3] bg-[#f7f5ef]"
+            ? "border-line bg-paper"
+            : "border-dashed border-line bg-cream-3"
       }`}
       onClick={() => onSelect(table)}
     >
@@ -685,7 +685,7 @@ function TableCard({
         <div className="mt-7 flex items-end justify-between">
           <div>
             <p className="text-sm font-bold">{table.guest}</p>
-            <div className="mt-2 flex items-center gap-3 text-xs text-[#88828b]">
+            <div className="mt-2 flex items-center gap-3 text-xs text-muted">
               <span className="flex items-center gap-1">
                 <Icon name="clock" size={14} /> {table.since}
               </span>
@@ -701,7 +701,7 @@ function TableCard({
           <span className="flex items-center gap-1.5 text-xs font-bold text-[#858c80]">
             <Icon name="users" size={16} /> Seats {table.seats}
           </span>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d2d7cd] text-sage transition group-hover:bg-sage group-hover:text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-sage transition group-hover:bg-sage group-hover:text-white">
             <Icon name="arrow" size={15} />
           </span>
         </div>
@@ -743,12 +743,12 @@ function TableEditor({
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[#fcfaf4] p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
+      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>Edit table</p>
           <button
             aria-label="Close"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-[#f1ece4]"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-cream-2"
             onClick={onClose}
           >
             <Icon name="close" size={17} />
@@ -759,7 +759,7 @@ function TableEditor({
             <h2 className="font-serif text-4xl">
               Table {table.id.toString().padStart(2, "0")}
             </h2>
-            <p className="mt-2 text-sm text-[#77717a]">
+            <p className="mt-2 text-sm text-muted-2">
               Capacity · {table.seats} guests
             </p>
           </div>
@@ -778,7 +778,7 @@ function TableEditor({
                     ? option === "occupied"
                       ? "border-berry bg-berry-soft text-berry-strong"
                       : "border-sage bg-sage-soft text-sage-strong"
-                    : "border-line bg-white text-[#77717a] hover:border-[#aaa6ad]"
+                    : "border-line bg-white text-muted-2 hover:border-placeholder"
                 }`}
                 key={option}
                 onClick={() => setStatus(option)}
@@ -798,7 +798,7 @@ function TableEditor({
           <label className="block">
             <span className={`${styles["detail-label"]}`}>Guest name</span>
             <input
-              className="mt-2.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition placeholder:text-[#aaa6ad] focus:border-berry focus:ring-2 focus:ring-berry/10"
+              className="mt-2.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition placeholder:text-placeholder focus:border-berry focus:ring-2 focus:ring-berry/10"
               disabled={!occupied}
               onChange={(event) => setGuest(event.target.value)}
               placeholder="Enter guest or party name"
@@ -816,7 +816,7 @@ function TableEditor({
             <div className="mt-2.5 flex items-center justify-between rounded-xl border border-line bg-white p-2">
               <button
                 aria-label="Decrease occupants"
-                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl font-medium transition hover:bg-[#e8e1d7] disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl font-medium transition hover:bg-line-soft disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!occupied || occupants <= 1}
                 onClick={() =>
                   setOccupants((current) => Math.max(1, current - 1))
@@ -834,7 +834,7 @@ function TableEditor({
               </div>
               <button
                 aria-label="Increase occupants"
-                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl font-medium transition hover:bg-[#e8e1d7] disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl font-medium transition hover:bg-line-soft disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!occupied || occupants >= table.seats}
                 onClick={() =>
                   setOccupants((current) =>
@@ -886,26 +886,26 @@ function OrderHistory({
         <h1 className="mt-2 font-serif text-4xl tracking-[-0.025em] md:text-5xl">
           Order history
         </h1>
-        <p className="mt-2 text-sm text-[#77717a]">
+        <p className="mt-2 text-sm text-muted-2">
           Review current and completed checks from today’s service.
         </p>
       </section>
       <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row">
-        <label className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-line bg-[#fcfaf4] px-4 py-3 text-[#88828b] focus-within:border-berry">
+        <label className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-line bg-paper px-4 py-3 text-muted focus-within:border-berry">
           <Icon name="search" size={18} />
           <input
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-[#aaa6ad]"
+            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-placeholder"
             placeholder="Search guest, table or order"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <button className="rounded-xl border border-line bg-[#fcfaf4] px-4 py-3 text-left text-xs font-bold sm:text-center">
+        <button className="rounded-xl border border-line bg-paper px-4 py-3 text-left text-xs font-bold sm:text-center">
           Today, May 24
         </button>
       </div>
-      <div className="overflow-hidden rounded-[22px] border border-line bg-[#fcfaf4]">
-        <div className="hidden grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] gap-4 border-b border-line-soft bg-[#f6f2eb] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted md:grid">
+      <div className="overflow-hidden rounded-[22px] border border-line bg-paper">
+        <div className="hidden grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] gap-4 border-b border-line-soft bg-cream-2 px-6 py-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted md:grid">
           <span>Order</span>
           <span>Table</span>
           <span>Guest</span>
@@ -916,30 +916,30 @@ function OrderHistory({
         {filteredOrders.map((order) => (
           <button
             aria-label={`View details for order ${order.id}`}
-            className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-line-soft px-5 py-5 text-left transition last:border-0 hover:bg-[#f8f3ed] focus-visible:bg-[#f8f3ed] focus-visible:outline-2 focus-visible:outline-berry focus-visible:outline-offset-[-2px] md:grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] md:px-6"
+            className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-line-soft px-5 py-5 text-left transition last:border-0 hover:bg-cream-3 focus-visible:bg-cream-3 focus-visible:outline-2 focus-visible:outline-berry focus-visible:outline-offset-[-2px] md:grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] md:px-6"
             key={order.id}
             onClick={() => onSelect(order)}
           >
             <span className="text-sm font-bold">{order.id}</span>
-            <span className="row-start-2 text-xs text-[#77717a] md:row-auto md:text-sm md:text-ink">
+            <span className="row-start-2 text-xs text-muted-2 md:row-auto md:text-sm md:text-ink">
               {order.table}
             </span>
             <span className="text-sm font-bold md:font-normal">
               {order.guest}
             </span>
-            <span className="hidden text-sm text-[#77717a] md:block">
+            <span className="hidden text-sm text-muted-2 md:block">
               {order.time}
             </span>
             <span className="row-span-2 row-start-1 text-right font-serif text-lg md:row-auto md:text-left">
               ${order.total.toFixed(2)}
             </span>
-            <span className="hidden text-[#aaa6ad] transition group-hover:translate-x-1 group-hover:text-berry md:block">
+            <span className="hidden text-placeholder transition group-hover:translate-x-1 group-hover:text-berry md:block">
               <Icon name="chevron" size={18} />
             </span>
           </button>
         ))}
         {filteredOrders.length === 0 && (
-          <p className="p-12 text-center text-sm text-[#88828b]">
+          <p className="p-12 text-center text-sm text-muted">
             No orders match your search.
           </p>
         )}
@@ -983,7 +983,7 @@ function KitchenWorkspace({
           <h1 className="mt-2 font-serif text-4xl tracking-[-0.025em] md:text-5xl">
             Active orders
           </h1>
-          <p className="mt-2 text-sm text-[#77717a]">
+          <p className="mt-2 text-sm text-muted-2">
             Keep the kitchen moving and let the floor know what’s ready.
           </p>
         </div>
@@ -997,7 +997,7 @@ function KitchenWorkspace({
         <div className="grid gap-5 xl:grid-cols-2">
           {orders.map((order) => (
             <article
-              className="overflow-hidden rounded-[22px] border border-line bg-[#fcfaf4]"
+              className="overflow-hidden rounded-[22px] border border-line bg-paper"
               key={order.id}
             >
               <div className="flex items-start justify-between border-b border-line-soft px-5 py-5 sm:px-6">
@@ -1007,11 +1007,11 @@ function KitchenWorkspace({
                     <KitchenStatusPill status={order.kitchenStatus} />
                   </div>
                   <p className="mt-1.5 text-sm font-bold">{order.table}</p>
-                  <p className="mt-1 text-xs text-[#88828b]">
+                  <p className="mt-1 text-xs text-muted">
                     {order.time.replace("Today, ", "")} · {order.server}
                   </p>
                 </div>
-                <span className="rounded-full bg-cream-2 px-3 py-1.5 text-xs font-bold text-[#77717a]">
+                <span className="rounded-full bg-cream-2 px-3 py-1.5 text-xs font-bold text-muted-2">
                   {order.items.reduce((sum, item) => sum + item.qty, 0)} items
                 </span>
               </div>
@@ -1019,10 +1019,10 @@ function KitchenWorkspace({
               <div className="px-5 py-2 sm:px-6">
                 {order.items.map((item) => (
                   <div
-                    className="flex items-center gap-3 border-b border-[#eee8df] py-3.5 last:border-0"
+                    className="flex items-center gap-3 border-b border-sand py-3.5 last:border-0"
                     key={item.name}
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#eee8df] text-sm font-bold">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sand text-sm font-bold">
                       {item.qty}
                     </span>
                     <span className="text-sm font-bold">{item.name}</span>
@@ -1030,12 +1030,12 @@ function KitchenWorkspace({
                 ))}
               </div>
 
-              <div className="grid grid-cols-3 gap-2 border-t border-line-soft bg-[#f8f4ed] p-4 sm:gap-3">
+              <div className="grid grid-cols-3 gap-2 border-t border-line-soft bg-cream-3 p-4 sm:gap-3">
                 <button
                   className={`rounded-xl border px-2 py-3 text-xs font-bold transition ${
                     order.kitchenStatus === "Preparing"
                       ? "border-[#d59a52] bg-amber-soft text-amber"
-                      : "border-[#e5c89f] bg-[#fffaf2] text-amber hover:border-[#d59a52] hover:bg-amber-soft"
+                      : "border-[#e5c89f] bg-cream-3 text-amber hover:border-[#d59a52] hover:bg-amber-soft"
                   }`}
                   disabled={order.kitchenStatus === "Preparing"}
                   onClick={() =>
@@ -1048,7 +1048,7 @@ function KitchenWorkspace({
                   className={`rounded-xl border px-2 py-3 text-xs font-bold transition ${
                     order.kitchenStatus === "Ready"
                       ? "border-sage bg-sage-soft text-sage-strong"
-                      : "border-[#bfd0bb] bg-[#f7faf5] text-sage-strong hover:border-sage hover:bg-sage-soft"
+                      : "border-[#bfd0bb] bg-paper text-sage-strong hover:border-sage hover:bg-sage-soft"
                   }`}
                   disabled={order.kitchenStatus === "Ready"}
                   onClick={() => setPendingAction({ order, status: "Ready" })}
@@ -1056,7 +1056,7 @@ function KitchenWorkspace({
                   Ready
                 </button>
                 <button
-                  className="rounded-xl border border-[#dfb9b9] bg-[#fff8f8] px-2 py-3 text-xs font-bold text-danger transition hover:border-berry-strong hover:bg-danger-soft"
+                  className="rounded-xl border border-[#dfb9b9] bg-paper px-2 py-3 text-xs font-bold text-danger transition hover:border-berry-strong hover:bg-danger-soft"
                   onClick={() =>
                     setPendingAction({ order, status: "Cancelled" })
                   }
@@ -1068,12 +1068,12 @@ function KitchenWorkspace({
           ))}
         </div>
       ) : (
-        <div className="rounded-[22px] border border-dashed border-[#c9cfc3] bg-[#f7f5ef] px-6 py-20 text-center">
+        <div className="rounded-[22px] border border-dashed border-line bg-cream-3 px-6 py-20 text-center">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-sage-soft text-sage-strong">
             <Icon name="check" size={22} />
           </span>
           <h2 className="mt-4 font-serif text-2xl">Kitchen is all caught up</h2>
-          <p className="mt-1 text-sm text-[#88828b]">
+          <p className="mt-1 text-sm text-muted">
             New active orders will appear here.
           </p>
         </div>
@@ -1088,7 +1088,7 @@ function KitchenWorkspace({
           <div className="grid gap-3 md:grid-cols-2">
             {previousOrders.map((order) => (
               <article
-                className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-[#fcfaf4] px-5 py-4"
+                className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-paper px-5 py-4"
                 key={order.id}
               >
                 <div className="min-w-0">
@@ -1096,7 +1096,7 @@ function KitchenWorkspace({
                     <p className="font-serif text-xl">{order.id}</p>
                     <KitchenStatusPill status={order.kitchenStatus} />
                   </div>
-                  <p className="mt-1 truncate text-xs text-[#77717a]">
+                  <p className="mt-1 truncate text-xs text-muted-2">
                     {order.table} · {order.time.replace("Today, ", "")} ·{" "}
                     {order.items.reduce((sum, item) => sum + item.qty, 0)} items
                   </p>
@@ -1151,7 +1151,7 @@ function KitchenStatusConfirmation({
         className="absolute inset-0 cursor-default"
         onClick={onCancel}
       />
-      <div className="relative w-full max-w-sm rounded-[22px] border border-line bg-[#fcfaf4] p-6 shadow-2xl">
+      <div className="relative w-full max-w-sm rounded-[22px] border border-line bg-paper p-6 shadow-2xl">
         <div
           className={`grid h-11 w-11 place-items-center rounded-full ${
             cancelled
@@ -1168,7 +1168,7 @@ function KitchenStatusConfirmation({
         >
           {cancelled ? "Cancel this order?" : `Set order to ${status}?`}
         </h2>
-        <p className="mt-3 text-sm leading-6 text-[#77717a]">
+        <p className="mt-3 text-sm leading-6 text-muted-2">
           You’re about to {actionLabel}{" "}
           <strong className="text-ink">{order.id}</strong> for{" "}
           <strong className="text-ink">{order.table}</strong>.
@@ -1176,7 +1176,7 @@ function KitchenStatusConfirmation({
         </p>
         <div className="mt-7 grid grid-cols-2 gap-3">
           <button
-            className="rounded-xl border border-line bg-white py-3 text-sm font-bold text-[#57535d] transition hover:border-[#aaa6ad]"
+            className="rounded-xl border border-line bg-white py-3 text-sm font-bold text-ink-soft transition hover:border-placeholder"
             onClick={onCancel}
           >
             Go back
@@ -1185,7 +1185,7 @@ function KitchenStatusConfirmation({
             className={`rounded-xl py-3 text-sm font-bold text-white transition ${
               cancelled
                 ? "bg-berry-strong hover:bg-[#9f354b]"
-                : "bg-sage-strong hover:bg-[#587453]"
+                : "bg-sage-strong hover:bg-sage-strong"
             }`}
             onClick={onConfirm}
           >
@@ -1229,13 +1229,13 @@ function HistoryOrderDrawer({
       />
       <aside
         aria-label={`Details for order ${order.id}`}
-        className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[#fcfaf4] p-6 shadow-2xl sm:w-[460px] sm:p-8`}
+        className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[460px] sm:p-8`}
       >
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>Order details</p>
           <button
             aria-label="Close"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-[#f1ece4]"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-cream-2"
             onClick={onClose}
           >
             <Icon name="close" size={17} />
@@ -1245,7 +1245,7 @@ function HistoryOrderDrawer({
         <div className="mt-8 flex items-start justify-between border-b border-line pb-7">
           <div>
             <h2 className="font-serif text-4xl">{order.id}</h2>
-            <p className="mt-2 text-sm text-[#77717a]">
+            <p className="mt-2 text-sm text-muted-2">
               {order.table} · {order.guest}
             </p>
           </div>
@@ -1285,7 +1285,7 @@ function HistoryOrderDrawer({
                 key={item.name}
               >
                 <div className="flex items-center gap-3">
-                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#eee8df] text-xs font-bold">
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-sand text-xs font-bold">
                     {item.qty}
                   </span>
                   <span className="text-sm font-bold">{item.name}</span>
@@ -1297,11 +1297,11 @@ function HistoryOrderDrawer({
         </div>
 
         <div className="mt-8 space-y-3 border-t border-line pt-6 text-sm">
-          <div className="flex justify-between text-[#77717a]">
+          <div className="flex justify-between text-muted-2">
             <span>Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-[#77717a]">
+          <div className="flex justify-between text-muted-2">
             <span>Tax</span>
             <span>${tax.toFixed(2)}</span>
           </div>
@@ -1366,7 +1366,7 @@ function ReservationWorkspace({
           <h1 className="mt-2 font-serif text-4xl tracking-[-0.025em] md:text-5xl">
             Reservations
           </h1>
-          <p className="mt-2 text-sm text-[#77717a]">
+          <p className="mt-2 text-sm text-muted-2">
             Manage arrivals and keep every booking organized.
           </p>
         </div>
@@ -1380,13 +1380,13 @@ function ReservationWorkspace({
       </section>
 
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex w-fit rounded-full border border-line bg-[#e9e3da] p-1">
+        <div className="flex w-fit rounded-full border border-line bg-line-soft p-1">
           {(["upcoming", "past"] as const).map((option) => (
             <button
               className={`rounded-full px-5 py-2 text-xs font-bold capitalize transition ${
                 reservationView === option
                   ? "bg-white text-ink shadow-sm"
-                  : "text-[#77717a] hover:text-ink"
+                  : "text-muted-2 hover:text-ink"
               }`}
               key={option}
               onClick={() => setReservationView(option)}
@@ -1410,8 +1410,8 @@ function ReservationWorkspace({
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-[22px] border border-line bg-[#fcfaf4]">
-        <div className="hidden grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr_0.8fr] gap-4 border-b border-line-soft bg-[#f6f2eb] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted md:grid">
+      <div className="overflow-hidden rounded-[22px] border border-line bg-paper">
+        <div className="hidden grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr_0.8fr] gap-4 border-b border-line-soft bg-cream-2 px-6 py-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted md:grid">
           <span>Guest</span>
           <span>Date</span>
           <span>Time</span>
@@ -1421,7 +1421,7 @@ function ReservationWorkspace({
         {visibleReservations.map((reservation) => (
           <button
             aria-label={`View reservation for ${reservation.guest}`}
-            className="group grid w-full grid-cols-[1fr_auto] gap-x-4 gap-y-3 border-b border-line-soft px-5 py-5 text-left transition last:border-0 hover:bg-[#f8f3ed] focus-visible:bg-[#f8f3ed] focus-visible:outline-2 focus-visible:outline-berry focus-visible:outline-offset-[-2px] md:grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr_0.8fr] md:items-center md:gap-4 md:px-6"
+            className="group grid w-full grid-cols-[1fr_auto] gap-x-4 gap-y-3 border-b border-line-soft px-5 py-5 text-left transition last:border-0 hover:bg-cream-3 focus-visible:bg-cream-3 focus-visible:outline-2 focus-visible:outline-berry focus-visible:outline-offset-[-2px] md:grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr_0.8fr] md:items-center md:gap-4 md:px-6"
             key={reservation.id}
             onClick={() => setSelectedReservation(reservation)}
           >
@@ -1429,7 +1429,7 @@ function ReservationWorkspace({
               <div className="flex items-center gap-2">
                 <p className="text-sm font-bold">{reservation.guest}</p>
                 {reservation.status === "cancelled" && (
-                  <span className="rounded-full bg-[#eee8df] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[#77717a]">
+                  <span className="rounded-full bg-sand px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-muted-2">
                     Cancelled
                   </span>
                 )}
@@ -1440,17 +1440,17 @@ function ReservationWorkspace({
                 </p>
               )}
             </div>
-            <span className="row-start-2 text-xs text-[#77717a] md:row-auto md:text-sm">
+            <span className="row-start-2 text-xs text-muted-2 md:row-auto md:text-sm">
               {reservation.date}
             </span>
             <span className="row-start-2 font-serif text-lg md:row-auto">
               {reservation.time}
             </span>
-            <span className="flex items-center gap-1.5 text-xs font-bold text-[#625e68] md:text-sm">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-ink-mid md:text-sm">
               <Icon name="users" size={15} />
               {reservation.guests} guests
             </span>
-            <span className="text-right text-xs text-[#77717a] md:text-left">
+            <span className="text-right text-xs text-muted-2 md:text-left">
               {reservation.table ?? "Unassigned"}
             </span>
           </button>
@@ -1522,12 +1522,12 @@ function NewReservationDrawer({
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[#fcfaf4] p-6 shadow-2xl sm:w-[460px] sm:p-8`}>
+      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[460px] sm:p-8`}>
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>New booking</p>
           <button
             aria-label="Close"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-[#f1ece4]"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-cream-2"
             onClick={onClose}
           >
             <Icon name="close" size={17} />
@@ -1535,7 +1535,7 @@ function NewReservationDrawer({
         </div>
         <div className="mt-8 border-b border-line pb-7">
           <h2 className="font-serif text-4xl">Create reservation</h2>
-          <p className="mt-2 text-sm text-[#77717a]">
+          <p className="mt-2 text-sm text-muted-2">
             Add the guest’s details and seating preferences.
           </p>
         </div>
@@ -1587,7 +1587,7 @@ function NewReservationDrawer({
             <div className="mt-2.5 flex items-center justify-between rounded-xl border border-line bg-white p-2">
               <button
                 aria-label="Decrease guests"
-                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl transition hover:bg-[#e8e1d7] disabled:opacity-40"
+                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl transition hover:bg-line-soft disabled:opacity-40"
                 disabled={guests <= 1}
                 onClick={() => setGuests((current) => Math.max(1, current - 1))}
                 type="button"
@@ -1599,7 +1599,7 @@ function NewReservationDrawer({
               </strong>
               <button
                 aria-label="Increase guests"
-                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl transition hover:bg-[#e8e1d7]"
+                className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl transition hover:bg-line-soft"
                 onClick={() => setGuests((current) => current + 1)}
                 type="button"
               >
@@ -1665,12 +1665,12 @@ function ReservationDetailDrawer({
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[#fcfaf4] p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
+      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>Reservation details</p>
           <button
             aria-label="Close"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-[#f1ece4]"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-cream-2"
             onClick={onClose}
           >
             <Icon name="close" size={17} />
@@ -1680,7 +1680,7 @@ function ReservationDetailDrawer({
         <div className="mt-8 flex items-start justify-between border-b border-line pb-7">
           <div>
             <h2 className="font-serif text-4xl">{reservation.guest}</h2>
-            <p className="mt-2 text-sm text-[#77717a]">
+            <p className="mt-2 text-sm text-muted-2">
               {reservation.date} · {reservation.time}
             </p>
           </div>
@@ -1708,7 +1708,7 @@ function ReservationDetailDrawer({
         {reservation.notes && (
           <div className="mt-6 rounded-2xl border border-line-soft bg-white p-4">
             <p className={`${styles["detail-label"]}`}>Guest notes</p>
-            <p className="mt-2 text-sm leading-6 text-[#625e68]">
+            <p className="mt-2 text-sm leading-6 text-ink-mid">
               {reservation.notes}
             </p>
           </div>
@@ -1724,11 +1724,11 @@ function ReservationDetailDrawer({
         )}
 
         {isUpcoming && confirming && (
-          <div className="mt-8 rounded-2xl border border-[#e4bdc4] bg-[#f9ecee] p-5">
+          <div className="mt-8 rounded-2xl border border-[#e4bdc4] bg-berry-soft p-5">
             <p className="text-sm font-bold text-[#9f394d]">
               Cancel this reservation?
             </p>
-            <p className="mt-2 text-xs leading-5 text-[#77717a]">
+            <p className="mt-2 text-xs leading-5 text-muted-2">
               It will be removed from Upcoming and moved to the Past list as
               cancelled.
             </p>

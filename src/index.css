@@ -36,9 +36,12 @@
 
   /* Text — ink */
   --color-ink: #332d29;
+  --color-ink-dark: #37333a;
   --color-ink-soft: #595663;
+  --color-ink-mid: #625e68;
   --color-muted: #969198;
   --color-muted-2: #777181;
+  --color-placeholder: #aaa6ad;
 
   /* Borders / dividers */
   --color-line: #ded8cf;

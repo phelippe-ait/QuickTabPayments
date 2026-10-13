@@ -793,13 +793,13 @@ function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem | null;
           <label className={`${styles["wide"]}`}>
             Item image
             <span className="mt-2.5 grid grid-cols-[112px_1fr] gap-4 rounded-[10px] border border-line bg-white p-3.5 max-[480px]:grid-cols-1">
-              <img className="h-24 w-28 rounded-lg bg-[#eee8df] object-cover max-[480px]:h-36 max-[480px]:w-full" src={form.image} alt="Menu item preview" />
+              <img className="h-24 w-28 rounded-lg bg-sand object-cover max-[480px]:h-36 max-[480px]:w-full" src={form.image} alt="Menu item preview" />
               <span className="flex min-w-0 flex-col items-start justify-center">
-                <span className="mb-1 block text-[12px] font-bold text-[#5b5661]">{item ? "Replace image" : "Upload an image"}</span>
+                <span className="mb-1 block text-[12px] font-bold text-ink-soft">{item ? "Replace image" : "Upload an image"}</span>
                 <span className="mb-3 block text-[10px] leading-[1.5] font-normal text-muted">
                   Use a landscape image in a 3:2 ratio, ideally 1200 × 800 px. JPG, PNG, or WebP up to 5 MB. Keep the food centered so it crops well on menu cards.
                 </span>
-                <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-[#d9d3ca] bg-[#f9f6ef] px-3 text-[11px] font-bold text-[#625e68] transition-colors hover:border-berry hover:text-berry">
+                <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
                   Choose image
                   <input
                     className="sr-only"
