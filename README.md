@@ -86,15 +86,35 @@ npm run lint      # Run ESLint
 
 ## Environment Variables
 
-Environment variables should be stored in local `.env` files and should not be committed to Git.
+Copy the example file and fill in your Supabase project values:
 
-Example:
-
-```env
-# Add project-specific environment variables here
+```bash
+cp .env.example .env.local
 ```
 
-Use public frontend variables only where appropriate, and never commit private API keys, payment secrets, service-role keys, or other sensitive credentials.
+```env
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<publishable / anon key>
+```
+
+Both are under **Project Settings → API Keys** in the Supabase dashboard. Only the
+publishable/anon key belongs in the browser — Row Level Security protects the data.
+Never put the `service_role`/secret key in a `VITE_` variable. `.env.local` is git-ignored.
+
+### Authentication setup
+
+1. **Authentication → Providers → Email**: enable it. For local development you can
+   switch **Confirm email** off to skip the confirmation step.
+2. **Authentication → URL Configuration**: set the Site URL to `http://localhost:5173`
+   and add `http://localhost:5173/**` to the Redirect URLs.
+3. Run `supabase/migrations/0001_profiles.sql` in the SQL Editor. It creates the
+   `profiles` table (with RLS) and a trigger that fills it whenever a user signs up.
+4. Social logins (optional): enable **Google** (and later Apple/Facebook) under
+   Providers. Each provider's OAuth redirect URI must be
+   `https://<project-ref>.supabase.co/auth/v1/callback`.
+
+In the customer app the Apple and Facebook buttons are shown but disabled until those
+providers are configured; Google and email are live.
 
 ## Project Structure
 

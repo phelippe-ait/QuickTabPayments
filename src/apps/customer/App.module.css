@@ -236,6 +236,9 @@
   box-shadow: 0 2px 6px rgba(50,42,36,.05); transition: border-color .18s ease, background .18s ease;
 }
 .auth-social-button:hover { border-color: var(--color-placeholder); background: var(--color-paper); }
+.auth-social-button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.auth-social-button:disabled:hover { border-color: var(--color-line); background: #fff; }
+.auth-social-soon { color: var(--color-muted); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--color-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
 .auth-divider::before, .auth-divider::after { content: ""; height: 1px; flex: 1; background: var(--color-line); }
 .auth-form { padding: 20px 16px; border: 1px solid var(--color-line-2); border-radius: 9px; background: rgba(255,255,255,.35); box-shadow: var(--shadow); }

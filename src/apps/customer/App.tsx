@@ -2,6 +2,9 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
 import { Icon } from "@shared/ui/Icon";
 import { Button } from "@shared/ui/Button";
+import { useAuth } from "@shared/auth/AuthContext";
+
+const AUTH_RETURN_KEY = "quicktab:auth-return";
 
 type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup";
 type Category = "Hot Beverages" | "Breakfast" | "Lunch";
@@ -457,12 +460,14 @@ function CheckoutScreen({
   total,
   onClose,
   onPay,
+  defaultName = "",
 }: {
   total: number;
   onClose: () => void;
   onPay: (customerName: string) => void;
+  defaultName?: string;
 }) {
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(defaultName);
   const hasCustomerName = customerName.trim().length > 0;
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -637,16 +642,54 @@ function AuthScreen({
   onContinue: () => void;
 }) {
   const signup = kind === "signup";
+  const { signInWithOAuth, signInWithPassword, signUp, loading: authLoading } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  // Each provider will map to `supabase.auth.signInWithOAuth({ provider })`;
-  // the form below is the email/password path. Both currently just continue the flow.
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const busy = pending || authLoading;
+
+  // Apple and Facebook stay visible but disabled until their providers are
+  // configured in Supabase. Google and email are live.
   const providers = [
-    { id: "apple", label: "Apple" },
-    { id: "google", label: "Google" },
-    { id: "facebook", label: "Facebook" },
+    { id: "apple", label: "Apple", enabled: false },
+    { id: "google", label: "Google", enabled: true },
+    { id: "facebook", label: "Facebook", enabled: false },
   ] as const;
+
+  const handleOAuth = async (provider: "google" | "apple" | "facebook") => {
+    setError("");
+    setPending(true);
+    const { error: oauthError } = await signInWithOAuth(provider);
+    // A successful call redirects the browser away; only errors return here.
+    if (oauthError) {
+      setError(oauthError.message);
+      setPending(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    if (signup && password !== passwordConfirmation) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    setPending(true);
+    const { error: submitError } = signup
+      ? await signUp({ email, password, firstName, lastName })
+      : await signInWithPassword(email, password);
+    if (submitError) {
+      setError(submitError.message);
+      setPending(false);
+      return;
+    }
+    onContinue();
+  };
 
   return (
     <main className={`${styles["page-screen"]} auth-screen`}>
@@ -657,8 +700,8 @@ function AuthScreen({
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
-          ? "Create your account to order faster next time — with Apple, Google, Facebook, or email."
-          : "Welcome back. Continue with Apple, Google, Facebook, or email."}
+          ? "Create your account to order faster next time — with Google, email, or another provider."
+          : "Welcome back. Continue with Google, email, or another provider."}
       </p>
       <div className={`${styles["auth-social"]}`}>
         {providers.map((provider) => (
@@ -666,44 +709,57 @@ function AuthScreen({
             key={provider.id}
             type="button"
             className={`${styles["auth-social-button"]}`}
-            onClick={onContinue}
+            disabled={!provider.enabled || busy}
+            title={provider.enabled ? undefined : "Coming soon"}
+            onClick={() => handleOAuth(provider.id)}
           >
             <Icon name={provider.id} size={18} />
             <span>
               {signup ? "Sign up" : "Log in"} with {provider.label}
             </span>
+            {!provider.enabled && (
+              <span className={`${styles["auth-social-soon"]}`}>Coming soon</span>
+            )}
           </button>
         ))}
       </div>
       <div className={`${styles["auth-divider"]}`} role="separator">
         <span>or continue with email</span>
       </div>
-      <form
-        className={`${styles["auth-form"]}`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (signup && password !== passwordConfirmation) {
-            setPasswordError("Passwords do not match.");
-            return;
-          }
-          onContinue();
-        }}
-      >
+      <form className={`${styles["auth-form"]}`} onSubmit={handleSubmit}>
         {signup && (
           <div className={`${styles["auth-name-row"]}`}>
             <label>
               First name
-              <input type="text" autoComplete="given-name" required />
+              <input
+                type="text"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                required
+              />
             </label>
             <label>
               Last name
-              <input type="text" autoComplete="family-name" required />
+              <input
+                type="text"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                required
+              />
             </label>
           </div>
         )}
         <label>
           Email
-          <input type="email" autoComplete="email" required />
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
         </label>
         <label>
           Password
@@ -741,8 +797,13 @@ function AuthScreen({
             {passwordError}
           </p>
         )}
-        <Button variant="outline" fullWidth type="submit" className="mt-1">
-          {signup ? "Create account" : "Log in"}
+        {error && (
+          <p className={`${styles["auth-error"]}`} role="alert">
+            {error}
+          </p>
+        )}
+        <Button variant="outline" fullWidth type="submit" className="mt-1" disabled={busy}>
+          {busy ? "Please wait…" : signup ? "Create account" : "Log in"}
         </Button>
       </form>
     </main>
@@ -750,11 +811,40 @@ function AuthScreen({
 }
 
 export default function App() {
+  const { user, profile } = useAuth();
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<Product | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
   const [authReturnScreen, setAuthReturnScreen] = useState<"menu" | "confirmation">("menu");
+
+  const openAuth = (authScreen: "login" | "signup", returnTo: "menu" | "confirmation") => {
+    setAuthReturnScreen(returnTo);
+    // Persisted so we can return here after an OAuth redirect reloads the page.
+    window.sessionStorage.setItem(AUTH_RETURN_KEY, returnTo);
+    setScreen(authScreen);
+  };
+
+  const closeAuth = () => {
+    window.sessionStorage.removeItem(AUTH_RETURN_KEY);
+    setScreen(authReturnScreen);
+  };
+
+  // After an OAuth redirect the page reloads with a session; send the user back
+  // to the screen they started from instead of the menu.
+  useEffect(() => {
+    if (!user) return;
+    const pending = window.sessionStorage.getItem(AUTH_RETURN_KEY);
+    if (!pending) return;
+    window.sessionStorage.removeItem(AUTH_RETURN_KEY);
+    setScreen(pending === "confirmation" ? "confirmation" : "menu");
+  }, [user]);
+
+  const profileName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    user?.email?.split("@")[0] ||
+    "";
+
   const cartItems = useMemo(
     () =>
       products
@@ -785,10 +875,7 @@ export default function App() {
           total={total}
           onOpenCart={() => setScreen("cart")}
           onSelect={setSelected}
-          onAuth={(authScreen) => {
-            setAuthReturnScreen("menu");
-            setScreen(authScreen);
-          }}
+          onAuth={(authScreen) => openAuth(authScreen, "menu")}
         />
       )}
       {screen === "cart" && (
@@ -821,6 +908,7 @@ export default function App() {
       {screen === "checkout" && (
         <CheckoutScreen
           total={total}
+          defaultName={profileName}
           onClose={() => setScreen("cart")}
           onPay={(name) => {
             setCustomerName(name);
@@ -831,14 +919,8 @@ export default function App() {
       {screen === "confirmation" && (
         <Confirmation
           customerName={customerName}
-          onLogin={() => {
-            setAuthReturnScreen("confirmation");
-            setScreen("login");
-          }}
-          onSignup={() => {
-            setAuthReturnScreen("confirmation");
-            setScreen("signup");
-          }}
+          onLogin={() => openAuth("login", "confirmation")}
+          onSignup={() => openAuth("signup", "confirmation")}
           onClose={() => {
             setCart({});
             setCustomerName("");
@@ -849,8 +931,8 @@ export default function App() {
       {(screen === "login" || screen === "signup") && (
         <AuthScreen
           kind={screen}
-          onBack={() => setScreen(authReturnScreen)}
-          onContinue={() => setScreen(authReturnScreen)}
+          onBack={closeAuth}
+          onContinue={closeAuth}
         />
       )}
       {selected && (
