@@ -31,6 +31,7 @@ export type AuthContextValue = {
   signInWithOAuth: (provider: OAuthProvider) => Promise<AuthResult>;
   signInWithPassword: (email: string, password: string) => Promise<AuthResult>;
   signUp: (input: SignUpInput) => Promise<AuthResult>;
+  updateProfile: (input: { firstName: string; lastName: string }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
@@ -49,6 +50,7 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithOAuth: async () => ({ error: null }),
   signInWithPassword: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
+  updateProfile: async () => ({ error: null }),
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -126,12 +128,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return { error };
       },
+      async updateProfile({ firstName, lastName }) {
+        if (!supabase || !userId) {
+          return { error: new Error("You need to be signed in to update your profile.") };
+        }
+        const { error } = await supabase
+          .from("profiles")
+          .update({ first_name: firstName, last_name: lastName })
+          .eq("id", userId);
+        if (!error) await refreshProfile();
+        return { error };
+      },
       async signOut() {
         if (supabase) await supabase.auth.signOut();
       },
       refreshProfile,
     }),
-    [session, profile, loading, refreshProfile],
+    [session, profile, loading, userId, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

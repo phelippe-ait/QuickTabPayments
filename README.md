@@ -35,7 +35,9 @@ QuickTab is designed as a tool for individual restaurants rather than a marketpl
 
 ### Prerequisites
 
-Make sure Node.js and npm are installed.
+QuickTab uses Vite 8, React 19, and TypeScript 6, which require a recent Node.js
+release. Install **Node.js 22.12 or newer** (the current LTS line or above is
+recommended) along with npm.
 
 Check your versions with:
 
@@ -75,13 +77,23 @@ http://localhost:5173/
 
 Vite includes its own development server and Hot Module Replacement (HMR), so the project does not require the VS Code Live Server extension.
 
+The app serves three surfaces from the same build:
+
+| Route | App |
+| --- | --- |
+| `/` | Customer app (browse, order, pay) |
+| `/staff` | Staff dashboard |
+| `/admin` | Admin dashboard |
+
 ## Available Scripts
 
 ```bash
-npm run dev       # Start the development server
-npm run build     # Build the application for production
-npm run preview   # Preview the production build locally
-npm run lint      # Run ESLint
+npm run dev         # Start the development server
+npm run build       # Build the application for production
+npm run preview     # Preview the production build locally
+npm run lint        # Run ESLint
+npm run test        # Run the unit/integration test suite once
+npm run test:watch  # Re-run tests on change while developing
 ```
 
 ## Environment Variables
@@ -101,6 +113,9 @@ Both are under **Project Settings → API Keys** in the Supabase dashboard. Only
 publishable/anon key belongs in the browser — Row Level Security protects the data.
 Never put the `service_role`/secret key in a `VITE_` variable. `.env.local` is git-ignored.
 
+Set `VITE_SUPABASE_URL` to the bare project origin (`https://<project-ref>.supabase.co`)
+— no trailing slash and no `/rest/v1` path, or the client will build invalid request URLs.
+
 ### Authentication setup
 
 1. **Authentication → Providers → Email**: enable it. For local development you can
@@ -118,19 +133,31 @@ until those providers are configured; email is the live sign-in method.
 
 ## Project Structure
 
-A typical project structure is:
+The app is organised by feature surface rather than by generic `components/` and
+`pages/` folders:
 
 ```text
 QuickTabPayments/
-├── public/
+├── public/                     # Static assets served as-is
 ├── src/
-│   ├── assets/
-│   ├── components/
-│   ├── pages/
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── .gitignore
+│   ├── apps/
+│   │   ├── customer/           # Customer app (route: /)
+│   │   ├── staff/              # Staff dashboard (route: /staff)
+│   │   └── admin/              # Admin dashboard (route: /admin)
+│   ├── routes/
+│   │   └── AppRoutes.tsx       # Router; lazy-loads each app
+│   ├── shared/
+│   │   ├── auth/               # AuthContext + useAuth hook
+│   │   ├── lib/                # Supabase client, generated DB types, helpers
+│   │   ├── types/              # Shared TypeScript types
+│   │   └── ui/                 # Shared UI components (Button, Icon, StatusPill)
+│   ├── test/
+│   │   └── setup.ts            # Vitest setup (Testing Library, jsdom shims)
+│   ├── index.css
+│   └── main.tsx                # App entry point
+├── supabase/
+│   └── migrations/             # SQL migrations (run in the Supabase SQL Editor)
+├── .env.example
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -138,7 +165,8 @@ QuickTabPayments/
 └── README.md
 ```
 
-The exact folder structure may grow as additional features are implemented.
+Each app folder co-locates its styles and tests (e.g. `App.module.css`,
+`App.test.tsx`). The exact structure may grow as additional features are implemented.
 
 ## Development Workflow
 
@@ -150,20 +178,18 @@ The exact folder structure may grow as additional features are implemented.
 
 ## Testing
 
-The project architecture includes:
-
-- **Vitest** for unit and integration testing.
-- **Playwright** for end-to-end testing.
-
-Example commands once the testing configuration is installed:
+Unit and integration tests use **Vitest** with **React Testing Library**, running
+against a jsdom environment. The configuration lives in `vitest.config.ts` and
+`src/test/setup.ts`; test files sit next to the code they cover as
+`*.test.ts(x)` and are discovered under `src/`.
 
 ```bash
-npm run test
+npm run test        # Run the suite once
+npm run test:watch  # Re-run on change while developing
 ```
 
-```bash
-npx playwright test
-```
+End-to-end coverage is planned with **Playwright**, but it is not configured in
+the repository yet.
 
 ## Deployment
 
@@ -176,6 +202,10 @@ npm run build
 ```
 
 The generated production files are placed in the `dist/` directory.
+
+When deploying to Vercel, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in
+the project's environment variables, and add the deployed domain to Supabase under
+**Authentication → URL Configuration** (Site URL and Redirect URLs).
 
 ## Project Documentation
 

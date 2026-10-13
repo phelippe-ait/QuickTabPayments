@@ -113,6 +113,16 @@
 .drawer-categories button { padding: 15px 2px; border: 0; border-bottom: 1px solid var(--color-line-soft); background: transparent; color: var(--color-muted-2); text-align: left; font-size: 14px; cursor: pointer; }
 .drawer-categories button.active { color: var(--berry); font-weight: 700; }
 .drawer-auth { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: auto; padding-top: 22px; }
+.drawer-account { margin-top: auto; padding-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+.drawer-account-head { display: flex; align-items: center; gap: 11px; }
+.drawer-avatar { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 50%; background: var(--color-berry-soft); color: var(--color-berry); font-size: 13px; font-weight: 700; }
+.drawer-account-name { flex: 1; min-width: 0; }
+.drawer-account-name strong { display: block; color: var(--color-muted-2); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-account-name small { display: block; margin-top: 2px; color: var(--color-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-edit { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid var(--color-line); border-radius: 50%; background: transparent; color: var(--color-muted-2); cursor: pointer; transition: border-color .18s ease, color .18s ease; }
+.drawer-edit:hover { color: var(--color-berry); border-color: var(--color-berry); }
+.drawer-account-link, .drawer-logout { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 43px; border: 1px solid var(--color-line); border-radius: 9px; background: #fff; color: var(--color-muted-2); font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color .18s ease, color .18s ease; }
+.drawer-account-link:hover, .drawer-logout:hover { color: var(--color-berry); border-color: var(--color-berry); }
 .drawer-links { margin-top: 18px; border-top: 1px solid var(--color-line-soft); display: flex; flex-direction: column; }
 .drawer-links span { padding: 17px 2px; border-bottom: 1px solid var(--color-line-soft); font-size: 13px; }
 
