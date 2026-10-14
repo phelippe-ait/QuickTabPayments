@@ -529,6 +529,10 @@ function App() {
           )}
         </main>
 
+        <footer className={styles["technology-footer"]}>
+          Developed by QuickTab Payments Team
+        </footer>
+
         <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-line bg-paper lg:hidden">
           <MobileNav
             active={view === "tables"}

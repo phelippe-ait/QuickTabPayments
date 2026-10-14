@@ -6,7 +6,14 @@ import { useAuth } from "@shared/auth/AuthContext";
 
 const AUTH_RETURN_KEY = "quicktab:auth-return";
 
-type Screen = "menu" | "cart" | "checkout" | "confirmation" | "login" | "signup" | "orders";
+type Screen =
+  | "menu"
+  | "cart"
+  | "checkout"
+  | "confirmation"
+  | "login"
+  | "signup"
+  | "orders";
 type Category = "Hot Beverages" | "Breakfast" | "Lunch";
 
 type Product = {
@@ -51,7 +58,8 @@ const products: Product[] = [
   },
   {
     name: "Cappuccino",
-    description: "Silky, rich, and deeply chocolatey with a generous cap of foam.",
+    description:
+      "Silky, rich, and deeply chocolatey with a generous cap of foam.",
     price: 4.5,
     category: "Hot Beverages",
     image: "/assets/cappuccino.jpg",
@@ -59,51 +67,51 @@ const products: Product[] = [
   },
   {
     name: "Avocado Toast",
-    description: "Sourdough toast with smashed avocado, feta, herbs, and lemon.",
+    description:
+      "Sourdough toast with smashed avocado, feta, herbs, and lemon.",
     price: 11.5,
     category: "Breakfast",
-    image:
-      "/assets/avocado-toast.jpg",
+    image: "/assets/avocado-toast.jpg",
   },
   {
     name: "Berry Pancakes",
-    description: "Fluffy pancakes with seasonal berries, maple syrup, and whipped butter.",
+    description:
+      "Fluffy pancakes with seasonal berries, maple syrup, and whipped butter.",
     price: 12,
     category: "Breakfast",
-    image:
-      "/assets/berry-pancakes.jpg",
+    image: "/assets/berry-pancakes.jpg",
   },
   {
     name: "Butter Croissant",
-    description: "A flaky, golden croissant served warm with cultured butter and jam.",
+    description:
+      "A flaky, golden croissant served warm with cultured butter and jam.",
     price: 5.5,
     category: "Breakfast",
-    image:
-      "/assets/butter-croissant.jpg",
+    image: "/assets/butter-croissant.jpg",
   },
   {
     name: "Chicken Club",
-    description: "Roast chicken, crisp lettuce, tomato, bacon, and herb mayo on toasted bread.",
+    description:
+      "Roast chicken, crisp lettuce, tomato, bacon, and herb mayo on toasted bread.",
     price: 13.5,
     category: "Lunch",
-    image:
-      "/assets/chicken-club.jpg",
+    image: "/assets/chicken-club.jpg",
   },
   {
     name: "Garden Salad",
-    description: "Seasonal greens, cucumber, tomato, avocado, and a bright lemon dressing.",
+    description:
+      "Seasonal greens, cucumber, tomato, avocado, and a bright lemon dressing.",
     price: 12.5,
     category: "Lunch",
-    image:
-      "/assets/garden-salad.jpg",
+    image: "/assets/garden-salad.jpg",
   },
   {
     name: "Pesto Panini",
-    description: "Toasted panini with mozzarella, tomato, basil pesto, and a crisp side salad.",
+    description:
+      "Toasted panini with mozzarella, tomato, basil pesto, and a crisp side salad.",
     price: 14,
     category: "Lunch",
-    image:
-      "/assets/pesto-panini.jpg",
+    image: "/assets/pesto-panini.jpg",
   },
 ];
 
@@ -113,7 +121,7 @@ const tableNumber = 3;
 const orderStatuses = [
   {
     label: "Order confirmed",
-    message: "We’ve received your order and sent it to the kitchen.",
+    message: "We've received your order and sent it to the kitchen.",
   },
   {
     label: "Preparing order",
@@ -137,13 +145,23 @@ function HeaderButton({
   className?: string;
 }) {
   return (
-    <button className={`${styles["icon-button"]} ${className ?? ""}`} aria-label={label} onClick={onClick}>
+    <button
+      className={`${styles["icon-button"]} ${className ?? ""}`}
+      aria-label={label}
+      onClick={onClick}
+    >
       <Icon name={icon} />
     </button>
   );
 }
 
-function ProductPhoto({ product, large = false }: { product: Product; large?: boolean }) {
+function ProductPhoto({
+  product,
+  large = false,
+}: {
+  product: Product;
+  large?: boolean;
+}) {
   return (
     <div
       className={`${styles["product-photo"]} ${large ? styles["photo-large"] : ""}`}
@@ -176,7 +194,8 @@ function MenuScreen({
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<Category>("Hot Beverages");
+  const [activeCategory, setActiveCategory] =
+    useState<Category>("Hot Beverages");
 
   const accountName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
@@ -203,13 +222,18 @@ function MenuScreen({
   useEffect(() => {
     const sections = categories
       .map((category) =>
-        document.getElementById(`category-${category.toLowerCase().replace(" ", "-")}`),
+        document.getElementById(
+          `category-${category.toLowerCase().replace(" ", "-")}`,
+        ),
       )
       .filter((section): section is HTMLElement => Boolean(section));
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries.find((entry) => entry.isIntersecting);
-        if (visible) setActiveCategory((visible.target as HTMLElement).dataset.category as Category);
+        if (visible)
+          setActiveCategory(
+            (visible.target as HTMLElement).dataset.category as Category,
+          );
       },
       { rootMargin: "-105px 0px -65% 0px" },
     );
@@ -221,7 +245,11 @@ function MenuScreen({
   return (
     <>
       {drawer && (
-        <button className={`${styles["drawer-shade"]}`} aria-label="Close menu" onClick={() => setDrawer(false)} />
+        <button
+          className={`${styles["drawer-shade"]}`}
+          aria-label="Close menu"
+          onClick={() => setDrawer(false)}
+        />
       )}
       <aside className={`${styles["drawer"]} ${drawer ? styles["open"] : ""}`}>
         <div className={`${styles["drawer-heading"]}`}>
@@ -229,9 +257,17 @@ function MenuScreen({
             <span className={`${styles["eyebrow"]}`}>CAFÉ SHOP</span>
             <h2>Welcome</h2>
           </div>
-          <HeaderButton className={styles["drawer-close"]} icon="close" label="Close menu" onClick={() => setDrawer(false)} />
+          <HeaderButton
+            className={styles["drawer-close"]}
+            icon="close"
+            label="Close menu"
+            onClick={() => setDrawer(false)}
+          />
         </div>
-        <nav className={`${styles["drawer-categories"]}`} aria-label="Menu categories">
+        <nav
+          className={`${styles["drawer-categories"]}`}
+          aria-label="Menu categories"
+        >
           <span>Menu categories</span>
           {categories.map((category) => (
             <button
@@ -282,10 +318,20 @@ function MenuScreen({
           </div>
         ) : (
           <div className={`${styles["drawer-auth"]}`}>
-            <Button variant="primary" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("signup")}>
+            <Button
+              variant="primary"
+              fullWidth
+              className="h-[43px] text-[11px]"
+              onClick={() => onAuth("signup")}
+            >
               Sign up
             </Button>
-            <Button variant="outline" fullWidth className="h-[43px] text-[11px]" onClick={() => onAuth("login")}>
+            <Button
+              variant="outline"
+              fullWidth
+              className="h-[43px] text-[11px]"
+              onClick={() => onAuth("login")}
+            >
               Log in
             </Button>
           </div>
@@ -299,7 +345,12 @@ function MenuScreen({
 
       <main className={`${styles["menu-screen"]}`}>
         <header className={`${styles["menu-header"]}`}>
-          <HeaderButton className={styles["menu-toggle"]} icon="menu" label="Open menu" onClick={() => setDrawer(true)} />
+          <HeaderButton
+            className={styles["menu-toggle"]}
+            icon="menu"
+            label="Open menu"
+            onClick={() => setDrawer(true)}
+          />
           <span className={`${styles["menu-brand"]}`}>Café Shop</span>
         </header>
 
@@ -321,7 +372,10 @@ function MenuScreen({
           </label>
         </div>
 
-        <nav className={`${styles["category-tabs"]}`} aria-label="Browse menu categories">
+        <nav
+          className={`${styles["category-tabs"]}`}
+          aria-label="Browse menu categories"
+        >
           {categories.map((category) => (
             <button
               key={category}
@@ -364,7 +418,9 @@ function MenuScreen({
                   </button>
                 ))}
                 {categoryProducts.length === 0 && (
-                  <p className={`${styles["empty-search"]}`}>No matching items in this section.</p>
+                  <p className={`${styles["empty-search"]}`}>
+                    No matching items in this section.
+                  </p>
                 )}
               </div>
             </section>
@@ -409,19 +465,33 @@ function ProductModal({
   const [quantity, setQuantity] = useState(1);
   return (
     <div className={`${styles["modal-shade"]}`}>
-      <section className={`${styles["product-modal"]}`} role="dialog" aria-modal="true" aria-label={product.name}>
+      <section
+        className={`${styles["product-modal"]}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={product.name}
+      >
         <div className={`${styles["modal-close"]}`}>
-          <HeaderButton icon="close" label="Close product details" onClick={onClose} />
+          <HeaderButton
+            icon="close"
+            label="Close product details"
+            onClick={onClose}
+          />
         </div>
         <ProductPhoto product={product} large />
         <h2>{product.name}</h2>
         <p>{product.description}</p>
-        <div className={`${styles["modal-price"]}`}>${product.price.toFixed(2)}</div>
+        <div className={`${styles["modal-price"]}`}>
+          ${product.price.toFixed(2)}
+        </div>
         {product.category === "Hot Beverages" && (
           <>
             <label className={`${styles["option-row"]}`}>
               <span>Size</span>
-              <select defaultValue="Regular"><option>Regular</option><option>Large</option></select>
+              <select defaultValue="Regular">
+                <option>Regular</option>
+                <option>Large</option>
+              </select>
             </label>
             <label className={`${styles["option-row"]}`}>
               <span>Choice of milk</span>
@@ -439,11 +509,28 @@ function ProductModal({
         </label>
         <div className={`${styles["modal-footer"]}`}>
           <div className={`${styles["quantity"]}`}>
-            <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
+            <button
+              aria-label="Decrease quantity"
+              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+            >
+              −
+            </button>
             <span>{quantity}</span>
-            <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}>+</button>
+            <button
+              aria-label="Increase quantity"
+              onClick={() => setQuantity(quantity + 1)}
+            >
+              +
+            </button>
           </div>
-          <Button variant="outline" size="sm" className="rounded-[5px]" onClick={() => onAdd(quantity)}>Add to Order</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-[5px]"
+            onClick={() => onAdd(quantity)}
+          >
+            Add to Order
+          </Button>
         </div>
       </section>
     </div>
@@ -505,15 +592,21 @@ function CartScreen({
         ))
       ) : (
         <div className={`${styles["empty-cart"]}`}>
-          <span className={`${styles["large-cart"]}`}><Icon name="cart" size={34} /></span>
+          <span className={`${styles["large-cart"]}`}>
+            <Icon name="cart" size={34} />
+          </span>
           <h2>Your cart is empty</h2>
           <p>Add a drink from our hot beverage menu.</p>
-          <Button variant="outline" className="w-auto px-6" onClick={onClose}>Browse menu</Button>
+          <Button variant="outline" className="w-auto px-6" onClick={onClose}>
+            Browse menu
+          </Button>
         </div>
       )}
       <div className={`${styles["checkout-dock"]}`}>
         <strong>Total: ${total.toFixed(2)}</strong>
-        <button disabled={!items.length} onClick={onCheckout}>Checkout</button>
+        <button disabled={!items.length} onClick={onCheckout}>
+          Checkout
+        </button>
       </div>
     </main>
   );
@@ -539,7 +632,9 @@ function CheckoutScreen({
   };
   return (
     <main className={`${styles["page-screen"]}`}>
-      <header className={`${styles["page-header"]} ${styles["checkout-header"]}`}>
+      <header
+        className={`${styles["page-header"]} ${styles["checkout-header"]}`}
+      >
         <h1>Checkout</h1>
         <HeaderButton icon="close" label="Close checkout" onClick={onClose} />
       </header>
@@ -554,31 +649,76 @@ function CheckoutScreen({
           required
         />
       </label>
-      <section className={`${styles["express-checkout"]}`} aria-labelledby="express-checkout-title">
+      <section
+        className={`${styles["express-checkout"]}`}
+        aria-labelledby="express-checkout-title"
+      >
         <h2 id="express-checkout-title">Express checkout</h2>
         <div className={`${styles["express-options"]}`}>
-          <button type="button" className={`${styles["express-button"]} ${styles["apple-pay"]}`} onClick={() => onPay(customerName.trim())} disabled={!hasCustomerName}>
-            <span className={`${styles["apple-mark"]}`} aria-hidden="true">●</span>
+          <button
+            type="button"
+            className={`${styles["express-button"]} ${styles["apple-pay"]}`}
+            onClick={() => onPay(customerName.trim())}
+            disabled={!hasCustomerName}
+          >
+            <span className={`${styles["apple-mark"]}`} aria-hidden="true">
+              ●
+            </span>
             Apple Pay
           </button>
-          <button type="button" className={`${styles["express-button"]} google-pay`} onClick={() => onPay(customerName.trim())} disabled={!hasCustomerName}>
-            <span className={`${styles["google-mark"]}`} aria-hidden="true">G</span>
+          <button
+            type="button"
+            className={`${styles["express-button"]} google-pay`}
+            onClick={() => onPay(customerName.trim())}
+            disabled={!hasCustomerName}
+          >
+            <span className={`${styles["google-mark"]}`} aria-hidden="true">
+              G
+            </span>
             Pay
           </button>
-          <button type="button" className={`${styles["express-button"]} ${styles["link-pay"]}`} onClick={() => onPay(customerName.trim())} disabled={!hasCustomerName}>
-            <span className={`${styles["link-mark"]}`} aria-hidden="true">Link</span>
+          <button
+            type="button"
+            className={`${styles["express-button"]} ${styles["link-pay"]}`}
+            onClick={() => onPay(customerName.trim())}
+            disabled={!hasCustomerName}
+          >
+            <span className={`${styles["link-mark"]}`} aria-hidden="true">
+              Link
+            </span>
           </button>
         </div>
       </section>
-      <div className={`${styles["payment-divider"]}`}><span>or pay with card</span></div>
-      <div className={`${styles["payment-pill"]}`}><Icon name="card" size={17} /> Credit/Debit Card</div>
+      <div className={`${styles["payment-divider"]}`}>
+        <span>or pay with card</span>
+      </div>
+      <div className={`${styles["payment-pill"]}`}>
+        <Icon name="card" size={17} /> Credit/Debit Card
+      </div>
       <form className={`${styles["payment-form"]}`} onSubmit={submit}>
-        <label>Card Number:<input defaultValue="1234 5678 9012 3456" inputMode="numeric" required /></label>
-        <label>Expiration Date:<input defaultValue="MM/YY" required /></label>
-        <label>CVV:<input defaultValue="123" inputMode="numeric" required /></label>
+        <label>
+          Card Number:
+          <input
+            defaultValue="1234 5678 9012 3456"
+            inputMode="numeric"
+            required
+          />
+        </label>
+        <label>
+          Expiration Date:
+          <input defaultValue="MM/YY" required />
+        </label>
+        <label>
+          CVV:
+          <input defaultValue="123" inputMode="numeric" required />
+        </label>
         <div className={`${styles["form-actions"]}`}>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="outline" type="submit" disabled={!hasCustomerName}>Pay ${total.toFixed(2)}</Button>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="outline" type="submit" disabled={!hasCustomerName}>
+            Pay ${total.toFixed(2)}
+          </Button>
         </div>
       </form>
     </main>
@@ -620,7 +760,11 @@ function Confirmation({
     <main className={`${styles["page-screen"]} ${styles["confirmation"]}`}>
       <header className={`${styles["confirmation-header"]}`}>
         <span>Order Confirmation</span>
-        <HeaderButton icon="close" label="Close confirmation" onClick={onClose} />
+        <HeaderButton
+          icon="close"
+          label="Close confirmation"
+          onClick={onClose}
+        />
       </header>
       <h1>{customerName}</h1>
       <strong>Your order number:</strong>
@@ -644,7 +788,10 @@ function Confirmation({
               }
               aria-current={index === statusIndex ? "step" : undefined}
             >
-              <span className={`${styles["status-marker"]}`} aria-hidden="true" />
+              <span
+                className={`${styles["status-marker"]}`}
+                aria-hidden="true"
+              />
               <span>{status.label}</span>
             </li>
           ))}
@@ -664,10 +811,20 @@ function Confirmation({
           <h2>Save your details</h2>
           <p>Create an account or log in to make your next order faster.</p>
           <div>
-            <Button variant="outline" fullWidth className="text-[10px]" onClick={onSignup}>
+            <Button
+              variant="outline"
+              fullWidth
+              className="text-[10px]"
+              onClick={onSignup}
+            >
               Create account
             </Button>
-            <Button variant="secondary" fullWidth className="text-[10px]" onClick={onLogin}>
+            <Button
+              variant="secondary"
+              fullWidth
+              className="text-[10px]"
+              onClick={onLogin}
+            >
               Log in
             </Button>
           </div>
@@ -690,10 +847,19 @@ function Confirmation({
             required
           />
         </label>
-        <Button variant="outline" fullWidth type="submit" disabled={!receiptContact.trim()}>
+        <Button
+          variant="outline"
+          fullWidth
+          type="submit"
+          disabled={!receiptContact.trim()}
+        >
           Send Receipt
         </Button>
-        {receiptConfirmed && <p className={`${styles["receipt-confirmed"]}`}>Receipt contact confirmed.</p>}
+        {receiptConfirmed && (
+          <p className={`${styles["receipt-confirmed"]}`}>
+            Receipt contact confirmed.
+          </p>
+        )}
       </form>
     </main>
   );
@@ -790,7 +956,11 @@ function OrdersScreen({ onClose }: { onClose: () => void }) {
     <main className={`${styles["page-screen"]}`}>
       <header className={`${styles["page-header"]}`}>
         <h1>My orders</h1>
-        <HeaderButton icon="close" label="Close order history" onClick={onClose} />
+        <HeaderButton
+          icon="close"
+          label="Close order history"
+          onClick={onClose}
+        />
       </header>
       <div className={`${styles["empty-cart"]}`}>
         <span className={`${styles["large-cart"]}`}>
@@ -816,7 +986,12 @@ function AuthScreen({
   onContinue: () => void;
 }) {
   const signup = kind === "signup";
-  const { signInWithOAuth, signInWithPassword, signUp, loading: authLoading } = useAuth();
+  const {
+    signInWithOAuth,
+    signInWithPassword,
+    signUp,
+    loading: authLoading,
+  } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -869,9 +1044,16 @@ function AuthScreen({
   return (
     <main className={`${styles["page-screen"]} auth-screen`}>
       <header className={`${styles["page-header"]} ${styles["auth-header"]}`}>
-        <HeaderButton icon="back" label="Back to order confirmation" onClick={onBack} />
+        <HeaderButton
+          icon="back"
+          label="Back to order confirmation"
+          onClick={onBack}
+        />
         <h1>{signup ? "Create account" : "Log in"}</h1>
-        <span className={`${styles["auth-header-spacer"]}`} aria-hidden="true" />
+        <span
+          className={`${styles["auth-header-spacer"]}`}
+          aria-hidden="true"
+        />
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
@@ -893,7 +1075,9 @@ function AuthScreen({
               {signup ? "Sign up" : "Log in"} with {provider.label}
             </span>
             {!provider.enabled && (
-              <span className={`${styles["auth-social-soon"]}`}>Coming soon</span>
+              <span className={`${styles["auth-social-soon"]}`}>
+                Coming soon
+              </span>
             )}
           </button>
         ))}
@@ -968,7 +1152,11 @@ function AuthScreen({
           </label>
         )}
         {passwordError && (
-          <p className={`${styles["auth-error"]}`} id="password-error" role="alert">
+          <p
+            className={`${styles["auth-error"]}`}
+            id="password-error"
+            role="alert"
+          >
             {passwordError}
           </p>
         )}
@@ -977,7 +1165,13 @@ function AuthScreen({
             {error}
           </p>
         )}
-        <Button variant="outline" fullWidth type="submit" className="mt-1" disabled={busy}>
+        <Button
+          variant="outline"
+          fullWidth
+          type="submit"
+          className="mt-1"
+          disabled={busy}
+        >
           {busy ? "Please wait…" : signup ? "Create account" : "Log in"}
         </Button>
       </form>
@@ -991,9 +1185,14 @@ export default function App() {
   const [selected, setSelected] = useState<Product | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
-  const [authReturnScreen, setAuthReturnScreen] = useState<"menu" | "confirmation">("menu");
+  const [authReturnScreen, setAuthReturnScreen] = useState<
+    "menu" | "confirmation"
+  >("menu");
 
-  const openAuth = (authScreen: "login" | "signup", returnTo: "menu" | "confirmation") => {
+  const openAuth = (
+    authScreen: "login" | "signup",
+    returnTo: "menu" | "confirmation",
+  ) => {
     setAuthReturnScreen(returnTo);
     // Persisted so we can return here after an OAuth redirect reloads the page.
     window.sessionStorage.setItem(AUTH_RETURN_KEY, returnTo);
@@ -1043,7 +1242,9 @@ export default function App() {
   const menu = () => setScreen("menu");
 
   return (
-    <div className={`${styles["app-shell"]} ${screen === "menu" ? styles["with-sidebar"] : ""}`}>
+    <div
+      className={`${styles["app-shell"]} ${screen === "menu" ? styles["with-sidebar"] : ""}`}
+    >
       {screen === "menu" && (
         <MenuScreen
           cartCount={cartCount}
@@ -1107,12 +1308,11 @@ export default function App() {
       )}
       {screen === "orders" && <OrdersScreen onClose={menu} />}
       {(screen === "login" || screen === "signup") && (
-        <AuthScreen
-          kind={screen}
-          onBack={closeAuth}
-          onContinue={closeAuth}
-        />
+        <AuthScreen kind={screen} onBack={closeAuth} onContinue={closeAuth} />
       )}
+      <footer className={styles["technology-footer"]}>
+        Developed by QuickTab Payments Team
+      </footer>
       {selected && (
         <ProductModal
           product={selected}

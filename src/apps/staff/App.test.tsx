@@ -6,5 +6,6 @@ describe("Staff app", () => {
   it("renders the table overview by default", () => {
     render(<StaffApp />);
     expect(screen.getByRole("heading", { name: /good evening/i })).toBeInTheDocument();
+    expect(screen.getByText("Developed by QuickTab Payments Team")).toBeInTheDocument();
   });
 });

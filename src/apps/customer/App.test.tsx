@@ -6,5 +6,6 @@ describe("Customer app", () => {
   it("renders the menu screen by default", () => {
     render(<CustomerApp />);
     expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByText("Developed by QuickTab Payments Team")).toBeInTheDocument();
   });
 });
