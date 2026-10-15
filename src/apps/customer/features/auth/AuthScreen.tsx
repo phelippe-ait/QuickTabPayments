@@ -37,7 +37,7 @@ export function AuthScreen({
   const providers = [
     { id: "apple", label: "Apple", enabled: false },
     { id: "google", label: "Google", enabled: true },
-    { id: "facebook", label: "Facebook", enabled: true },
+    { id: "facebook", label: "Facebook", enabled: false },
   ] as const;
 
   const handleOAuth = async (provider: "google" | "apple" | "facebook") => {
