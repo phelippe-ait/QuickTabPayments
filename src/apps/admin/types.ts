@@ -2,9 +2,7 @@ export type Section = "catalog" | "tables" | "users" | "orders";
 
 export type MenuItem = {
   id: number;
-  restaurantId?: number;
   name: string;
-  categoryId?: number;
   category: string;
   description: string;
   price: number;
