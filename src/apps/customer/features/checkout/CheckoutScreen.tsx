@@ -1,8 +1,8 @@
-import { type FormEvent, useState } from "react"
-import styles from "../../App.module.css"
-import { Icon } from "@shared/ui/Icon"
-import { Button } from "@shared/ui/Button"
-import { HeaderButton } from "../../components/CustomerUi"
+import { type FormEvent, useState } from "react";
+import styles from "../../App.module.css";
+import { Icon } from "@shared/ui/Icon";
+import { Button } from "@shared/ui/Button";
+import { HeaderButton } from "../../components/CustomerUi";
 
 export function CheckoutScreen({
   total,

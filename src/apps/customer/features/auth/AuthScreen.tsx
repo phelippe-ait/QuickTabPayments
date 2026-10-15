@@ -1,9 +1,9 @@
-import { type FormEvent, useState } from "react"
-import styles from "../../App.module.css"
-import { Icon } from "@shared/ui/Icon"
-import { Button } from "@shared/ui/Button"
-import { useAuth } from "@shared/auth/AuthContext"
-import { HeaderButton } from "../../components/CustomerUi"
+import { type FormEvent, useState } from "react";
+import styles from "../../App.module.css";
+import { Icon } from "@shared/ui/Icon";
+import { Button } from "@shared/ui/Button";
+import { useAuth } from "@shared/auth/AuthContext";
+import { HeaderButton } from "../../components/CustomerUi";
 
 export function AuthScreen({
   kind,
@@ -36,7 +36,7 @@ export function AuthScreen({
   // once a provider's credentials are set up.
   const providers = [
     { id: "apple", label: "Apple", enabled: false },
-    { id: "google", label: "Google", enabled: false },
+    { id: "google", label: "Google", enabled: true },
     { id: "facebook", label: "Facebook", enabled: false },
   ] as const;
 

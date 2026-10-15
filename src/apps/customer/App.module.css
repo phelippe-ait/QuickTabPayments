@@ -205,6 +205,14 @@
 }
 .express-button:hover { border-color: var(--color-placeholder); transform: translateY(-1px); }
 .express-button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.google-login { min-width: 0; }
+.google-login-button { width: 100%; min-width: 0; padding: 0 5px; gap: 5px; font-size: 10px; line-height: 1.2; white-space: normal; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+.google-login-button:hover:not(:disabled) { border-color: #c7c7c7; background: #fff; box-shadow: 0 3px 9px rgba(50,42,36,.1); }
+.google-login-button:disabled { opacity: .7; }
+.google-login-button svg { flex: 0 0 auto; }
+.google-login-spinner { width: 15px; height: 15px; flex: 0 0 auto; border: 2px solid #dadce0; border-top-color: #4285f4; border-radius: 50%; animation: google-login-spin .7s linear infinite; }
+.google-login-error { margin: 6px 0 0; color: var(--color-berry-alt); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+@keyframes google-login-spin { to { transform: rotate(360deg); } }
 .apple-pay { background: #151515; border-color: #151515; color: white; }
 .apple-mark { font-size: 11px; }
 .google-mark { color: #4285f4; font-size: 15px; font-weight: 700; }
