@@ -6,6 +6,7 @@ export type Screen =
   | "login"
   | "signup"
   | "orders";
+  
 export type Category = "Hot Beverages" | "Breakfast" | "Lunch";
 
 export type Product = {

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import StaffApp from "./App";
+import StaffApp from "./StaffDashboard";
 
 describe("Staff app", () => {
   it("renders the table overview by default", () => {
     render(<StaffApp />);
-    expect(screen.getByRole("heading", { name: /good evening/i })).toBeInTheDocument();
-    expect(screen.getByText("Developed by QuickTab Payments Team")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /good evening/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Developed by QuickTab Payments Team"),
+    ).toBeInTheDocument();
   });
 });

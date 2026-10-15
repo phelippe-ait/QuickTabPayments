@@ -3,9 +3,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter } from "react-router";
 import { cn } from "@shared/lib/cn";
 
-const CustomerApp = lazy(() => import("../apps/customer/App"));
-const StaffApp = lazy(() => import("../apps/staff/App"));
-const AdminApp = lazy(() => import("../apps/admin/App"));
+const CustomerApp = lazy(() => import("../apps/customer/CustomerDashboard"));
+const StaffApp = lazy(() => import("../apps/staff/StaffDashboard"));
+const AdminApp = lazy(() => import("../apps/admin/AdminDashboard"));
 
 function withSuspense(node: ReactNode) {
   return (
