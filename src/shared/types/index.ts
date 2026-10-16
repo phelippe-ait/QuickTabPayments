@@ -10,7 +10,7 @@
  * interim source of truth so the three apps do not diverge.
  */
 
-/** Workspace role — governs access to the staff and admin apps. */
-export type Role = "manager" | "staff";
+/** Workspace role — governs access to the customer, staff, and admin apps. */
+export type Role = "customer" | "staff" | "manager" | "admin";
 
 export {};
