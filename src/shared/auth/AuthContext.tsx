@@ -9,7 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import type { AuthError, Session, User } from "@supabase/supabase-js";
-import { supabase, SUPABASE_NOT_CONFIGURED_MESSAGE } from "@shared/lib/supabase";
+import {
+  supabase,
+  SUPABASE_NOT_CONFIGURED_MESSAGE,
+} from "@shared/lib/supabase";
 import type { Profile } from "@shared/lib/database.types";
 
 export type OAuthProvider = "google" | "apple" | "facebook";
@@ -31,7 +34,10 @@ export type AuthContextValue = {
   signInWithOAuth: (provider: OAuthProvider) => Promise<AuthResult>;
   signInWithPassword: (email: string, password: string) => Promise<AuthResult>;
   signUp: (input: SignUpInput) => Promise<AuthResult>;
-  updateProfile: (input: { firstName: string; lastName: string }) => Promise<AuthResult>;
+  updateProfile: (input: {
+    firstName: string;
+    lastName: string;
+  }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
@@ -72,10 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setLoading(false);
-    });
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, next) => {
+        setSession(next);
+        setLoading(false);
+      },
+    );
 
     return () => {
       active = false;
@@ -110,13 +118,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!supabase) return { error: notConfigured };
         const { error } = await supabase.auth.signInWithOAuth({
           provider,
-          options: { redirectTo: window.location.origin },
+          options: { redirectTo: "https://quick-tab-payments.vercel.app/" },
         });
         return { error };
       },
       async signInWithPassword(email, password) {
         if (!supabase) return { error: notConfigured };
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         return { error };
       },
       async signUp({ email, password, firstName, lastName }) {
@@ -130,7 +141,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async updateProfile({ firstName, lastName }) {
         if (!supabase || !userId) {
-          return { error: new Error("You need to be signed in to update your profile.") };
+          return {
+            error: new Error(
+              "You need to be signed in to update your profile.",
+            ),
+          };
         }
         const { error } = await supabase
           .from("profiles")
