@@ -21,6 +21,7 @@ export type Database = {
           email: string | null;
           first_name: string | null;
           last_name: string | null;
+          role: string;
           created_at: string;
         };
         Insert: {
@@ -28,6 +29,7 @@ export type Database = {
           email?: string | null;
           first_name?: string | null;
           last_name?: string | null;
+          role?: string;
           created_at?: string;
         };
         Update: {
@@ -35,6 +37,33 @@ export type Database = {
           email?: string | null;
           first_name?: string | null;
           last_name?: string | null;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "profiles_role_fkey";
+            columns: ["role"];
+            isOneToOne: false;
+            referencedRelation: "roles";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      roles: {
+        Row: {
+          name: string;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
           created_at?: string;
         };
         Relationships: [];
