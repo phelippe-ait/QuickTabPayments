@@ -44,10 +44,12 @@ export default function App() {
         onSelectTable={setSelectedTable}
       />}
       {view === "kitchen" && <KitchenWorkspace
-        orders={workspace.activeKitchenOrders}
-        previousOrders={workspace.previousKitchenOrders}
-        onStatusChange={workspace.updateKitchenStatus}
-      />}
+  orders={workspace.activeKitchenOrders}
+  previousOrders={workspace.previousKitchenOrders}
+  onStatusChange={workspace.updateKitchenStatus}
+  ordersLoading={workspace.ordersLoading}
+  ordersError={workspace.ordersError}
+/>}
       {view === "history" && <OrderHistory
         filteredOrders={filteredOrders}
         totalOrders={workspace.orders.length}

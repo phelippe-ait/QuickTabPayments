@@ -9,10 +9,14 @@ export function KitchenWorkspace({
   orders,
   previousOrders,
   onStatusChange,
+  ordersLoading,
+  ordersError,
 }: {
   orders: Order[]
   previousOrders: Order[]
   onStatusChange: (id: string, status: KitchenStatus) => void
+  ordersLoading: boolean
+  ordersError: string | null
 }) {
   const [pendingAction, setPendingAction] = useState<{
     order: Order
@@ -46,8 +50,21 @@ export function KitchenWorkspace({
           <Stat value={ready.toString().padStart(2, "0")} label="Ready" tone="green" />
         </div>
       </section>
+     {ordersError && (
+  <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+    Unable to refresh orders: {ordersError}
+  </div>
+)}
 
-      {orders.length > 0 ? (
+{ordersLoading && orders.length === 0 ? (
+  <div role="status" className="rounded-[22px] border border-line bg-paper px-6 py-20 text-center">
+    Loading orders...
+  </div>
+) : ordersError && orders.length === 0 ? (
+  <div className="rounded-[22px] border border-line bg-paper px-6 py-20 text-center">
+    Orders are currently unavailable.
+  </div>
+) : orders.length > 0 ? (
         <div className="grid gap-5 xl:grid-cols-2">
           {orders.map((order) => (
             <article
@@ -84,40 +101,51 @@ export function KitchenWorkspace({
                 ))}
               </div>
 
-              <div className="grid grid-cols-3 gap-2 border-t border-line-soft bg-cream-3 p-4 sm:gap-3">
-                <button
-                  className={`rounded-xl border px-2 py-3 text-xs font-bold transition ${
-                    order.kitchenStatus === "Preparing"
-                      ? "border-[#d59a52] bg-amber-soft text-amber"
-                      : "border-[#e5c89f] bg-cream-3 text-amber hover:border-[#d59a52] hover:bg-amber-soft"
-                  }`}
-                  disabled={order.kitchenStatus === "Preparing"}
-                  onClick={() =>
-                    setPendingAction({ order, status: "Preparing" })
-                  }
-                >
-                  Prepare
-                </button>
-                <button
-                  className={`rounded-xl border px-2 py-3 text-xs font-bold transition ${
-                    order.kitchenStatus === "Ready"
-                      ? "border-sage bg-sage-soft text-sage-strong"
-                      : "border-[#bfd0bb] bg-paper text-sage-strong hover:border-sage hover:bg-sage-soft"
-                  }`}
-                  disabled={order.kitchenStatus === "Ready"}
-                  onClick={() => setPendingAction({ order, status: "Ready" })}
-                >
-                  Ready
-                </button>
-                <button
-                  className="rounded-xl border border-[#dfb9b9] bg-paper px-2 py-3 text-xs font-bold text-danger transition hover:border-berry-strong hover:bg-danger-soft"
-                  onClick={() =>
-                    setPendingAction({ order, status: "Cancelled" })
-                  }
-                >
-                  Cancel
-                </button>
-              </div>
+              
+<div className="grid grid-cols-2 gap-3 border-t border-line-soft bg-cream-3 p-4">
+  {order.kitchenStatus === "New" && (
+    <button
+      className="rounded-xl border border-[#e5c89f] bg-cream-3 px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
+      onClick={() =>
+        setPendingAction({ order, status: "Preparing" })
+      }
+    >
+      Prepare
+    </button>
+  )}
+
+  {order.kitchenStatus === "Preparing" && (
+    <button
+      className="rounded-xl border border-[#bfd0bb] bg-paper px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage-soft"
+      onClick={() =>
+        setPendingAction({ order, status: "Ready" })
+      }
+    >
+      Ready
+    </button>
+  )}
+
+  {order.kitchenStatus === "Ready" && (
+    <button
+      className="rounded-xl border border-sage bg-sage-soft px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage"
+      onClick={() =>
+        setPendingAction({ order, status: "Completed" })
+      }
+    >
+      Complete
+    </button>
+  )}
+
+  <button
+    className="rounded-xl border border-[#dfb9b9] bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
+    onClick={() =>
+      setPendingAction({ order, status: "Cancelled" })
+    }
+  >
+    Cancel
+  </button>
+</div>
+
             </article>
           ))}
         </div>
@@ -187,10 +215,12 @@ function KitchenStatusConfirmation({
 }) {
   const cancelled = status === "Cancelled"
   const actionLabel =
-    status === "Preparing"
-      ? "start preparing"
-      : status === "Ready"
-        ? "mark as ready"
+  status === "Preparing"
+    ? "start preparing"
+    : status === "Ready"
+      ? "mark as ready"
+      : status === "Completed"
+        ? "complete"
         : "cancel"
 
   return (
