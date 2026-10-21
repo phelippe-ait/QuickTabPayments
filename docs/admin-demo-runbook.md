@@ -27,6 +27,9 @@ Already applied to the linked project:
 | `0009_orders_snapshot_and_stats.sql` | `orders.customer_name_snapshot`, `restaurant_daily_stats` |
 | `0010_refunds.sql` | `refunds`, amount/quantity guards, staff RLS |
 | `0011_staff_directory.sql` | directory + add-by-email RPCs, manager staff policy |
+| `0012_drop_global_roles.sql` | removed the unused global roles layer |
+| `0013_staff_management_guards.sql` | self-add, peer-manager, last-owner guards |
+| `0014_restaurant_invites.sql` | developer invitations + atomic claim flow; old self-serve RPC revoked |
 
 ### Fresh environment (CLI not authenticated)
 
@@ -38,6 +41,41 @@ Already applied to the linked project:
 3. Hand-update `src/shared/lib/database.types.ts` for the migration.
 4. When the CLI is authenticated:
    `npx supabase gen types typescript --project-id <ref> > src/shared/lib/database.types.ts`.
+
+### Creating a restaurant (developer flow)
+
+Onboarding is developer-controlled. A restaurant is **not** created by a
+self-serve signup form anymore.
+
+1. Collect the owner's email.
+2. Create a pending invitation (replace the values):
+
+```bash
+# edit supabase/scripts/create_restaurant_invite.sql first
+npx supabase db query --linked --file supabase/scripts/create_restaurant_invite.sql
+```
+
+The SQL helper inserts `restaurant_invites` with the owner email, proposed
+name/slug, and a 30-day expiry. It is idempotent for an existing pending invite.
+
+3. The owner signs in at `/admin` with that **verified** email. If they have no
+   active membership, they see “You’ve been invited”, review/adjust the
+   name/slug, and click **Create my restaurant**.
+4. `claim_restaurant_invite` atomically creates the restaurant + owner
+   membership and marks the invite accepted.
+
+Users with no invitation see “No restaurant linked” and are told to ask QuickTab
+or an owner for access. Self-serve creation is disabled; the old
+`create_restaurant_with_owner` RPC has its authenticated execute grant revoked.
+
+Revoke a pending invite:
+
+```sql
+update public.restaurant_invites
+   set status = 'revoked'
+ where lower(email) = lower('owner@example.com')
+   and status = 'pending';
+```
 
 ### Seed / reseed
 

@@ -133,7 +133,7 @@ Ground rules for every milestone:
   - Drop policy `restaurants_owner_update`; create `restaurants_staff_update` using/with check `is_manager_of(id)`.
   - Trigger `guard_restaurants_owner_fields` (before update): non-owners may not change `owner_id`, `slug`, or `is_active` → raise `42501`.
 - `supabase/migrations/0007_onboarding_rpc.sql` (A6):
-  - `public.create_restaurant_with_owner(p_name text, p_slug text)` returns `restaurants` row — `security definer`, inserts restaurant (`owner_id = auth.uid()`) + owner `restaurant_staff` row in one function; unique-violation on slug re-raised with a friendly message. Revoke from `public`, grant to `authenticated`.
+  - `public.create_restaurant_with_owner(p_name text, p_slug text)` returns `restaurants` row — `security definer`, inserts restaurant (`owner_id = auth.uid()`) + owner `restaurant_staff` row in one function; unique-violation on slug re-raised with a friendly message. Revoke from `public`, grant to `authenticated`. **Amended by 0014:** self-serve onboarding is disabled; the authenticated grant is revoked and onboarding uses developer-issued invitations (`restaurant_invites` + `claim_restaurant_invite`).
 - Update `src/shared/lib/database.types.ts` by hand: add `is_manager_of`, `create_restaurant_with_owner` to `Functions`. (Storage schema is not typed by hand; the upload helper uses string paths.)
 
 **Files.**
@@ -175,7 +175,7 @@ Ground rules for every milestone:
 - [ ] Logo + cover upload → objects exist in `restaurant-assets/{id}/`, `logo_url`/`cover_image_url` hold the public URLs, sidebar/preview show them after refresh.
 - [ ] >5 MB or non-image file → inline error, nothing uploaded (no `window.alert`).
 - [ ] Manager account can save profile fields; slug change attempt is blocked in UI and, if forced via console, by the trigger (42501 → error toast).
-- [ ] New-user onboarding creates restaurant + owner membership via one RPC call; duplicate slug shows the friendly error.
+- [ ] ~~New-user onboarding creates restaurant + owner membership via one RPC call~~ **Amended by 0014:** a developer-issued invite is claimed via `claim_restaurant_invite`; users without an invite see “No restaurant linked”. Duplicate slug still shows the friendly error.
 - [ ] SQL-editor RLS checks (§11) pass: manager update allowed on `name`, denied on `slug`; anon insert to `storage.objects` denied; staff upload to their restaurant folder allowed, to another restaurant's folder denied.
 
 **Tests.** Unit: `validateImageFile`, tax-rate mapping, `uploadRestaurantAsset` path building (mock supabase client). Integration: SettingsPage save/error toast with mocked data layer. RLS: manual SQL script (below). Manual QA: full settings pass with the demo owner + a manager account.
@@ -689,7 +689,7 @@ Seed order matters: categories → items → tables → orders → order_items �
 | A3 | `completed_at` semantics undocumented | Documented in status module + data-layer comment | M5 |
 | A4 | Deep-link role bypass | `RequireRole` per route | M1 |
 | A5 | Fake default item image | Placeholder state instead | M3 |
-| A6 | Two-write onboarding | `create_restaurant_with_owner` RPC | M2 |
+| A6 | Two-write onboarding | `create_restaurant_with_owner` RPC, superseded by developer invitations + `claim_restaurant_invite` (0014) | M2 |
 | A7 | "Delete user" semantics | Remove-membership (owner-only) + bulk deactivate | M7 |
 
 **Out of scope (with reason):** realtime order feed, dashboard overview page (stretch, cut order #1/#3 — stats live on Orders); Stripe intent/webhook work (brief); modifier UI (brief); multi-restaurant switching (brief); customer/staff rewiring (brief — see appendix); Playwright E2E (brief); automated type generation (CLI unauthenticated — documented manual step instead); "Admin" global-role management UI (the global `profiles.role` + `roles` layer was removed in 0012).
@@ -700,7 +700,7 @@ Seed order matters: categories → items → tables → orders → order_items �
 
 Per DB milestone, in order:
 
-1. Supabase dashboard → SQL editor → paste the new migration file(s) verbatim → Run. Files: `0005_storage.sql`, `0006_restaurants_manager_update.sql`, `0007_onboarding_rpc.sql` (M2); `0008_tables_seats.sql` (M4); `0009_orders_snapshot_and_stats.sql` (M5); `0010_refunds.sql` (M6); `0011_staff_directory.sql` (M7).
+1. Supabase dashboard → SQL editor → paste the new migration file(s) verbatim → Run. Files: `0005_storage.sql`, `0006_restaurants_manager_update.sql`, `0007_onboarding_rpc.sql` (M2); `0008_tables_seats.sql` (M4); `0009_orders_snapshot_and_stats.sql` (M5); `0010_refunds.sql` (M6); `0011_staff_directory.sql` (M7); `0012_drop_global_roles.sql`, `0013_staff_management_guards.sql`, `0014_restaurant_invites.sql` (post-review).
 2. Storage buckets: if the dashboard-managed `storage.buckets` insert in `0005` is blocked by dashboard permissions, create both buckets in Dashboard → Storage with: public = on, file size limit = 5 MB, allowed MIME = jpeg/png/webp. Policies from `0005` still need the SQL editor.
 3. After each migration, hand-update `src/shared/lib/database.types.ts` (tables/columns/functions/enums listed per milestone) and note "hand-maintained" in the commit body. When the CLI is eventually authenticated: `npx supabase gen types typescript --project-id <ref> > src/shared/lib/database.types.ts`.
 4. RLS verification — the snippets below live in the repo as **`supabase/tests/rls_checks.sql`** (added in M2, extended with a section per DB milestone: M4 seats, M5 stats, M6 refunds, M7 directory/invite). Run the section matching the milestone in the SQL editor after applying it (replace `<uuid>`s):

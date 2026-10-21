@@ -8,7 +8,7 @@ src/shared/
 ├── auth/          AuthProvider + useAuth (Supabase session)
 ├── components/
 │   └── ui/        Reusable primitives (Button, Card, Modal, StatusPill, ...)
-├── data/          Typed Supabase reads/writes (client, restaurants, menu, tables, orders, refunds)
+├── data/          Typed Supabase reads/writes (client, restaurants, invites, menu, tables, orders, refunds)
 ├── hooks/         Cross-app React hooks
 ├── lib/           Framework-agnostic helpers (cn, money, qr, storage, time, supabase, database.types)
 ├── orders/        Order status labels, tones, and the legal transition matrix
