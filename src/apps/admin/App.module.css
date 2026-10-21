@@ -82,7 +82,7 @@ main { min-width: 0; background: var(--color-cream-3); }
 .selection-bar { display: flex; align-items: center; gap: 14px; margin: -8px 0 20px; padding: 11px 13px 11px 16px; border: 1px solid var(--color-line); border-radius: 10px; background: var(--color-paper); box-shadow: 0 5px 16px rgba(65,58,48,.05); }
 .selection-bar > strong { margin-right: auto; color: var(--color-ink-soft); font-size: 12px; }
 .selection-bar > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.selection-bar button { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid var(--color-line); border-radius: 7px; color: var(--color-ink-mid); background: #fff; font-size: 9px; font-weight: 700; }
+.selection-bar button { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid var(--color-line); border-radius: 7px; color: var(--color-ink-mid); background: #fff; font-size: 10px; font-weight: 700; }
 .selection-bar button:hover { color: var(--color-berry); border-color: var(--color-berry); }
 .selection-bar button.danger { color: var(--color-berry-strong); }
 .selection-bar > button:last-child { border: 0; color: var(--color-muted); background: transparent; }
@@ -217,13 +217,13 @@ main { min-width: 0; background: var(--color-cream-3); }
 .order-summary .order-total span { color: var(--color-ink-soft); font-weight: 700; }
 .order-summary .order-total strong { color: var(--color-berry); font-family: "DM Serif Display", serif; font-size: 22px; font-weight: 400; }
 .payment-line { padding-top: 18px; }
-.refunded-line { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; padding: 11px 12px; border-radius: 8px; color: #925f52; background: var(--color-danger-soft); font-size: 11px; }
-.refunded-line strong { color: #b64e52; }
-.cancel-order { width: 100%; min-height: 40px; margin-top: 20px; border: 1px solid #d8b8bc; border-radius: 8px; color: var(--color-berry-alt); background: var(--color-paper); font-size: 11px; font-weight: 700; transition: .18s ease; }
-.cancel-order:hover { color: #fff; border-color: var(--color-berry); background: var(--color-berry); }
+.refunded-line { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; padding: 11px 12px; border-radius: 8px; color: var(--color-danger); background: var(--color-danger-soft); font-size: 11px; }
+.refunded-line strong { color: var(--color-berry-deep); }
+.cancel-order { width: 100%; min-height: 40px; margin-top: 20px; border: 1px solid #d8b8bc; border-radius: 8px; color: var(--color-berry-strong); background: var(--color-paper); font-size: 12px; font-weight: 700; transition: .18s ease; }
+.cancel-order:hover { color: #fff; border-color: var(--color-berry-strong); background: var(--color-berry-strong); }
 .refund-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-line-soft); }
-.refund-button { min-height: 42px; padding: 0 13px; border: 1px solid var(--color-berry); border-radius: 9px; color: #fff; background: var(--color-berry); font-size: 11px; font-weight: 700; transition: .18s ease; }
-.refund-button:hover:not(:disabled) { background: var(--color-berry-strong); }
+.refund-button { min-height: 42px; padding: 0 13px; border: 1px solid var(--color-berry-strong); border-radius: 9px; color: #fff; background: var(--color-berry-strong); font-size: 12px; font-weight: 700; transition: .18s ease; }
+.refund-button:hover:not(:disabled) { background: var(--color-berry-deep); }
 .refund-button:disabled { opacity: .45; cursor: not-allowed; }
 .refund-quantity { display: grid; grid-template-columns: 26px 22px 26px; align-items: center; text-align: center; }
 .refund-quantity button { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--color-line); border-radius: 6px; color: var(--color-ink-mid); background: var(--color-cream-3); font-size: 15px; }
