@@ -3,8 +3,10 @@ export type KitchenStatus = "New" | "Preparing" | "Ready" | "Completed" | "Cance
 export type View = "tables" | "kitchen" | "history" | "reservations"
 
 export type Table = {
-  id: number
-  seats: number
+  id: string | number
+  tableNumber?: string
+  locationLabel?: string | null
+  seats?: number
   occupants: number
   status: TableStatus
   guest?: string

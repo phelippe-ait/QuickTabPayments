@@ -6,6 +6,7 @@ import { KitchenWorkspace } from "./features/kitchen/KitchenWorkspace"
 import { HistoryOrderDrawer, OrderHistory } from "./features/orders/OrderHistory"
 import { ReservationWorkspace } from "./features/reservations/ReservationWorkspace"
 import type { Order, Table, TableStatus, View } from "./types"
+import { useAuth } from "@shared/auth/AuthContext"
 
 export default function App() {
   const [view, setView] = useState<View>("tables")
@@ -14,6 +15,16 @@ export default function App() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [query, setQuery] = useState("")
   const workspace = useStaffWorkspace()
+
+  const { user, profile } = useAuth()
+
+const userName =
+  [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ") ||
+  user?.user_metadata?.full_name ||
+  user?.email?.split("@")[0] ||
+  "Staff member"
 
   const filteredTables = useMemo(
     () => workspace.tableList.filter((table) => filter === "all" || table.status === filter),
@@ -33,8 +44,9 @@ export default function App() {
   }
 
   return (
-    <StaffShell view={view} onViewChange={setView}>
+    <StaffShell view={view} onViewChange={setView} userName={userName}>
       {view === "tables" && <TablesWorkspace
+        userName={userName}
         tableList={workspace.tableList}
         filteredTables={filteredTables}
         occupied={occupied}
@@ -44,10 +56,12 @@ export default function App() {
         onSelectTable={setSelectedTable}
       />}
       {view === "kitchen" && <KitchenWorkspace
-        orders={workspace.activeKitchenOrders}
-        previousOrders={workspace.previousKitchenOrders}
-        onStatusChange={workspace.updateKitchenStatus}
-      />}
+  orders={workspace.activeKitchenOrders}
+  previousOrders={workspace.previousKitchenOrders}
+  onStatusChange={workspace.updateKitchenStatus}
+  ordersLoading={workspace.ordersLoading}
+  ordersError={workspace.ordersError}
+/>}
       {view === "history" && <OrderHistory
         filteredOrders={filteredOrders}
         totalOrders={workspace.historyOrders.length}
