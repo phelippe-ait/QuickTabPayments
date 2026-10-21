@@ -97,22 +97,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/*
+ * Keep element resets inside Tailwind's base layer. Unlayered rules beat
+ * layered utilities, which previously forced every button to `color: inherit`
+ * and made white text on filled buttons render grey.
+ */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+    color: inherit;
+  }
 }
 
 input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   font-size: 16px !important;
-}
-
-button {
-  cursor: pointer;
-  color: inherit;
 }
 
 button:focus-visible,
