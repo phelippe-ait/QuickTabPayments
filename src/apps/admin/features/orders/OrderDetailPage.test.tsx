@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { OrderDetailPage } from "./OrderDetailPage"
+import type { Refund } from "@shared/lib/database.types"
 import type { OrderVM } from "../../types"
 
 const order: OrderVM = {
@@ -51,6 +52,8 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(async () => true),
   confirm: vi.fn(),
   notify: vi.fn(),
+  refunds: [] as Refund[],
+  createRefund: vi.fn(async () => true),
 }))
 
 vi.mock("@shared/restaurant/RestaurantProvider", () => ({
@@ -83,6 +86,23 @@ vi.mock("../../hooks/useOrders", () => ({
   }),
 }))
 
+vi.mock("@shared/auth/AuthContext", () => ({
+  useAuth: () => ({ user: { id: "user-1" } }),
+}))
+
+vi.mock("../../hooks/useRefunds", () => ({
+  useRefunds: () => ({
+    refunds: mocks.refunds,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useCreateRefund: () => ({
+    isMutating: false,
+    createRefund: mocks.createRefund,
+  }),
+}))
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/orders/order-1"]}>
@@ -102,6 +122,8 @@ describe("OrderDetailPage", () => {
     mocks.setStatus.mockClear()
     mocks.cancel.mockClear()
     mocks.confirm.mockClear()
+    mocks.refunds = []
+    mocks.createRefund.mockClear()
   })
 
   it("renders line items, payment rows, and legal transition buttons", () => {
@@ -139,5 +161,55 @@ describe("OrderDetailPage", () => {
     expect(mocks.confirm.mock.calls[0][0]).toEqual(
       expect.objectContaining({ actionLabel: "Cancel order" }),
     )
+  })
+
+  it("records a partial refund keyed by order-item id", async () => {
+    mocks.order = { ...order, status: "completed" }
+    renderPage()
+
+    fireEvent.click(screen.getByRole("button", { name: /partial refund/i }))
+    fireEvent.click(screen.getByRole("button", { name: /add one flat white to refund/i }))
+    fireEvent.click(screen.getByRole("button", { name: /confirm refund/i }))
+
+    expect(mocks.confirm).toHaveBeenCalledTimes(1)
+    const confirmation = mocks.confirm.mock.calls[0][0] as {
+      onConfirm: () => void
+    }
+    confirmation.onConfirm()
+
+    await waitFor(() =>
+      expect(mocks.createRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order_id: "order-1",
+          payment_id: "payment-1",
+          order_item_id: "line-1",
+          quantity: 1,
+          amount: 4.7,
+        }),
+      ),
+    )
+  })
+
+  it("shows existing refund history", () => {
+    mocks.order = { ...order, status: "completed", refundedTotal: 4.7 }
+    mocks.refunds = [
+      {
+        id: "refund-1",
+        order_id: "order-1",
+        payment_id: "payment-1",
+        order_item_id: "line-1",
+        quantity: 1,
+        amount: 4.7,
+        reason: "One coffee remade",
+        status: "succeeded",
+        stripe_refund_id: null,
+        created_by: "user-1",
+        created_at: "2026-10-21T09:00:00Z",
+      },
+    ]
+    renderPage()
+
+    expect(screen.getByText(/one coffee remade/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
   })
 })

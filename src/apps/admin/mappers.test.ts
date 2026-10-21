@@ -98,6 +98,7 @@ const orderRow: OrderWithDetails = {
       menu_items: { image_url: "https://example.test/flat-white.webp" },
     },
   ],
+  refunds: [],
   payments: [
     {
       id: "payment-1",

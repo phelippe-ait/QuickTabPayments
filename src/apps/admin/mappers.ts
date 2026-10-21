@@ -96,7 +96,9 @@ export function toOrderVM(
       receiptUrl: payment.receipt_url,
       failureReason: payment.failure_reason,
     })),
-    refundedTotal: 0,
+    refundedTotal: (row.refunds ?? [])
+      .filter((refund) => refund.status === "succeeded")
+      .reduce((total, refund) => total + refund.amount, 0),
   }
 }
 

@@ -4,6 +4,7 @@ import type {
   OrderItem,
   OrderStatus,
   Payment,
+  Refund,
   TablesUpdate,
 } from "@shared/lib/database.types";
 
@@ -50,6 +51,7 @@ export type OrderItemWithImage = OrderItem & {
 export type OrderWithDetails = Order & {
   order_items: OrderItemWithImage[];
   payments: Payment[];
+  refunds: Refund[];
   tables: { table_number: string } | null;
 };
 
@@ -83,6 +85,7 @@ const orderSelect = `
   *,
   order_items(*, menu_items(image_url)),
   payments(*),
+  refunds(*),
   tables(table_number)
 `;
 

@@ -3,19 +3,29 @@ import { Link, useParams } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
-import { Button } from "@shared/ui/Button"
+import { Button, buttonVariants } from "@shared/ui/Button"
 import { EmptyState, PageHeader } from "../../components/AdminUi"
+import { useAuth } from "@shared/auth/AuthContext"
 import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
 import { formatMoney } from "@shared/lib/money"
 import {
   ORDER_STATUSES,
+  isOpenOrderStatus,
   orderStatusLabels,
   orderStatusTones,
   nextStatuses,
 } from "@shared/orders/status"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useOrder, useOrderMutations } from "../../hooks/useOrders"
+import { useCreateRefund, useRefunds } from "../../hooks/useRefunds"
+import { REFUNDS_ENABLED } from "../../flags"
 import { formatRunningTime } from "./order.utils"
+import {
+  partialRefundAmount,
+  refundableBalance,
+  roundMoney,
+  validateRefundAmount,
+} from "./refund.utils"
 
 const flow = ["pending", "confirmed", "preparing", "ready", "completed"] as const
 
@@ -33,13 +43,22 @@ function formatTimestamp(iso: string | null, timezone: string): string {
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { restaurant, role } = useRestaurant()
+  const { user } = useAuth()
   const { notify, confirm } = useAdminUi()
   const display = {
     currency: restaurant?.currency ?? "AUD",
     timezone: restaurant?.timezone ?? "UTC",
   }
   const { order, isLoading, error, refetch } = useOrder(restaurant?.id ?? "", id, display)
+  const refundsQuery = useRefunds(order?.id ?? "")
+  const refundMutation = useCreateRefund(order?.id ?? "", {
+    onSuccess: notify,
+    onError: notify,
+  })
   const [now, setNow] = useState(() => Date.now())
+  const [refundMode, setRefundMode] = useState<"full" | "partial" | "custom" | null>(null)
+  const [refundQuantities, setRefundQuantities] = useState<Record<string, number>>({})
+  const [customAmount, setCustomAmount] = useState("")
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
@@ -74,10 +93,97 @@ export function OrderDetailPage() {
   const currentIndex = flow.indexOf(order.status as (typeof flow)[number])
   const transitions = nextStatuses(order.status).filter((status) => status !== "cancelled")
 
+  const succeededPayments = order.payments.filter((payment) => payment.status === "succeeded")
+  const refundedToDate = refundsQuery.isLoading
+    ? order.refundedTotal
+    : refundsQuery.refunds
+        .filter((refund) => refund.status === "succeeded")
+        .reduce((total, refund) => total + refund.amount, 0)
+  const refundable = refundableBalance(order.payments, refundedToDate)
+  const partialAmount = partialRefundAmount(order.lineItems, refundQuantities)
+  const refundAmount =
+    refundMode === "full"
+      ? refundable
+      : refundMode === "custom"
+        ? Number(customAmount) || 0
+        : partialAmount
+  const customError =
+    refundMode === "custom" ? validateRefundAmount(refundAmount, refundable) : null
+  const canRecordRefund =
+    REFUNDS_ENABLED && canManage && succeededPayments.length > 0 && refundable > 0
+  const showRefundSection =
+    REFUNDS_ENABLED && (canRecordRefund || refundsQuery.refunds.length > 0)
+
+  const resetRefundForm = () => {
+    setRefundMode(null)
+    setRefundQuantities({})
+    setCustomAmount("")
+  }
+
+  const submitRefund = async () => {
+    const payment = succeededPayments[0]
+    if (!payment || !refundMode) return
+
+    if (refundMode === "partial") {
+      for (const line of order.lineItems) {
+        const quantity = refundQuantities[line.id] ?? 0
+        if (quantity <= 0) continue
+        const ok = await refundMutation.createRefund({
+          order_id: order.id,
+          payment_id: payment.id,
+          order_item_id: line.id,
+          quantity,
+          amount: roundMoney(line.unitPrice * quantity),
+          reason: "Line refund",
+          status: "succeeded",
+          created_by: user?.id ?? null,
+        })
+        if (!ok) return
+      }
+    } else {
+      const amount = roundMoney(refundMode === "full" ? refundable : refundAmount)
+      const ok = await refundMutation.createRefund({
+        order_id: order.id,
+        payment_id: payment.id,
+        amount,
+        reason: refundMode === "full" ? "Full refund" : "Custom refund",
+        status: "succeeded",
+        created_by: user?.id ?? null,
+      })
+      if (!ok) return
+    }
+
+    resetRefundForm()
+  }
+
+  const requestRefundConfirmation = () => {
+    if (!refundMode || refundAmount <= 0 || refundAmount > refundable) return
+    if (refundMode === "custom" && customError) return
+
+    const warning = isOpenOrderStatus(order.status)
+      ? "This order is still active. "
+      : ""
+
+    confirm({
+      title: `Record a ${refundMode === "full" ? "full" : refundMode} refund?`,
+      description: `${warning}${formatMoney(refundAmount, order.currency)} will be recorded against ${succeededPayments[0]?.method ?? "the payment"}. Stripe is not called yet — the refund is recorded in QuickTab only.`,
+      actionLabel: "Record refund",
+      onConfirm: () => {
+        void submitRefund()
+      },
+    })
+  }
+
   const requestCancel = () => {
+    const unrefunded = Math.max(0, roundMoney(
+      succeededPayments.reduce((total, payment) => total + payment.amount, 0) - refundedToDate,
+    ))
     confirm({
       title: `Cancel order #${order.orderNumber}?`,
-      description: "The order will be marked cancelled. Cancelling never issues a refund automatically.",
+      description:
+        unrefunded > 0
+          ? `${formatMoney(unrefunded, order.currency)} has been paid and will NOT be refunded automatically. Cancelling only closes the order.`
+          : "The order will be marked cancelled. Cancelling never issues a refund automatically.",
       actionLabel: "Cancel order",
       onConfirm: () => {
         void mutations.cancel(order.id, order.status)
@@ -195,8 +301,8 @@ export function OrderDetailPage() {
               <div><span>Tax</span><strong>{formatMoney(order.tax, order.currency)}</strong></div>
               <div className={`${styles["order-total"]}`}><span>Total</span><strong>{formatMoney(order.total, order.currency)}</strong></div>
             </div>
-            {order.refundedTotal > 0 && (
-              <div className={`${styles["refunded-line"]}`}><span>Refunded to date</span><strong>−{formatMoney(order.refundedTotal, order.currency)}</strong></div>
+            {refundedToDate > 0 && (
+              <div className={`${styles["refunded-line"]}`}><span>Refunded to date</span><strong>−{formatMoney(refundedToDate, order.currency)}</strong></div>
             )}
           </section>
 
@@ -228,9 +334,114 @@ export function OrderDetailPage() {
               </div>
             )}
             <p className="mt-4 text-[10px] leading-relaxed text-muted">
-              Read-only in this milestone. Refund recording arrives in M6 behind a feature flag.
+              Payment rows are written by the payment provider and read-only here.
             </p>
           </section>
+
+          {showRefundSection && (
+            <section className="rounded-card border border-line bg-paper p-7 shadow-card">
+              <h2 className="font-serif text-2xl text-ink">Refunds</h2>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted">
+                Stripe refund not yet processed — this records the refund in QuickTab.
+              </p>
+
+              {refundsQuery.error && (
+                <p className="mt-3 text-[12px] text-danger" role="alert">{refundsQuery.error.message}</p>
+              )}
+
+              {refundsQuery.refunds.length > 0 && (
+                <div className="mt-4 grid gap-2">
+                  {refundsQuery.refunds.map((refund) => {
+                    const line = order.lineItems.find((item) => item.id === refund.order_item_id)
+                    return (
+                      <div key={refund.id} className="rounded-[9px] border border-line bg-white p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <strong className="text-[12px] text-ink-soft">
+                            {formatMoney(refund.amount, order.currency)}
+                          </strong>
+                          <StatusPill tone={refund.status === "succeeded" ? "success" : refund.status === "failed" ? "danger" : "warning"} withDot={false}>
+                            {refund.status}
+                          </StatusPill>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted">
+                          {line ? `${line.name} × ${refund.quantity ?? 1}` : "Order-level refund"}
+                          {refund.reason ? ` · ${refund.reason}` : ""}
+                        </p>
+                        <p className="mt-1 text-[10px] text-muted">{formatTimestamp(refund.created_at, display.timezone)}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {canRecordRefund && (
+                <>
+                  {!refundMode && (
+                    <div className={`${styles["refund-actions"]}`}>
+                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("partial")}>Partial refund</button>
+                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("custom")}>Other amount</button>
+                      <button type="button" className={`${styles["refund-button"]}`} onClick={() => setRefundMode("full")}>Refund full order</button>
+                    </div>
+                  )}
+
+                  {refundMode === "partial" && (
+                    <div className="mt-4 grid gap-2">
+                      {order.lineItems.map((line) => {
+                        const quantity = refundQuantities[line.id] ?? 0
+                        return (
+                          <div key={line.id} className="flex items-center justify-between gap-3 rounded-[8px] border border-line bg-white px-3 py-2">
+                            <div>
+                              <strong className="block text-[12px] text-ink-soft">{line.name}</strong>
+                              <small className="text-[10px] text-muted">
+                                {formatMoney(line.unitPrice, order.currency)} · ordered {line.quantity}
+                              </small>
+                            </div>
+                            <div className={`${styles["refund-quantity"]}`}>
+                              <button type="button" aria-label={`Remove one ${line.name} from refund`} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.max(0, quantity - 1) })}>−</button>
+                              <strong>{quantity}</strong>
+                              <button type="button" aria-label={`Add one ${line.name} to refund`} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.min(line.quantity, quantity + 1) })}>+</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {refundMode && (
+                    <div className={`${styles["refund-confirmation"]}`}>
+                      <div>
+                        <span>{refundMode === "full" ? "Remaining balance" : refundMode === "custom" ? "Custom refund" : "Selected refund"}</span>
+                        <strong>{formatMoney(refundAmount, order.currency)}</strong>
+                      </div>
+                      {refundMode === "custom" ? (
+                        <label className={`${styles["custom-refund"]}`}>
+                          Refund amount
+                          <span>
+                            <strong>$</strong>
+                            <input autoFocus type="number" min="0.01" max={refundable} step="0.01" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} />
+                          </span>
+                          <small>{customError ?? `Up to ${formatMoney(refundable, order.currency)} can be refunded.`}</small>
+                        </label>
+                      ) : (
+                        <p>{refundMode === "partial" ? "Choose quantities above; each line is recorded against its own order item id." : "The remaining balance will be recorded as a refund."}</p>
+                      )}
+                      <div>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={resetRefundForm}>Cancel</button>
+                        <button
+                          type="button"
+                          className={`${styles["refund-button"]}`}
+                          disabled={refundAmount <= 0 || refundAmount > refundable || Boolean(customError) || refundMutation.isMutating}
+                          onClick={requestRefundConfirmation}
+                        >
+                          Confirm refund
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
         </div>
       </div>
 
