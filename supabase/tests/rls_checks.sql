@@ -108,3 +108,37 @@ select set_config(
 set local role authenticated;
 select public.is_manager_of('<restaurant-uuid>') as manager_is_manager;
 rollback;
+
+-- ---------------------------------------------------------------------
+-- M4 — tables.seats + staff writes
+-- ---------------------------------------------------------------------
+
+-- (h) Staff may create a table with seats. Expected: 1 row.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.tables (restaurant_id, table_number, location_label, seats)
+values (
+  '<restaurant-uuid>',
+  'RLS-' || substr(gen_random_uuid()::text, 1, 8),
+  'Indoors',
+  2
+)
+returning id, seats, qr_token;
+rollback;
+
+-- (i) Anonymous table writes are denied. Expected: RLS violation.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+insert into public.tables (restaurant_id, table_number)
+values ('<restaurant-uuid>', 'ANON-CHECK');
+rollback;

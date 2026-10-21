@@ -656,6 +656,7 @@ export type Database = {
           location_label: string | null;
           qr_token: string;
           restaurant_id: string;
+          seats: number | null;
           table_number: string;
         };
         Insert: {
@@ -665,6 +666,7 @@ export type Database = {
           location_label?: string | null;
           qr_token?: string;
           restaurant_id: string;
+          seats?: number | null;
           table_number: string;
         };
         Update: {
@@ -674,6 +676,7 @@ export type Database = {
           location_label?: string | null;
           qr_token?: string;
           restaurant_id?: string;
+          seats?: number | null;
           table_number?: string;
         };
         Relationships: [
