@@ -474,7 +474,6 @@ export type Database = {
           id: string
           last_name: string | null
           phone: string | null
-          role: string
         }
         Insert: {
           created_at?: string
@@ -483,7 +482,6 @@ export type Database = {
           id: string
           last_name?: string | null
           phone?: string | null
-          role?: string
         }
         Update: {
           created_at?: string
@@ -492,17 +490,8 @@ export type Database = {
           id?: string
           last_name?: string | null
           phone?: string | null
-          role?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_role_fkey"
-            columns: ["role"]
-            isOneToOne: false
-            referencedRelation: "roles"
-            referencedColumns: ["name"]
-          },
-        ]
+        Relationships: []
       }
       qr_sessions: {
         Row: {
@@ -716,24 +705,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      roles: {
-        Row: {
-          created_at: string
-          description: string | null
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          name: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          name?: string
-        }
-        Relationships: []
       }
       tables: {
         Row: {
