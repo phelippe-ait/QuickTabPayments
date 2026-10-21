@@ -34,7 +34,9 @@ nav button { width: 100%; display: flex; align-items: center; gap: 13px; padding
 nav button:hover { color: #fff; background: rgba(255,255,255,.05); }
 nav button.active { color: #fff; background: var(--color-berry); box-shadow: 0 8px 22px rgba(200,77,100,.2); }
 .sidebar-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.08); }
-.admin-profile { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; padding: 5px; }
+.admin-profile { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 5px; border: 0; border-radius: 10px; color: inherit; background: transparent; font-family: inherit; text-align: left; cursor: pointer; transition: background .18s ease; }
+.admin-profile:hover { background: rgba(255,255,255,.06); }
+.admin-profile:focus-visible { outline: 2px solid var(--color-berry); outline-offset: 2px; }
 .admin-profile > span { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #6f5e54; background: var(--color-line-soft); font-size: 12px; font-weight: 700; }
 .admin-profile strong, .admin-profile small { display: block; }
 .admin-profile strong { color: var(--color-cream-3); font-size: 13px; }

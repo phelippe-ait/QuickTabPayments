@@ -10,6 +10,7 @@ type AdminShellProps = {
   userName: string
   userRole: string
   userInitials: string
+  onOpenProfile: () => void
   onSignOut: () => void
   mobileNavOpen: boolean
   onToggleMobileNav: () => void
@@ -33,7 +34,7 @@ const sectionIcons: Record<Section, IconName> = {
   settings: "settings",
 }
 
-export function AdminShell({ sections, restaurantName, userName, userRole, userInitials, onSignOut, mobileNavOpen, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
+export function AdminShell({ sections, restaurantName, userName, userRole, userInitials, onOpenProfile, onSignOut, mobileNavOpen, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
   return (
     <div className={styles["app-shell"]}>
       <button
@@ -63,7 +64,16 @@ export function AdminShell({ sections, restaurantName, userName, userRole, userI
           ))}
         </nav>
         <div className={styles["sidebar-footer"]}>
-          <div className={styles["admin-profile"]}><span>{userInitials}</span><div><strong>{userName}</strong><small>{userRole}</small></div><Icon name="chevron" size={15} /></div>
+          <button
+            type="button"
+            className={styles["admin-profile"]}
+            onClick={onOpenProfile}
+            aria-haspopup="dialog"
+            aria-label={`Profile settings for ${userName}`}
+            title="Profile settings"
+          >
+            <span>{userInitials}</span><div><strong>{userName}</strong><small>{userRole}</small></div><Icon name="chevron" size={15} />
+          </button>
           <button type="button" onClick={onSignOut}><Icon name="logout" />Sign out</button>
         </div>
       </aside>
