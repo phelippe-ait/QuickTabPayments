@@ -32,10 +32,10 @@ const userName =
   )
   const filteredOrders = useMemo(() => {
     const term = query.toLowerCase()
-    return workspace.orders.filter((order) =>
+    return workspace.historyOrders.filter((order) =>
       [order.id, order.table, order.guest, order.status].some((value) => value.toLowerCase().includes(term)),
     )
-  }, [workspace.orders, query])
+  }, [workspace.historyOrders, query])
   const occupied = workspace.tableList.filter((table) => table.status === "occupied").length
 
   const saveTable = (table: Table) => {
@@ -64,7 +64,9 @@ const userName =
 />}
       {view === "history" && <OrderHistory
         filteredOrders={filteredOrders}
-        totalOrders={workspace.orders.length}
+        totalOrders={workspace.historyOrders.length}
+        isLoading={workspace.historyLoading}
+        error={workspace.historyError}
         query={query}
         setQuery={setQuery}
         onSelect={setSelectedOrder}

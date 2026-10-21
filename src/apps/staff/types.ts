@@ -17,10 +17,13 @@ export type Table = {
 
 export type Order = {
   id: string
+  databaseId?: string
   table: string
   guest: string
   time: string
   total: number
+  subtotal?: number
+  tax?: number
   status: "In progress" | "Completed" | "Cancelled"
   kitchenStatus: KitchenStatus
   server: string

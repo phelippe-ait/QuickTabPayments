@@ -18,8 +18,7 @@ export function StaffShell({
   onViewChange,
   children,
   overlays,
-  userName = "Staff member",
-  restaurantName = "Restaurant",
+    userName = "Staff member",
 }: StaffShellProps) {
   const initials = userName
     .trim()

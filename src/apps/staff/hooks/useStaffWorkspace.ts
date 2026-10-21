@@ -1,7 +1,8 @@
+import { useEffect, useMemo, useState } from "react"
 import { initialReservations } from "../data/fixtures"
 import type { KitchenStatus, Order, Reservation, Table } from "../types"
-import { useEffect, useMemo, useState } from "react"
-import { supabase } from "../../../shared/lib/supabase"
+import { supabase } from "@shared/lib/supabase"
+import { toHistoryOrder } from "../data/orderHistory"
 import { fetchStaffTables } from "../services/staffTables"
 import {
   fetchMyStaffRestaurantId,
@@ -10,31 +11,16 @@ import {
   updateStaffOrderStatus,
 } from "../services/staffOrders"
 
-
+const restaurantSlug =
+  import.meta.env.VITE_RESTAURANT_SLUG || "quicktab-demo-cafe"
 
 export function useStaffWorkspace() {
-  
-  useEffect(() => {
-  async function testConnection() {
-    if (!supabase) {
-      console.error("Supabase is not configured")
-      return
-    }
-
-    const { data, error } = await supabase.auth.getUser()
-
-    if (error) {
-      console.error("Supabase authentication:", error.message)
-    } else {
-      console.log("Supabase connection test:", data.user?.id ?? "No authenticated user")
-    }
-  }
-
-  void testConnection()
-}, [])
-  
   const [tableList, setTableList] = useState<Table[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations)
   const [ordersLoading, setOrdersLoading] = useState(true)
 const [ordersError, setOrdersError] = useState<string | null>(null)
@@ -146,6 +132,79 @@ async function loadTables(restaurantId: string) {
 }, [])
 
 
+  useEffect(() => {
+    let active = true
+
+    const loadHistory = async () => {
+      if (!supabase) {
+        setHistoryError("Supabase is not configured.")
+        setHistoryLoading(false)
+        return
+      }
+      const client = supabase
+
+      const { data: restaurant, error: restaurantError } = await client
+        .from("restaurants")
+        .select("id")
+        .eq("slug", restaurantSlug)
+        .eq("is_active", true)
+        .single()
+
+      if (restaurantError || !restaurant) {
+        if (!active) return
+        setHistoryError("Could not find the configured restaurant.")
+        setHistoryLoading(false)
+        return
+      }
+
+      const loadOrders = async () => {
+        const { data, error } = await client
+          .from("orders")
+          .select("id, restaurant_id, table_id, customer_id, order_number, status, subtotal, tax, total, notes, pickup_time_estimate, created_at, updated_at, completed_at")
+          .eq("restaurant_id", restaurant.id)
+          .order("created_at", { ascending: false })
+          .limit(100)
+
+        if (!active) return
+        if (error) {
+          console.error("Could not load order history", error)
+          setHistoryError("Could not load recent orders. Check your staff access and try again.")
+        } else {
+          setHistoryOrders((data ?? []).map(toHistoryOrder))
+          setHistoryError(null)
+        }
+        setHistoryLoading(false)
+      }
+
+      await loadOrders()
+      if (!active) return
+      const channel = client
+        .channel(`staff-order-history-${restaurant.id}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `restaurant_id=eq.${restaurant.id}`,
+        }, () => { void loadOrders() })
+        .subscribe()
+
+      return () => { void client.removeChannel(channel) }
+    }
+
+    let removeSubscription: (() => void) | undefined
+    void loadHistory().then((remove) => { removeSubscription = remove }).catch((error: unknown) => {
+      if (!active) return
+      console.error("Could not load order history", error)
+      setHistoryError("Could not load recent orders. Check your connection and try again.")
+      setHistoryLoading(false)
+    })
+
+    return () => {
+      active = false
+      removeSubscription?.()
+    }
+  }, [])
+
   const activeKitchenOrders = useMemo(
     () => orders.filter((order) => order.kitchenStatus !== "Completed" && order.kitchenStatus !== "Cancelled"),
     [orders],
@@ -232,7 +291,10 @@ const updateKitchenStatus = async (
     tableList,
     orders,
     ordersLoading,
-  ordersError,
+    ordersError,
+    historyOrders,
+    historyLoading,
+    historyError,
     reservations,
     activeKitchenOrders,
     previousKitchenOrders,
