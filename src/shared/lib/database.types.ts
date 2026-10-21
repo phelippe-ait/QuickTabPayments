@@ -329,6 +329,7 @@ export type Database = {
           completed_at: string | null;
           created_at: string;
           customer_id: string | null;
+          customer_name_snapshot: string | null;
           id: string;
           notes: string | null;
           order_number: string;
@@ -345,6 +346,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           customer_id?: string | null;
+          customer_name_snapshot?: string | null;
           id?: string;
           notes?: string | null;
           order_number: string;
@@ -361,6 +363,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           customer_id?: string | null;
+          customer_name_snapshot?: string | null;
           id?: string;
           notes?: string | null;
           order_number?: string;
@@ -737,6 +740,15 @@ export type Database = {
         Args: { p_restaurant_id: string };
         Returns: boolean;
       };
+      restaurant_daily_stats: {
+        Args: { p_restaurant_id: string; p_timezone?: string };
+        Returns: {
+          avg_order_value: number;
+          orders_count: number;
+          period: string;
+          revenue: number;
+        }[];
+      };
       storage_folder_restaurant_id: {
         Args: { p_name: string };
         Returns: string;
@@ -785,3 +797,5 @@ export type Order = Tables<"orders">;
 export type OrderItem = Tables<"order_items">;
 export type Payment = Tables<"payments">;
 export type OrderStatus = Enums<"order_status">;
+export type PaymentStatus = Enums<"payment_status">;
+export type PaymentMethodType = Enums<"payment_method_type">;

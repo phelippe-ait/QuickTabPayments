@@ -142,3 +142,44 @@ set local role anon;
 insert into public.tables (restaurant_id, table_number)
 values ('<restaurant-uuid>', 'ANON-CHECK');
 rollback;
+
+-- ---------------------------------------------------------------------
+-- M5 — order reads and daily stats
+-- ---------------------------------------------------------------------
+
+-- (j) Staff can read their restaurant's orders. Expected: a positive count.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select count(*) as visible_orders
+from public.orders
+where restaurant_id = '<restaurant-uuid>';
+rollback;
+
+-- (k) Staff of another restaurant cannot read these orders.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<other-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select count(*) as should_be_zero
+from public.orders
+where restaurant_id = '<restaurant-uuid>';
+rollback;
+
+-- (l) Daily stats returns two rows for staff. Expected: today + yesterday.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select * from public.restaurant_daily_stats('<restaurant-uuid>', 'Australia/Sydney');
+rollback;
