@@ -232,3 +232,52 @@ delete from public.refunds
 where id = '<refund-uuid>'
 returning id;
 rollback;
+
+-- ---------------------------------------------------------------------
+-- M7 — staff directory and add-by-email
+-- ---------------------------------------------------------------------
+
+-- (p) Staff can read the directory (including inactive rows). Expected: rows.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select * from public.list_staff_directory('<restaurant-uuid>');
+rollback;
+
+-- (q) A non-staff caller gets zero directory rows.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<non-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select count(*) as should_be_zero
+from public.list_staff_directory('<restaurant-uuid>');
+rollback;
+
+-- (r) Kitchen staff cannot add members. Expected: ERROR 42501.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select public.add_staff_by_email('<restaurant-uuid>', 'someone@example.test', 'manager');
+rollback;
+
+-- (s) Unknown email returns P0002. Expected: ERROR with the sign-up message.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select public.add_staff_by_email('<restaurant-uuid>', 'nobody@example.test', 'manager');
+rollback;

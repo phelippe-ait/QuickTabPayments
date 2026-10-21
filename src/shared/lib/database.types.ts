@@ -766,6 +766,14 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      add_staff_by_email: {
+        Args: {
+          p_email: string;
+          p_restaurant_id: string;
+          p_role?: Database["public"]["Enums"]["staff_role"];
+        };
+        Returns: string;
+      };
       create_restaurant_with_owner: {
         Args: { p_name: string; p_slug: string };
         Returns: {
@@ -810,6 +818,19 @@ export type Database = {
       is_staff_of: {
         Args: { p_restaurant_id: string };
         Returns: boolean;
+      };
+      list_staff_directory: {
+        Args: { p_restaurant_id: string };
+        Returns: {
+          created_at: string;
+          email: string | null;
+          first_name: string | null;
+          is_active: boolean;
+          last_name: string | null;
+          role: Database["public"]["Enums"]["staff_role"];
+          staff_id: string;
+          user_id: string;
+        }[];
       };
       restaurant_daily_stats: {
         Args: { p_restaurant_id: string; p_timezone?: string };
