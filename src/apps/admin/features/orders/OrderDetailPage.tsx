@@ -210,7 +210,7 @@ export function OrderDetailPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <StatusPill tone={orderStatusTones[order.status]}>{orderStatusLabels[order.status]}</StatusPill>
-                {order.status !== "cancelled" && (
+                {isOpenOrderStatus(order.status) && (
                   <small className={`${styles["running-time"]}`}>Running {formatRunningTime(order.createdAt, now)}</small>
                 )}
               </div>

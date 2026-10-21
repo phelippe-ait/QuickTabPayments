@@ -136,6 +136,14 @@ describe("OrderDetailPage", () => {
     expect(screen.getByText("succeeded")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /mark confirmed/i })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /mark completed/i })).toBeNull()
+    expect(screen.getByText(/^Running /)).toBeInTheDocument()
+  })
+
+  it("does not show running time for completed orders", () => {
+    mocks.order = { ...order, status: "completed" }
+    renderPage()
+
+    expect(screen.queryByText(/^Running /)).toBeNull()
   })
 
   it("advances status through the shared matrix", () => {
