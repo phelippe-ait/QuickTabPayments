@@ -7,7 +7,7 @@ import type { StaffRole } from "@shared/lib/database.types";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
 import { useStaff } from "../../hooks/useStaff";
-import type { StaffVM } from "../../types";
+import type { StaffVM } from "../../viewModels";
 import { UserModal } from "./UserDialog";
 import { staffPermissions } from "./staff.utils";
 

@@ -4,7 +4,7 @@ import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
 import { roleLabels } from "@shared/restaurant/RestaurantProvider"
 import type { StaffRole } from "@shared/lib/database.types"
-import type { StaffVM } from "../../types"
+import type { StaffVM } from "../../viewModels"
 import { assignableRoles, staffPermissions } from "./staff.utils"
 
 type UserModalProps = {

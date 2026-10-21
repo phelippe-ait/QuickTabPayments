@@ -12,7 +12,7 @@ import { useTables } from "../../hooks/useTables"
 import { buildTableQrUrl } from "./tableQr.utils"
 import { formatElapsed } from "./table.utils"
 import { TableModal } from "./TableDialog"
-import type { TableVM } from "../../types"
+import type { TableVM } from "../../viewModels"
 
 export function TablesPage() {
   const { restaurant } = useRestaurant()

@@ -5,7 +5,7 @@ import type {
 } from "@shared/lib/database.types"
 import type { OpenTableOrder, OrderWithDetails } from "@shared/data/orders"
 import type { StaffDirectoryEntry } from "@shared/data/restaurants"
-import type { CategoryVM, MenuItemVM, OrderVM, StaffVM, TableVM } from "./types"
+import type { CategoryVM, MenuItemVM, OrderVM, StaffVM, TableVM } from "./viewModels"
 
 /**
  * Database rows → admin view models. Keep this free of React so the mapping

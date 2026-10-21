@@ -5,7 +5,7 @@ import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
 import { uploadMenuItemImage, validateImageFile } from "@shared/lib/storage"
 import type { TablesUpdate } from "@shared/lib/database.types"
-import type { CategoryVM, MenuItemVM } from "../../types"
+import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import type { NewMenuItemInput } from "../../hooks/useMenu"
 
 export function ItemModal({

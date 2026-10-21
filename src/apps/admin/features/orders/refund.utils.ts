@@ -1,4 +1,4 @@
-import type { OrderLineVM, PaymentVM } from "../../types"
+import type { OrderLineVM, PaymentVM } from "../../viewModels"
 
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100

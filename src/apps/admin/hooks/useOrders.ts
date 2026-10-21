@@ -16,7 +16,7 @@ import {
 import type { OrderStatus } from "@shared/lib/database.types"
 import { canTransitionStatus } from "@shared/orders/status"
 import { toOrderVM } from "../mappers"
-import type { OrderVM } from "../types"
+import type { OrderVM } from "../viewModels"
 
 type RestaurantDisplay = { currency: string; timezone: string }
 type HooksOptions = {

@@ -1,5 +1,5 @@
 import type { StaffRole } from "@shared/lib/database.types"
-import type { StaffVM } from "../../types"
+import type { StaffVM } from "../../viewModels"
 
 export type StaffPermissions = {
   canChangeRole: boolean

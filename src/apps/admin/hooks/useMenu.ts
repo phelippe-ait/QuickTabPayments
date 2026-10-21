@@ -18,7 +18,7 @@ import {
 } from "@shared/data/menu"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import { toCategoryVM, toMenuItemVM } from "../mappers"
-import type { CategoryVM, MenuItemVM } from "../types"
+import type { CategoryVM, MenuItemVM } from "../viewModels"
 
 export type NewMenuItemInput = {
   id: string

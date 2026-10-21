@@ -9,7 +9,7 @@ import {
 } from "@shared/data/restaurants"
 import type { StaffRole } from "@shared/lib/database.types"
 import { toStaffVM } from "../mappers"
-import type { StaffVM } from "../types"
+import type { StaffVM } from "../viewModels"
 
 type Options = {
   onSuccess?: (message: string) => void

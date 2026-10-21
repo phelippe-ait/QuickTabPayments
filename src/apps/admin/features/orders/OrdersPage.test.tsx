@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { OrdersPage } from "./OrdersPage"
-import type { OrderVM } from "../../types"
+import type { OrderVM } from "../../viewModels"
 
 const order: OrderVM = {
   id: "order-1",

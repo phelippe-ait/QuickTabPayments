@@ -4,7 +4,7 @@ import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import type { NewTableInput } from "../../hooks/useTables"
-import type { TableVM } from "../../types"
+import type { TableVM } from "../../viewModels"
 import { normaliseSeats } from "./table.utils"
 
 const locationSuggestions = ["Indoors", "Outdoors", "Pick-up"]

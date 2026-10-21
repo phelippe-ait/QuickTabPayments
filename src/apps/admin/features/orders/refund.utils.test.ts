@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { OrderLineVM, PaymentVM } from "../../types"
+import type { OrderLineVM, PaymentVM } from "../../viewModels"
 import {
   partialRefundAmount,
   refundableBalance,

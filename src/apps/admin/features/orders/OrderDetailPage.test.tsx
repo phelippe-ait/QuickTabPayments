@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { OrderDetailPage } from "./OrderDetailPage"
 import type { Refund } from "@shared/lib/database.types"
-import type { OrderVM } from "../../types"
+import type { OrderVM } from "../../viewModels"
 
 const order: OrderVM = {
   id: "order-1",

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { UsersPage } from "./UsersPage"
-import type { StaffVM } from "../../types"
+import type { StaffVM } from "../../viewModels"
 
 const mocks = vi.hoisted(() => ({
   viewerRole: "owner" as "owner" | "manager" | "kitchen",

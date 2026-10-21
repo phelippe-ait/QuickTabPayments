@@ -17,7 +17,7 @@ import {
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useOrderStats, useOrders } from "../../hooks/useOrders"
 import type { OrderStatus } from "@shared/lib/database.types"
-import type { OrderVM } from "../../types"
+import type { OrderVM } from "../../viewModels"
 import { formatRunningTime, getRefundStatus } from "./order.utils"
 
 const PAGE_SIZE = 25

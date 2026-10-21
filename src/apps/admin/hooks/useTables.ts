@@ -12,7 +12,7 @@ import {
 import { fetchOpenOrdersByTable, orderKeys } from "@shared/data/orders"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import { toTableVM } from "../mappers"
-import type { TableVM } from "../types"
+import type { TableVM } from "../viewModels"
 
 export type NewTableInput = {
   table_number: string

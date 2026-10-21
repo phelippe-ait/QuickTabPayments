@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { TablesPage } from "./TablesPage"
-import type { TableVM } from "../../types"
+import type { TableVM } from "../../viewModels"
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),

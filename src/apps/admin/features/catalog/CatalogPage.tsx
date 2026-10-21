@@ -8,7 +8,7 @@ import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
 import { formatMoney } from "@shared/lib/money"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useMenu } from "../../hooks/useMenu"
-import type { MenuItemVM } from "../../types"
+import type { MenuItemVM } from "../../viewModels"
 import { ItemModal, SectionsModal } from "./CatalogDialogs"
 
 const ALL_ITEMS = "all"

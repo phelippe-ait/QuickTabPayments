@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { CategoryVM, MenuItemVM } from "../../types"
+import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import { ItemModal, SectionsModal } from "./CatalogDialogs"
 
 const categories: CategoryVM[] = [

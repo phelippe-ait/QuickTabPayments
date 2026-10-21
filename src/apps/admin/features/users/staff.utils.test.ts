@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { StaffVM } from "../../types"
+import type { StaffVM } from "../../viewModels"
 import { assignableRoles, staffPermissions } from "./staff.utils"
 
 const member: StaffVM = {

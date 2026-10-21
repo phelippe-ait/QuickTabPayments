@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { CatalogPage } from "./CatalogPage"
-import type { CategoryVM, MenuItemVM } from "../../types"
+import type { CategoryVM, MenuItemVM } from "../../viewModels"
 
 const category: CategoryVM = {
   id: "cat-a",
