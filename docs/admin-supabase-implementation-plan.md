@@ -808,7 +808,7 @@ Defaults are already baked into the plan; flagging changes **before** the owning
 | D4 | Refund writes | Staff-writable stub rows (`status='succeeded'`), DB triggers cap amounts; tighten to service-role when Stripe webhook lands | Service-role-only from day one (requires Edge Function for the demo — cuts refund UI to read-only) | M6 migration 0010 |
 | D5 | QR URL | `{origin}/?r={slug}&t={qr_token}` (query params — no hosting rewrite rules needed) | Path format `{origin}/r/{slug}/t/{token}` (prettier; requires SPA catch-all on the host) | M4 `shared/lib/qr.ts` |
 | D6 | Kitchen in admin | Read-only order history (no transitions/refunds — staff app owns kitchen workflow) | Let kitchen advance preparing→ready from admin | M5 gating |
-| D7 | "Delete user" | Remove membership, owner-only; bulk delete → bulk deactivate | Hard-delete for managers too | M7 |
+| D7 | "Delete user" | **Amended after review:** remove membership by owner **or manager**; owner rows stay owner-only; bulk delete → bulk deactivate. Managers already change roles/deactivate, so removal is not an escalation. | Hard-delete for managers too | M7 |
 
 ---
 

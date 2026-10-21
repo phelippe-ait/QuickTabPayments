@@ -97,7 +97,8 @@ rolled back.
 6. **(7:00–8:30) Users.** Real directory names/emails from the RPC. Demote a
    manager to kitchen in a second browser; their admin narrows on refresh.
    Add-by-email: show the unknown-email error, then a success. Owner rows and
-   your own row are locked.
+   your own row are locked. Managers may remove non-owner memberships; owner
+   rows remain owner-only.
 7. **(8:30–9:30) Settings.** Change description + tax rate, replace the logo.
    Refresh. Mention managers can edit profile fields but not the slug.
 8. **(9:30–10:00) Close.** Grep gate on fixtures, `npm test` output, roadmap:
@@ -126,3 +127,5 @@ rolled back.
 - Invitations require an existing QuickTab account; real email invitations need
   an Edge Function with `service_role`.
 - Polling (30 s) replaces realtime for this demo.
+- Refund state is shown as per-row pills and on the order detail; filtering all
+  orders by refunded state across pages is post-demo.
