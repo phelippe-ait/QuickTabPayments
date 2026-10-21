@@ -689,13 +689,42 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      create_restaurant_with_owner: {
+        Args: { p_name: string; p_slug: string };
+        Returns: {
+          address: string | null;
+          cover_image_url: string | null;
+          created_at: string;
+          currency: string;
+          description: string | null;
+          email: string | null;
+          id: string;
+          is_active: boolean;
+          logo_url: string | null;
+          name: string;
+          owner_id: string;
+          phone: string | null;
+          slug: string;
+          tax_rate: number;
+          timezone: string;
+          updated_at: string;
+        };
+      };
       enforce_role_change_permission: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      guard_restaurants_owner_fields: {
         Args: Record<PropertyKey, never>;
         Returns: unknown;
       };
       handle_new_user: {
         Args: Record<PropertyKey, never>;
         Returns: unknown;
+      };
+      is_manager_of: {
+        Args: { p_restaurant_id: string };
+        Returns: boolean;
       };
       is_owner_of: {
         Args: { p_restaurant_id: string };
@@ -704,6 +733,10 @@ export type Database = {
       is_staff_of: {
         Args: { p_restaurant_id: string };
         Returns: boolean;
+      };
+      storage_folder_restaurant_id: {
+        Args: { p_name: string };
+        Returns: string;
       };
       set_updated_at: {
         Args: Record<PropertyKey, never>;
