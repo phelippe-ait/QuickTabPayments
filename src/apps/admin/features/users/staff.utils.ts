@@ -16,10 +16,12 @@ export function staffPermissions({
   viewerRole,
   viewerUserId,
   member,
+  activeOwnerCount,
 }: {
   viewerRole: StaffRole
   viewerUserId: string
   member: StaffVM
+  activeOwnerCount: number
 }): StaffPermissions {
   if (member.userId === viewerUserId) {
     return {
@@ -36,6 +38,24 @@ export function staffPermissions({
       canToggleActive: false,
       canRemove: false,
       lockedReason: "Only the owner can manage an owner.",
+    }
+  }
+
+  if (member.role === "owner" && member.isActive && activeOwnerCount <= 1) {
+    return {
+      canChangeRole: false,
+      canToggleActive: false,
+      canRemove: false,
+      lockedReason: "The last active owner cannot be deactivated or demoted.",
+    }
+  }
+
+  if (viewerRole === "manager" && member.role === "manager") {
+    return {
+      canChangeRole: false,
+      canToggleActive: false,
+      canRemove: false,
+      lockedReason: "Managers cannot manage other managers.",
     }
   }
 

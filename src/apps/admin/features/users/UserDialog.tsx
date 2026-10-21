@@ -11,6 +11,7 @@ type UserModalProps = {
   mode: { kind: "edit"; member: StaffVM } | { kind: "add" }
   viewerRole: StaffRole
   viewerUserId: string
+  activeOwnerCount: number
   onClose: () => void
   onSaveRole: (staffId: string, role: StaffRole) => Promise<boolean>
   onSetActive: (staffId: string, isActive: boolean) => Promise<boolean>
@@ -21,6 +22,7 @@ export function UserModal({
   mode,
   viewerRole,
   viewerUserId,
+  activeOwnerCount,
   onClose,
   onSaveRole,
   onSetActive,
@@ -33,6 +35,7 @@ export function UserModal({
         viewerRole,
         viewerUserId,
         member,
+        activeOwnerCount,
       })
     : null
   const roleChoices = (

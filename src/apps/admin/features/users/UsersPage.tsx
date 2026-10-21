@@ -47,9 +47,13 @@ export function UsersPage() {
     [staffQuery.staff],
   );
 
+  const activeOwnerCount = staffQuery.staff.filter(
+    (member) => member.role === "owner" && member.isActive,
+  ).length
   const selectable = visible.filter(
     (member) =>
-      staffPermissions({ viewerRole, viewerUserId, member }).canToggleActive,
+      staffPermissions({ viewerRole, viewerUserId, member, activeOwnerCount })
+        .canToggleActive,
   );
   const selectedMembers = staffQuery.staff.filter((member) =>
     selected.includes(member.staffId),
@@ -58,7 +62,8 @@ export function UsersPage() {
   const bulkSetActive = (isActive: boolean) => {
     const targets = selectedMembers.filter(
       (member) =>
-        staffPermissions({ viewerRole, viewerUserId, member }).canToggleActive,
+        staffPermissions({ viewerRole, viewerUserId, member, activeOwnerCount })
+          .canToggleActive,
     );
     if (!targets.length) return;
     void staffQuery
@@ -168,7 +173,12 @@ export function UsersPage() {
                 <span>Actions</span>
               </div>
               {visible.map((member) => {
-                const permissions = staffPermissions({ viewerRole, viewerUserId, member })
+                const permissions = staffPermissions({
+                  viewerRole,
+                  viewerUserId,
+                  member,
+                  activeOwnerCount,
+                })
                 return (
                   <div className={`${styles["table-row"]}`} key={member.staffId}>
                     <label className={`${styles["inline-select"]}`} aria-label={`Select ${member.name}`}>
@@ -233,6 +243,7 @@ export function UsersPage() {
           mode={modal.kind === "edit" ? { kind: "edit", member: modal.member } : { kind: "add" }}
           viewerRole={viewerRole}
           viewerUserId={viewerUserId}
+          activeOwnerCount={activeOwnerCount}
           onClose={() => setModal(null)}
           onSaveRole={staffQuery.setRole}
           onSetActive={staffQuery.setActive}
