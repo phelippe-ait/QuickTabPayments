@@ -31,7 +31,10 @@ export type AuthContextValue = {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signInWithOAuth: (provider: OAuthProvider) => Promise<AuthResult>;
+  signInWithOAuth: (
+    provider: OAuthProvider,
+    options?: { redirectTo?: string },
+  ) => Promise<AuthResult>;
   signInWithPassword: (email: string, password: string) => Promise<AuthResult>;
   signUp: (input: SignUpInput) => Promise<AuthResult>;
   updateProfile: (input: {
@@ -114,11 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profile,
       loading,
-      async signInWithOAuth(provider) {
+      async signInWithOAuth(provider, options) {
         if (!supabase) return { error: notConfigured };
         const { error } = await supabase.auth.signInWithOAuth({
           provider,
-          options: { redirectTo: "https://quick-tab-payments.vercel.app/" },
+          options: {
+            redirectTo: options?.redirectTo ?? `${window.location.origin}/`,
+          },
         });
         return { error };
       },

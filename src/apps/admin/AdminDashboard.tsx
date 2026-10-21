@@ -11,10 +11,34 @@ import { TableModal } from "./features/tables/TableDialog"
 import { UsersPage } from "./features/users/UsersPage"
 import { UserModal } from "./features/users/UserDialog"
 import { OrdersPage } from "./features/orders/OrdersPage"
+import { RequireStaff } from "./features/auth/AdminGate"
+import { useAuth } from "@shared/auth/AuthContext"
+import {
+  getInitials,
+  getProfileName,
+  RestaurantProvider,
+  roleLabels,
+  useRestaurant,
+} from "@shared/restaurant/RestaurantProvider"
 import type { CafeTable, Confirmation, MenuItem, Section, User } from "./types"
 
 export default function App() {
-  const [section, setSection] = useState<Section>("catalog")
+  return (
+    <RestaurantProvider>
+      <RequireStaff>
+        <AdminWorkspace />
+      </RequireStaff>
+    </RestaurantProvider>
+  )
+}
+
+function AdminWorkspace() {
+  const { restaurant, role } = useRestaurant()
+  const { profile, user, signOut } = useAuth()
+  const allowedSections: Section[] = role === "kitchen"
+    ? ["orders"]
+    : ["catalog", "tables", "users", "orders"]
+  const [section, setSection] = useState<Section>(allowedSections[0])
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [itemModal, setItemModal] = useState<{ open: boolean; item: MenuItem | null }>({ open: false, item: null })
   const [tableModal, setTableModal] = useState<{ open: boolean; table: CafeTable | null }>({ open: false, table: null })
@@ -23,6 +47,7 @@ export default function App() {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const { toast, showToast } = useAdminToast()
   const workspace = useAdminWorkspace({ notify: showToast, confirm: setConfirmation })
+  const userName = getProfileName(profile, user?.email)
 
   const navigate = (next: Section) => {
     setSection(next)
@@ -34,8 +59,8 @@ export default function App() {
     setItemModal({ open: false, item: null })
   }
 
-  const saveUser = (user: User) => {
-    workspace.saveUser(user)
+  const saveUser = (nextUser: User) => {
+    workspace.saveUser(nextUser)
     setUserModal({ open: false, user: null })
   }
 
@@ -48,6 +73,12 @@ export default function App() {
     <>
       <AdminShell
         section={section}
+        sections={allowedSections}
+        restaurantName={restaurant?.name ?? "Your restaurant"}
+        userName={userName}
+        userRole={role ? roleLabels[role] : ""}
+        userInitials={getInitials(userName)}
+        onSignOut={() => void signOut()}
         mobileNavOpen={mobileNavOpen}
         onNavigate={navigate}
         onToggleMobileNav={() => setMobileNavOpen((open) => !open)}

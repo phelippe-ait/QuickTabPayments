@@ -5,6 +5,12 @@ import type { Section } from "../../types"
 
 type AdminShellProps = {
   section: Section
+  sections: Section[]
+  restaurantName: string
+  userName: string
+  userRole: string
+  userInitials: string
+  onSignOut: () => void
   mobileNavOpen: boolean
   onNavigate: (section: Section) => void
   onToggleMobileNav: () => void
@@ -12,23 +18,36 @@ type AdminShellProps = {
   children: ReactNode
 }
 
-export function AdminShell({ section, mobileNavOpen, onNavigate, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
+const sectionLabels: Record<Section, string> = {
+  catalog: "Catalog",
+  tables: "Tables",
+  users: "Users",
+  orders: "Order history",
+}
+
+const sectionIcons: Record<Section, "catalog" | "tables" | "users" | "orders"> = {
+  catalog: "catalog",
+  tables: "tables",
+  users: "users",
+  orders: "orders",
+}
+
+export function AdminShell({ section, sections, restaurantName, userName, userRole, userInitials, onSignOut, mobileNavOpen, onNavigate, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
   return (
     <div className={styles["app-shell"]}>
       <button className={styles["mobile-menu"]} onClick={onToggleMobileNav} aria-label="Open navigation"><span /><span /><span /></button>
       {mobileNavOpen && <button className={styles["nav-scrim"]} onClick={onCloseMobileNav} aria-label="Close navigation" />}
       <aside className={mobileNavOpen ? styles["open"] : ""}>
-        <div className={styles["brand"]}><span><Icon name="coffee" size={25} /></span><div><strong>Café Shop</strong><small>Admin workspace</small></div></div>
+        <div className={styles["brand"]}><span><Icon name="coffee" size={25} /></span><div><strong>{restaurantName}</strong><small>Admin workspace</small></div></div>
         <nav>
           <p>Workspace</p>
-          <button className={section === "catalog" ? styles["active"] : ""} onClick={() => onNavigate("catalog")}><Icon name="catalog" />Catalog</button>
-          <button className={section === "tables" ? styles["active"] : ""} onClick={() => onNavigate("tables")}><Icon name="tables" />Tables</button>
-          <button className={section === "users" ? styles["active"] : ""} onClick={() => onNavigate("users")}><Icon name="users" />Users</button>
-          <button className={section === "orders" ? styles["active"] : ""} onClick={() => onNavigate("orders")}><Icon name="orders" />Order history</button>
+          {sections.map((item) => (
+            <button key={item} className={section === item ? styles["active"] : ""} onClick={() => onNavigate(item)}><Icon name={sectionIcons[item]} />{sectionLabels[item]}</button>
+          ))}
         </nav>
         <div className={styles["sidebar-footer"]}>
-          <div className={styles["admin-profile"]}><span>MJ</span><div><strong>Maya Johnson</strong><small>Manager</small></div><Icon name="chevron" size={15} /></div>
-          <button><Icon name="logout" />Sign out</button>
+          <div className={styles["admin-profile"]}><span>{userInitials}</span><div><strong>{userName}</strong><small>{userRole}</small></div><Icon name="chevron" size={15} /></div>
+          <button onClick={onSignOut}><Icon name="logout" />Sign out</button>
         </div>
       </aside>
       <main>
