@@ -1,15 +1,18 @@
 import { useState } from "react"
-import { starterItems, starterTables, starterUsers } from "../data/fixtures"
-import type { CafeTable, Confirmation, MenuItem, User } from "../types"
+import { starterTables, starterUsers } from "../data/fixtures"
+import type { CafeTable, Confirmation, User } from "../types"
 
 type UseAdminWorkspaceOptions = {
   notify: (message: string) => void;
   confirm: (confirmation: Confirmation) => void;
 }
 
+/**
+ * Transitional in-memory state for the sections that are not Supabase-backed
+ * yet (tables until M4, users until M7). Catalog uses `useMenu`; this hook no
+ * longer owns menu data.
+ */
 export function useAdminWorkspace({ notify, confirm }: UseAdminWorkspaceOptions) {
-  const [items, setItems] = useState(starterItems);
-  const [catalogSections, setCatalogSections] = useState(["Hot Beverages", "Breakfast", "Lunch"]);
   const [tables, setTables] = useState<CafeTable[]>(() => {
     if (starterTables.some((table) => table.location === "Pick-up")) {
       return starterTables
@@ -21,11 +24,6 @@ export function useAdminWorkspace({ notify, confirm }: UseAdminWorkspaceOptions)
     return [...starterTables, pickUpTable]
   });
   const [users, setUsers] = useState(starterUsers)
-
-  const saveItem = (item: MenuItem) => {
-    setItems((current) => current.some((entry) => entry.id === item.id) ? current.map((entry) => entry.id === item.id ? item : entry) : [item, ...current])
-    notify(`Menu item ${item.name} saved`)
-  }
 
   const saveUser = (user: User) => {
     setUsers((current) => current.some((entry) => entry.id === user.id) ? current.map((entry) => entry.id === user.id ? user : entry) : [user, ...current])
@@ -39,34 +37,6 @@ export function useAdminWorkspace({ notify, confirm }: UseAdminWorkspaceOptions)
     setTables((current) => current.some((entry) => entry.id === table.id) ? current.map((entry) => entry.id === table.id ? normalizedTable : entry) : [...current, normalizedTable])
     notify(`Table ${table.number} saved`)
   }
-
-  const deleteItem = (id: number) => {
-    const item = items.find((entry) => entry.id === id)
-    confirm({
-      title: `Delete ${item?.name ?? "menu item"}?`,
-      description: "This item will be permanently removed from the catalog.",
-      actionLabel: "Delete item",
-      onConfirm: () => {
-        setItems((current) => current.filter((entry) => entry.id !== id))
-        notify("Menu item deleted")
-      },
-    })
-  }
-
-  const bulkAvailabilityItems = (ids: number[], available: boolean) => {
-    setItems((current) => current.map((item) => ids.includes(item.id) ? { ...item, available } : item))
-    notify(`${ids.length} menu items updated`)
-  }
-
-  const bulkDeleteItems = (ids: number[]) => confirm({
-    title: `Delete ${ids.length} menu items?`,
-    description: "The selected items will be permanently removed from the catalog.",
-    actionLabel: "Delete items",
-    onConfirm: () => {
-      setItems((current) => current.filter((item) => !ids.includes(item.id)))
-      notify(`${ids.length} menu items deleted`)
-    },
-  })
 
   const deleteTable = (id: number) => {
     const table = tables.find((entry) => entry.id === id)
@@ -138,27 +108,11 @@ export function useAdminWorkspace({ notify, confirm }: UseAdminWorkspaceOptions)
     },
   })
 
-  const saveCatalogSections = (nextSections: string[], renamed: Record<string, string>, deleted: string[]) => {
-    setCatalogSections(nextSections)
-    setItems((current) => current.map((item) => {
-      if (renamed[item.category]) return { ...item, category: renamed[item.category] }
-      if (deleted.includes(item.category)) return { ...item, category: nextSections[0] }
-      return item
-    }))
-    notify("Catalog sections saved")
-  }
-
   return {
-    items,
-    catalogSections,
     tables,
     users,
-    saveItem,
     saveUser,
     saveTable,
-    deleteItem,
-    bulkAvailabilityItems,
-    bulkDeleteItems,
     deleteTable,
     toggleTableAvailability,
     bulkAvailabilityTables,
@@ -166,6 +120,5 @@ export function useAdminWorkspace({ notify, confirm }: UseAdminWorkspaceOptions)
     deleteUser,
     bulkStatusUsers,
     bulkDeleteUsers,
-    saveCatalogSections,
   }
 }

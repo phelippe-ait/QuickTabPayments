@@ -261,7 +261,11 @@ main { min-width: 0; background: var(--color-cream-3); }
 .switch-row input { width: 36px; height: 19px; accent-color: var(--color-berry); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--color-line-soft); }
 .section-editor > p { margin: 0 0 8px; color: var(--color-muted); font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
-.section-editor > label { display: grid; grid-template-columns: 32px 1fr 40px; align-items: center; overflow: hidden; margin-bottom: 8px; border: 1px solid var(--color-line); border-radius: 8px; background: #fff; }
+.section-editor > label { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; overflow: hidden; margin-bottom: 8px; border: 1px solid var(--color-line); border-radius: 8px; background: #fff; }
+.section-actions { display: flex; align-self: stretch; }
+.section-actions button { display: grid; place-items: center; width: 34px; height: 100%; min-height: 42px; padding: 0; border: 0; border-left: 1px solid var(--color-line-soft); color: var(--color-berry); background: #fff; font-size: 13px; transition: .18s ease; }
+.section-actions button:hover:not(:disabled) { background: var(--color-berry-soft); }
+.section-actions button:disabled { color: #c8c3c7; cursor: not-allowed; }
 .section-editor > label > span { display: grid; place-items: center; height: 42px; color: var(--color-placeholder); border-right: 1px solid var(--color-line-soft); background: var(--color-cream-2); font-size: 9px; font-weight: 700; }
 .section-editor > label > button { display: grid; place-items: center; width: 40px; height: 42px; border: 0; border-left: 1px solid var(--color-line-soft); color: var(--color-berry); background: #fff; transition: .18s ease; }
 .section-editor > label > button:hover:not(:disabled) { background: var(--color-berry-soft); }

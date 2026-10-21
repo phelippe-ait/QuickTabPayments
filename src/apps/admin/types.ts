@@ -1,5 +1,27 @@
 export type Section = "catalog" | "tables" | "users" | "orders" | "settings";
 
+export type MenuItemVM = {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  description: string;
+  price: number;
+  imageUrl: string | null;
+  isAvailable: boolean;
+  displayOrder: number;
+};
+
+export type CategoryVM = {
+  id: string;
+  name: string;
+  displayOrder: number;
+};
+
+/**
+ * Legacy fixture shape. Catalog no longer uses it; it remains until
+ * `data/fixtures.ts` is deleted in M8.
+ */
 export type MenuItem = {
   id: number;
   name: string;

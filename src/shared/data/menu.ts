@@ -149,6 +149,54 @@ export async function setMenuItemsAvailability(
   if (error) throw new Error(error.message);
 }
 
+/** Bulk patch used for moving items between categories (and similar actions). */
+export async function updateMenuItems(
+  ids: string[],
+  patch: TablesUpdate<"menu_items">,
+): Promise<void> {
+  if (!ids.length) return;
+  const client = requireSupabase();
+  const { error } = await client
+    .from("menu_items")
+    .update(patch)
+    .in("id", ids);
+
+  if (error) throw new Error(error.message);
+}
+
+/** Persist a drag-free explicit order (one update per row). */
+export async function reorderMenuItems(
+  orders: { id: string; display_order: number }[],
+): Promise<void> {
+  if (!orders.length) return;
+  await Promise.all(
+    orders.map(async ({ id, display_order }) => {
+      const client = requireSupabase();
+      const { error } = await client
+        .from("menu_items")
+        .update({ display_order })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    }),
+  );
+}
+
+export async function updateCategories(
+  orders: { id: string; display_order: number }[],
+): Promise<void> {
+  if (!orders.length) return;
+  await Promise.all(
+    orders.map(async ({ id, display_order }) => {
+      const client = requireSupabase();
+      const { error } = await client
+        .from("menu_categories")
+        .update({ display_order })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    }),
+  );
+}
+
 export const menuKeys = {
   all: (restaurantId: string) => ["menu", restaurantId] as const,
   categories: (restaurantId: string) =>
