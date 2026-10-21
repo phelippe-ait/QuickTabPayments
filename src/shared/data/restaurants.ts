@@ -104,6 +104,36 @@ export type CreateRestaurantInput = {
   ownerId: string;
 };
 
+export type NewRestaurantInput = {
+  name: string;
+  slug: string;
+};
+
+/**
+ * Atomic onboarding: inserts the restaurant and its owner membership inside
+ * one security-definer function (`create_restaurant_with_owner`, 0007).
+ */
+export async function createRestaurant({
+  name,
+  slug,
+}: NewRestaurantInput): Promise<Restaurant> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("create_restaurant_with_owner", {
+    p_name: name.trim(),
+    p_slug: slug.trim(),
+  });
+
+  if (error) {
+    throw new Error(
+      error.code === "23505"
+        ? "That web address is already taken. Try a different one."
+        : error.message,
+    );
+  }
+
+  return data;
+}
+
 /**
  * Creates the restaurant and its owner membership. Two writes are needed
  * because `restaurants.owner_id` and `restaurant_staff` are separate tables;

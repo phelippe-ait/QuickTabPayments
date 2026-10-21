@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@shared/auth/AuthContext";
 import { useRestaurant } from "@shared/restaurant/RestaurantProvider";
-import { createRestaurantWithOwner } from "@shared/data/restaurants";
+import { createRestaurant } from "@shared/data/restaurants";
 import {
   isSupabaseConfigured,
   SUPABASE_NOT_CONFIGURED_MESSAGE,
@@ -154,13 +154,8 @@ function NoAccess() {
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
 
-  const createRestaurant = useMutation({
-    mutationFn: () =>
-      createRestaurantWithOwner({
-        name,
-        slug,
-        ownerId: user!.id,
-      }),
+  const createRestaurantMutation = useMutation({
+    mutationFn: () => createRestaurant({ name, slug }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["restaurants"] });
       refetch();
@@ -175,7 +170,7 @@ function NoAccess() {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !slug) return;
-    createRestaurant.mutate();
+    createRestaurantMutation.mutate();
   };
 
   return (
@@ -224,17 +219,17 @@ function NoAccess() {
               />
             </span>
           </label>
-          {createRestaurant.error && (
+          {createRestaurantMutation.error && (
             <p className="text-[12px] text-danger" role="alert">
-              {createRestaurant.error.message}
+              {createRestaurantMutation.error.message}
             </p>
           )}
           <Button
             type="submit"
             fullWidth
-            disabled={createRestaurant.isPending}
+            disabled={createRestaurantMutation.isPending}
           >
-            {createRestaurant.isPending
+            {createRestaurantMutation.isPending
               ? "Creating restaurant…"
               : "Create restaurant"}
           </Button>
