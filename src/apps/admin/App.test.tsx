@@ -78,6 +78,9 @@ describe("Admin app access gate", () => {
         { timeout: 5_000 },
       ),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toHaveClass(
+      "bg-berry-deep",
+    );
   });
 
   it("blocks signed-in users without a restaurant membership", async () => {

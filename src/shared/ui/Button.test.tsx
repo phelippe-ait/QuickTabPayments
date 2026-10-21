@@ -33,9 +33,9 @@ describe("Button", () => {
   });
 
   it("uses the higher-contrast berry background for filled variants", () => {
-    expect(buttonVariants({ variant: "primary" })).toContain("bg-berry-strong");
-    expect(buttonVariants({ variant: "danger" })).toContain("bg-berry-strong");
-    expect(buttonVariants({ variant: "primary" })).toContain("hover:bg-berry-deep");
+    expect(buttonVariants({ variant: "primary" })).toContain("bg-berry-deep");
+    expect(buttonVariants({ variant: "danger" })).toContain("bg-berry-deep");
+    expect(buttonVariants({ variant: "primary" })).toContain("hover:bg-berry-dark");
   });
 
   it("buttonVariants is shared with Button", () => {
