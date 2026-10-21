@@ -25,6 +25,13 @@ const mocks = vi.hoisted(() => ({
     error: null as Error | null,
     refetch: vi.fn(),
   },
+  invite: null as null | {
+    id: string;
+    email: string;
+    restaurant_name: string;
+    restaurant_slug: string;
+    expires_at: string;
+  },
 }));
 
 vi.mock("@shared/auth/AuthContext", () => ({
@@ -37,6 +44,14 @@ vi.mock("@shared/restaurant/RestaurantProvider", () => ({
   roleLabels: { owner: "Owner", manager: "Manager", kitchen: "Kitchen" },
   getProfileName: () => "Test Manager",
   getInitials: () => "TM",
+}));
+
+vi.mock("@shared/data/invites", () => ({
+  fetchMyRestaurantInvite: async () => mocks.invite,
+  claimRestaurantInvite: vi.fn(async () => ({ id: "restaurant-new" })),
+  inviteKeys: {
+    my: (userId: string) => ["restaurant-invites", "mine", userId],
+  },
 }));
 
 vi.mock("@shared/lib/supabase", () => ({
@@ -67,6 +82,7 @@ describe("Admin app access gate", () => {
     mocks.restaurant.role = null;
     mocks.restaurant.isLoading = false;
     mocks.restaurant.error = null;
+    mocks.invite = null;
     mocks.auth.signOut.mockClear();
   });
 
@@ -88,8 +104,27 @@ describe("Admin app access gate", () => {
     mocks.auth.user = { id: "user-1", email: "staff@example.com" };
     renderAdminApp();
     expect(
-      await screen.findByRole("heading", { name: /set up your restaurant/i }),
+      await screen.findByRole("heading", { name: /no restaurant linked/i }),
     ).toBeInTheDocument();
+  });
+
+  it("shows prefilled details for a pending invitation", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.invite = {
+      id: "invite-1",
+      email: "owner@example.com",
+      restaurant_name: "Harbour Café",
+      restaurant_slug: "harbour-cafe",
+      expires_at: "2026-12-01T00:00:00Z",
+    };
+
+    renderAdminApp();
+
+    expect(
+      await screen.findByRole("heading", { name: /you've been invited/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/restaurant name/i)).toHaveValue("Harbour Café");
+    expect(screen.getByLabelText(/web address/i)).toHaveValue("harbour-cafe");
   });
 
   it("redirects owners from /admin to the catalog", async () => {
