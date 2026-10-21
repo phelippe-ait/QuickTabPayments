@@ -180,6 +180,70 @@ export async function createRestaurantWithOwner({
   return restaurant;
 }
 
+export type StaffDirectoryEntry = {
+  staff_id: string;
+  user_id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  role: StaffRole;
+  is_active: boolean;
+  created_at: string;
+};
+
+/** Reads names/emails through the security-definer directory RPC. */
+export async function fetchStaffDirectory(
+  restaurantId: string,
+): Promise<StaffDirectoryEntry[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("list_staff_directory", {
+    p_restaurant_id: restaurantId,
+  });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/** Adds an existing QuickTab account to the restaurant; returns the membership id. */
+export async function addStaffByEmail(
+  restaurantId: string,
+  email: string,
+  role: StaffRole,
+): Promise<string> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("add_staff_by_email", {
+    p_restaurant_id: restaurantId,
+    p_email: email.trim(),
+    p_role: role,
+  });
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateStaffMembership(
+  staffId: string,
+  patch: TablesUpdate<"restaurant_staff">,
+): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("restaurant_staff")
+    .update(patch)
+    .eq("id", staffId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function removeStaffMembership(staffId: string): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from("restaurant_staff")
+    .delete()
+    .eq("id", staffId);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchStaff(
   restaurantId: string,
 ): Promise<StaffMember[]> {

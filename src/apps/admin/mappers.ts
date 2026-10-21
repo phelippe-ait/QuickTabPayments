@@ -4,7 +4,8 @@ import type {
   MenuItem as DbMenuItem,
 } from "@shared/lib/database.types"
 import type { OpenTableOrder, OrderWithDetails } from "@shared/data/orders"
-import type { CategoryVM, MenuItemVM, OrderVM, TableVM } from "./types"
+import type { StaffDirectoryEntry } from "@shared/data/restaurants"
+import type { CategoryVM, MenuItemVM, OrderVM, StaffVM, TableVM } from "./types"
 
 /**
  * Database rows → admin view models. Keep this free of React so the mapping
@@ -99,6 +100,31 @@ export function toOrderVM(
     refundedTotal: (row.refunds ?? [])
       .filter((refund) => refund.status === "succeeded")
       .reduce((total, refund) => total + refund.amount, 0),
+  }
+}
+
+export function toStaffVM(entry: StaffDirectoryEntry): StaffVM {
+  const fullName = [entry.first_name, entry.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+  const name =
+    fullName || entry.email?.split("@")[0] || "Team member"
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+
+  return {
+    staffId: entry.staff_id,
+    userId: entry.user_id,
+    name,
+    email: entry.email ?? "",
+    initials: initials || "TM",
+    role: entry.role,
+    isActive: entry.is_active,
   }
 }
 

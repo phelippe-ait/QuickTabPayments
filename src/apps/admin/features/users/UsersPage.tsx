@@ -1,47 +1,90 @@
 import { useEffect, useState } from "react";
 import styles from "../../App.module.css";
 import { Icon } from "@shared/ui/Icon";
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider";
+import { useAuth } from "@shared/auth/AuthContext";
+import { roleLabels, useRestaurant } from "@shared/restaurant/RestaurantProvider";
+import type { StaffRole } from "@shared/lib/database.types";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
-import { useAdminWorkspace } from "../../hooks/useAdminWorkspace";
-import type { User } from "../../types";
+import { useStaff } from "../../hooks/useStaff";
+import type { StaffVM } from "../../types";
 import { UserModal } from "./UserDialog";
+import { staffPermissions } from "./staff.utils";
+
+const roleFilters: Array<StaffRole | "all"> = ["all", "owner", "manager", "kitchen"];
 
 export function UsersPage() {
   const { notify, confirm } = useAdminUi();
-  const { restaurant } = useRestaurant();
-  const workspace = useAdminWorkspace({ notify, confirm });
-  const users = workspace.users;
+  const { restaurant, role } = useRestaurant();
+  const { user } = useAuth();
+  const staffQuery = useStaff(restaurant?.id ?? "", {
+    onSuccess: notify,
+    onError: notify,
+  });
+  const viewerRole: StaffRole = role ?? "kitchen";
+  const viewerUserId = user?.id ?? "";
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
-  const [role, setRole] = useState("All roles");
-  const [selected, setSelected] = useState<number[]>([]);
-  const [userModal, setUserModal] = useState<{ open: boolean; user: User | null }>({
-    open: false,
-    user: null,
+  const [roleFilter, setRoleFilter] = useState<StaffRole | "all">("all");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [modal, setModal] = useState<
+    { kind: "add" } | { kind: "edit"; member: StaffVM } | null
+  >(null);
+
+  const visible = staffQuery.staff.filter((member) => {
+    const matchesQuery = `${member.name} ${member.email}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    const matchesStatus =
+      status === "All" || (status === "Active" ? member.isActive : !member.isActive);
+    const matchesRole = roleFilter === "all" || member.role === roleFilter;
+    return matchesQuery && matchesStatus && matchesRole;
   });
-  const roles = [...new Set(users.map((user) => user.role))].sort();
-  const visible = users.filter(
-    (user) =>
-      `${user.name} ${user.email}`
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (status === "All" || user.status === status) &&
-      (role === "All roles" || user.role === role),
-  );
+
   useEffect(
-    () =>
-      setSelected((current) =>
-        current.filter((id) => users.some((user) => user.id === id)),
-      ),
-    [users],
+    () => setSelected((current) => current.filter((id) => staffQuery.staff.some((member) => member.staffId === id))),
+    [staffQuery.staff],
   );
 
-  const closeUserModal = () => setUserModal({ open: false, user: null });
-  const saveUser = (user: User) => {
-    workspace.saveUser(user);
-    closeUserModal();
+  const selectable = visible.filter(
+    (member) =>
+      staffPermissions({ viewerRole, viewerUserId, member }).canToggleActive,
+  );
+  const selectedMembers = staffQuery.staff.filter((member) =>
+    selected.includes(member.staffId),
+  );
+
+  const bulkSetActive = (isActive: boolean) => {
+    const targets = selectedMembers.filter(
+      (member) =>
+        staffPermissions({ viewerRole, viewerUserId, member }).canToggleActive,
+    );
+    if (!targets.length) return;
+    void staffQuery
+      .bulkSetActive(
+        targets.map((member) => member.staffId),
+        isActive,
+      )
+      .then((ok) => {
+        if (ok) setSelected([]);
+      });
+  };
+
+  const requestRemove = (member: StaffVM) => {
+    confirm({
+      title: `Remove ${member.name}?`,
+      description:
+        "They will lose access to this restaurant's admin workspace. Their QuickTab account and order history are kept.",
+      actionLabel: "Remove member",
+      onConfirm: () => {
+        void staffQuery.remove(member.staffId).then((ok) => {
+          if (ok) {
+            setSelected((current) => current.filter((id) => id !== member.staffId));
+          }
+        });
+      },
+    });
   };
 
   return (
@@ -49,162 +92,151 @@ export function UsersPage() {
       <PageHeader
         eyebrow="Team access"
         title="Users"
-        description={`Create user accounts and manage access to ${restaurant?.name ?? "your restaurant"}.`}
-        action="Add user"
-        onAction={() => setUserModal({ open: true, user: null })}
+        description={`Manage roles and access for ${restaurant?.name ?? "your restaurant"}.`}
+        action="Add team member"
+        onAction={() => setModal({ kind: "add" })}
       />
-      <div className={`${styles["toolbar"]} user-toolbar`}>
-        <label className={`${styles["search-box"]}`}>
-          <Icon name="search" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search users"
-          />
-        </label>
-        <div className={`${styles["user-filters"]}`}>
-          <label className={`${styles["filter-select"]}`}>
-            <span>Status</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <option>All</option>
-              <option>Active</option>
-              <option>Inactive</option>
-            </select>
-          </label>
-          <label className={`${styles["filter-select"]}`}>
-            <span>Role</span>
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-            >
-              <option>All roles</option>
-              {roles.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
-      {selected.length > 0 && (
-        <SelectionBar count={selected.length} onClear={() => setSelected([])}>
-          <button
-            type="button"
-            onClick={() => workspace.bulkStatusUsers(selected, "Active")}
-          >
-            Activate
-          </button>
-          <button
-            type="button"
-            onClick={() => workspace.bulkStatusUsers(selected, "Inactive")}
-          >
-            Deactivate
-          </button>
-          <button
-            type="button"
-            className={`${styles["danger"]}`}
-            onClick={() => workspace.bulkDeleteUsers(selected)}
-          >
-            Delete
-          </button>
-        </SelectionBar>
-      )}
-      {visible.length === 0 ? (
-        <EmptyState
-          title="No users found"
-          description="Try changing the name, status, or role filters."
-        />
-      ) : (
-        <div
-          className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}
-        >
-          <div className={`${styles["table-heading"]}`}>
-            <label
-              className={`${styles["inline-select"]}`}
-              aria-label="Select all visible users"
-            >
-              <input
-                type="checkbox"
-                checked={visible.every((user) => selected.includes(user.id))}
-                onChange={() =>
-                  setSelected(
-                    visible.every((user) => selected.includes(user.id))
-                      ? selected.filter(
-                          (id) => !visible.some((user) => user.id === id),
-                        )
-                      : [
-                          ...new Set([
-                            ...selected,
-                            ...visible.map((user) => user.id),
-                          ]),
-                        ],
-                  )
-                }
-              />
-            </label>
-            <span>User</span>
-            <span>Role</span>
-            <span>Status</span>
-            <span>Actions</span>
+
+      {staffQuery.error ? (
+        <>
+          <EmptyState title="We couldn't load the team" description={staffQuery.error.message} />
+          <div className="flex justify-center">
+            <button type="button" className="rounded-[9px] border border-line bg-white px-[17px] py-3 text-[13px] font-bold text-ink-mid" onClick={staffQuery.refetch}>
+              Try again
+            </button>
           </div>
-          {visible.map((user) => (
-            <div className={`${styles["table-row"]}`} key={user.id}>
-              <label
-                className={`${styles["inline-select"]}`}
-                aria-label={`Select ${user.name}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(user.id)}
-                  onChange={() =>
-                    setSelected((current) =>
-                      current.includes(user.id)
-                        ? current.filter((id) => id !== user.id)
-                        : [...current, user.id],
-                    )
-                  }
-                />
+        </>
+      ) : staffQuery.isLoading ? (
+        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading the team…</div>
+      ) : (
+        <>
+          <div className={`${styles["toolbar"]} user-toolbar`}>
+            <label className={`${styles["search-box"]}`}>
+              <Icon name="search" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or email" />
+            </label>
+            <div className={`${styles["user-filters"]}`}>
+              <label className={`${styles["filter-select"]}`}>
+                <span>Status</span>
+                <select value={status} onChange={(event) => setStatus(event.target.value)}>
+                  <option>All</option>
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
               </label>
-              <div className={`${styles["person"]}`}>
-                <span className={`${styles["avatar"]}`}>{user.initials}</span>
-                <div>
-                  <strong>{user.name}</strong>
-                  <small>{user.email}</small>
-                </div>
-              </div>
-              <span className={`${styles["role"]}`}>{user.role}</span>
-              <span>
-                <i
-                  className={`${styles["status-dot"]} ${styles[user.status.toLowerCase()]}`}
-                />
-                {user.status}
-              </span>
-              <div className={`${styles["row-actions"]}`}>
-                <button
-                  aria-label={`Edit ${user.name}`}
-                  onClick={() => setUserModal({ open: true, user })}
-                >
-                  <Icon name="edit" size={17} />
-                </button>
-                <button
-                  aria-label={`Delete ${user.name}`}
-                  onClick={() => workspace.deleteUser(user.id)}
-                >
-                  <Icon name="trash" size={17} />
-                </button>
-              </div>
+              <label className={`${styles["filter-select"]}`}>
+                <span>Role</span>
+                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as StaffRole | "all")}>
+                  {roleFilters.map((filter) => (
+                    <option key={filter} value={filter}>
+                      {filter === "all" ? "All roles" : roleLabels[filter]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          ))}
-        </div>
+          </div>
+
+          {selected.length > 0 && (
+            <SelectionBar count={selected.length} onClear={() => setSelected([])}>
+              <button type="button" onClick={() => bulkSetActive(true)}>Activate</button>
+              <button type="button" onClick={() => bulkSetActive(false)}>Deactivate</button>
+            </SelectionBar>
+          )}
+
+          {visible.length === 0 ? (
+            <EmptyState title="No users found" description="Try changing the name, status, or role filters." />
+          ) : (
+            <div className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}>
+              <div className={`${styles["table-heading"]}`}>
+                <label className={`${styles["inline-select"]}`} aria-label="Select all visible users">
+                  <input
+                    type="checkbox"
+                    checked={selectable.length > 0 && selectable.every((member) => selected.includes(member.staffId))}
+                    onChange={() =>
+                      setSelected((current) =>
+                        selectable.every((member) => current.includes(member.staffId))
+                          ? current.filter((id) => !selectable.some((member) => member.staffId === id))
+                          : [...new Set([...current, ...selectable.map((member) => member.staffId)])],
+                      )
+                    }
+                  />
+                </label>
+                <span>User</span>
+                <span>Role</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {visible.map((member) => {
+                const permissions = staffPermissions({ viewerRole, viewerUserId, member })
+                return (
+                  <div className={`${styles["table-row"]}`} key={member.staffId}>
+                    <label className={`${styles["inline-select"]}`} aria-label={`Select ${member.name}`}>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(member.staffId)}
+                        disabled={!permissions.canToggleActive}
+                        onChange={() =>
+                          setSelected((current) =>
+                            current.includes(member.staffId)
+                              ? current.filter((id) => id !== member.staffId)
+                              : [...current, member.staffId],
+                          )
+                        }
+                      />
+                    </label>
+                    <div className={`${styles["person"]}`}>
+                      <span className={`${styles["avatar"]}`}>{member.initials}</span>
+                      <div>
+                        <strong>
+                          {member.name}
+                          {member.userId === viewerUserId && (
+                            <span className="ml-2 rounded-pill bg-berry-soft px-2 py-0.5 text-[9px] font-bold text-berry-strong">You</span>
+                          )}
+                        </strong>
+                        <small>{member.email || "No email on profile"}</small>
+                      </div>
+                    </div>
+                    <span className={`${styles["role"]}`}>{roleLabels[member.role]}</span>
+                    <span>
+                      <i className={`${styles["status-dot"]} ${member.isActive ? "" : styles["inactive"]}`} />
+                      {member.isActive ? "Active" : "Inactive"}
+                    </span>
+                    <div className={`${styles["row-actions"]}`}>
+                      <button
+                        aria-label={`Edit ${member.name}`}
+                        disabled={!permissions.canChangeRole}
+                        title={permissions.lockedReason ?? `Edit ${member.name}`}
+                        onClick={() => setModal({ kind: "edit", member })}
+                      >
+                        <Icon name="edit" size={17} />
+                      </button>
+                      <button
+                        aria-label={`Remove ${member.name}`}
+                        disabled={!permissions.canRemove}
+                        title={permissions.lockedReason ?? `Remove ${member.name}`}
+                        onClick={() => requestRemove(member)}
+                      >
+                        <Icon name="trash" size={17} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
-      {userModal.open && (
+      {modal && (
         <UserModal
-          user={userModal.user}
-          onClose={closeUserModal}
-          onSave={saveUser}
+          mode={modal.kind === "edit" ? { kind: "edit", member: modal.member } : { kind: "add" }}
+          viewerRole={viewerRole}
+          viewerUserId={viewerUserId}
+          onClose={() => setModal(null)}
+          onSaveRole={staffQuery.setRole}
+          onSetActive={staffQuery.setActive}
+          onAdd={staffQuery.addByEmail}
         />
       )}
     </>

@@ -1,6 +1,7 @@
 import type {
   OrderStatus,
   PaymentStatus,
+  StaffRole,
 } from "@shared/lib/database.types";
 
 export type Section = "catalog" | "tables" | "users" | "orders" | "settings";
@@ -68,6 +69,16 @@ export type CafeTable = {
   seats?: number;
   currentOrder?: string;
   seatedAt?: string;
+};
+
+export type StaffVM = {
+  staffId: string;
+  userId: string;
+  name: string;
+  email: string;
+  initials: string;
+  role: StaffRole;
+  isActive: boolean;
 };
 
 export type OrderLineVM = {

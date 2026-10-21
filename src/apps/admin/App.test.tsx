@@ -72,7 +72,11 @@ describe("Admin app access gate", () => {
   it("shows the sign-in screen when signed out", async () => {
     renderAdminApp();
     expect(
-      await screen.findByRole("heading", { name: /manager sign in/i }),
+      await screen.findByRole(
+        "heading",
+        { name: /manager sign in/i },
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
   });
 

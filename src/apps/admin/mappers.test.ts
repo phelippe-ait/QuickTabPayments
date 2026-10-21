@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { MenuCategory, MenuItem as DbMenuItem } from "@shared/lib/database.types"
 import type { OrderWithDetails } from "@shared/data/orders"
-import { toCategoryVM, toMenuItemVM, toOrderVM } from "./mappers"
+import { toCategoryVM, toMenuItemVM, toOrderVM, toStaffVM } from "./mappers"
 
 const category: MenuCategory = {
   id: "cat-1",
@@ -116,6 +116,45 @@ const orderRow: OrderWithDetails = {
     },
   ],
 }
+
+describe("toStaffVM", () => {
+  const entry = {
+    staff_id: "staff-1",
+    user_id: "user-1",
+    email: "maya@example.com",
+    first_name: "Maya",
+    last_name: "Johnson",
+    role: "manager" as const,
+    is_active: true,
+    created_at: "2026-01-01T00:00:00Z",
+  }
+
+  it("uses profile names and initials", () => {
+    expect(toStaffVM(entry)).toEqual({
+      staffId: "staff-1",
+      userId: "user-1",
+      name: "Maya Johnson",
+      email: "maya@example.com",
+      initials: "MJ",
+      role: "manager",
+      isActive: true,
+    })
+  })
+
+  it("falls back to the email prefix and then Team member", () => {
+    expect(
+      toStaffVM({ ...entry, first_name: null, last_name: null }).name,
+    ).toBe("maya")
+    expect(
+      toStaffVM({
+        ...entry,
+        first_name: null,
+        last_name: null,
+        email: null,
+      }).name,
+    ).toBe("Team member")
+  })
+})
 
 describe("toOrderVM", () => {
   it("maps snapshots, payments, and ISO timestamps", () => {
