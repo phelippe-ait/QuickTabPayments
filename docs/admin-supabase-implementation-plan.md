@@ -511,7 +511,7 @@ Ground rules for every milestone:
   - **Add:** email + role; helper text "They must sign up to QuickTab first"; friendly error when no account matches (from RPC `P0002`). No password fields, no auth-account creation from the client (impossible with the anon key — this is the honest MVP invite; Edge Function invite listed in §10/appendix).
   - No `Date.now()` id (fixes #19). Built on `AdminModal`.
 
-**UI / role gating.** Route: owner+manager. Within it: role changes/deactivation → owner+manager; owner-row management and membership removal → owner-only.
+**UI / role gating.** Route: owner+manager. Within it: kitchen rows → owner or manager; peer manager rows → owner only; owner rows → owner only. The last active owner cannot be deactivated or demoted, nobody can change their own role/status, and `add_staff_by_email` rejects the caller's own email (amended by 0013).
 
 **Cross-app impact.** `restaurant_staff.role` is the only authorization source. **Amended by 0012:** the unused global `profiles.role` + `roles` lookup were removed, so there is no account-level role to promote. Staff app will consume `fetchStaffDirectory` when wired (appendix).
 

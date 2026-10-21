@@ -97,8 +97,9 @@ rolled back.
 6. **(7:00–8:30) Users.** Real directory names/emails from the RPC. Demote a
    manager to kitchen in a second browser; their admin narrows on refresh.
    Add-by-email: show the unknown-email error, then a success. Owner rows and
-   your own row are locked. Managers may remove non-owner memberships; owner
-   rows remain owner-only.
+   your own row are locked. Managers may manage kitchen rows but not peer
+   managers; owner rows are owner-only. The last active owner cannot be
+   deactivated or demoted, and adding your own email is rejected.
 7. **(8:30–9:30) Settings.** Change description + tax rate, replace the logo.
    Refresh. Mention managers can edit profile fields but not the slug.
 8. **(9:30–10:00) Close.** Grep gate on fixtures, `npm test` output, roadmap:
