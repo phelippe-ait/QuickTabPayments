@@ -184,6 +184,18 @@
 }
 .checkout-dock button:disabled { opacity: .4; cursor: not-allowed; }
 .empty-cart { text-align: center; margin-top: 120px; }
+.orders-message { margin: 40px 0; color: var(--color-muted); font-size: 13px; text-align: center; }
+.order-history-list { padding: 18px 0; }
+.history-order-card { padding: 14px 15px; }
+.history-order-heading { display: flex; align-items: center; gap: 12px; }
+.history-order-heading .item-name { flex: 1; min-width: 0; }
+.order-status-pill { flex: 0 0 auto; border: 1px solid var(--color-line); border-radius: 20px; padding: 5px 9px; color: var(--berry); font-size: 9px; font-weight: 700; text-transform: capitalize; }
+.history-order-items { display: flex; flex-direction: column; gap: 8px; margin: 15px 0 0; padding: 12px 0; border-top: 1px solid var(--color-line-soft); border-bottom: 1px solid var(--color-line-soft); list-style: none; }
+.history-order-items li, .history-order-total { display: flex; justify-content: space-between; gap: 12px; }
+.history-order-items li { color: var(--color-muted-2); }
+.history-order-items li span:first-child { min-width: 0; }
+.history-order-total { margin-top: 12px !important; color: var(--color-muted-2); font-weight: 700; }
+.history-order-total strong { color: var(--berry); }
 .large-cart { width: 70px; height: 70px; border-radius: 50%; display: grid; place-items: center; margin: auto; background: var(--color-danger-soft); color: var(--berry); }
 .empty-cart h2 { color: var(--color-muted-2); font-size: 17px; margin: 18px 0 7px; }
 .empty-cart p { font-size: 12px; margin: 0 0 22px; }
