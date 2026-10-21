@@ -2,27 +2,23 @@ import { useEffect, useState } from "react";
 import styles from "../../App.module.css";
 import { Icon } from "@shared/ui/Icon";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
+import { useAdminUi } from "../../hooks/AdminUiProvider";
+import { useAdminWorkspace } from "../../hooks/useAdminWorkspace";
 import type { User } from "../../types";
+import { UserModal } from "./UserDialog";
 
-export function UsersPage({
-  users,
-  onAdd,
-  onEdit,
-  onDelete,
-  onBulkStatus,
-  onBulkDelete,
-}: {
-  users: User[];
-  onAdd: () => void;
-  onEdit: (user: User) => void;
-  onDelete: (id: number) => void;
-  onBulkStatus: (ids: number[], status: User["status"]) => void;
-  onBulkDelete: (ids: number[]) => void;
-}) {
+export function UsersPage() {
+  const { notify, confirm } = useAdminUi();
+  const workspace = useAdminWorkspace({ notify, confirm });
+  const users = workspace.users;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const [role, setRole] = useState("All roles");
   const [selected, setSelected] = useState<number[]>([]);
+  const [userModal, setUserModal] = useState<{ open: boolean; user: User | null }>({
+    open: false,
+    user: null,
+  });
   const roles = [...new Set(users.map((user) => user.role))].sort();
   const visible = users.filter(
     (user) =>
@@ -39,6 +35,13 @@ export function UsersPage({
       ),
     [users],
   );
+
+  const closeUserModal = () => setUserModal({ open: false, user: null });
+  const saveUser = (user: User) => {
+    workspace.saveUser(user);
+    closeUserModal();
+  };
+
   return (
     <>
       <PageHeader
@@ -46,7 +49,7 @@ export function UsersPage({
         title="Users"
         description="Create user accounts and manage access to Café Shop."
         action="Add user"
-        onAction={onAdd}
+        onAction={() => setUserModal({ open: true, user: null })}
       />
       <div className={`${styles["toolbar"]} user-toolbar`}>
         <label className={`${styles["search-box"]}`}>
@@ -87,20 +90,20 @@ export function UsersPage({
         <SelectionBar count={selected.length} onClear={() => setSelected([])}>
           <button
             type="button"
-            onClick={() => onBulkStatus(selected, "Active")}
+            onClick={() => workspace.bulkStatusUsers(selected, "Active")}
           >
             Activate
           </button>
           <button
             type="button"
-            onClick={() => onBulkStatus(selected, "Inactive")}
+            onClick={() => workspace.bulkStatusUsers(selected, "Inactive")}
           >
             Deactivate
           </button>
           <button
             type="button"
             className={`${styles["danger"]}`}
-            onClick={() => onBulkDelete(selected)}
+            onClick={() => workspace.bulkDeleteUsers(selected)}
           >
             Delete
           </button>
@@ -179,13 +182,13 @@ export function UsersPage({
               <div className={`${styles["row-actions"]}`}>
                 <button
                   aria-label={`Edit ${user.name}`}
-                  onClick={() => onEdit(user)}
+                  onClick={() => setUserModal({ open: true, user })}
                 >
                   <Icon name="edit" size={17} />
                 </button>
                 <button
                   aria-label={`Delete ${user.name}`}
-                  onClick={() => onDelete(user.id)}
+                  onClick={() => workspace.deleteUser(user.id)}
                 >
                   <Icon name="trash" size={17} />
                 </button>
@@ -193,6 +196,14 @@ export function UsersPage({
             </div>
           ))}
         </div>
+      )}
+
+      {userModal.open && (
+        <UserModal
+          user={userModal.user}
+          onClose={closeUserModal}
+          onSave={saveUser}
+        />
       )}
     </>
   );

@@ -2,16 +2,16 @@ import { type FormEvent, useState } from "react"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
+import { AdminModal } from "../../components/AdminModal"
 import type { MenuItem } from "../../types"
 
 export function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem | null; sections: string[]; onClose: () => void; onSave: (item: MenuItem) => void }) {
   const [form, setForm] = useState<MenuItem>(() => item ?? { id: Date.now(), name: "", category: sections[0] ?? "", description: "", price: 0, image: "/menu/matcha.jpg", available: true })
   const submit = (event: FormEvent) => { event.preventDefault(); onSave(form) }
   return (
-    <div className={`${styles["modal-backdrop"]}`} onMouseDown={onClose}>
-      <form className={`${styles["modal"]}`} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className={`${styles["modal-close"]}`} onClick={onClose} aria-label="Close"><Icon name="close" /></button>
-        <p className={`${styles["modal-kicker"]}`}>Catalog</p><h2>{item ? "Edit menu item" : "Add menu item"}</h2><p className={`${styles["modal-description"]}`}>Keep the details concise and helpful for your guests.</p>
+    <AdminModal labelledBy="item-modal-title" describedBy="item-modal-description" onClose={onClose}>
+      <form onSubmit={submit}>
+        <p className={`${styles["modal-kicker"]}`}>Catalog</p><h2 id="item-modal-title">{item ? "Edit menu item" : "Add menu item"}</h2><p className={`${styles["modal-description"]}`} id="item-modal-description">Keep the details concise and helpful for your guests.</p>
         <div className={`${styles["form-grid"]}`}>
           <label className={`${styles["wide"]}`}>
             Item image
@@ -55,7 +55,7 @@ export function ItemModal({ item, sections, onClose, onSave }: { item: MenuItem 
         </div>
         <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{item ? "Save changes" : "Add item"}</button></div>
       </form>
-    </div>
+    </AdminModal>
   )
 }
 export function SectionsModal({
@@ -84,12 +84,11 @@ export function SectionsModal({
     onSave(validRows.map((row) => row.name.trim()), renamed, deleted)
   }
   return (
-    <div className={`${styles["modal-backdrop"]}`} onMouseDown={onClose}>
-      <form className={`${styles["modal"]} ${styles["small-modal"]}`} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className={`${styles["modal-close"]}`} onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+    <AdminModal labelledBy="sections-modal-title" describedBy="sections-modal-description" onClose={onClose} panelClassName={styles["small-modal"]}>
+      <form onSubmit={submit}>
         <p className={`${styles["modal-kicker"]}`}>Catalog structure</p>
-        <h2>Manage sections</h2>
-        <p className={`${styles["modal-description"]}`}>Create sections and rename existing ones. Changes are reflected across the catalog.</p>
+        <h2 id="sections-modal-title">Manage sections</h2>
+        <p className={`${styles["modal-description"]}`} id="sections-modal-description">Create sections and rename existing ones. Changes are reflected across the catalog.</p>
         <div className={`${styles["section-editor"]}`}>
           <p>Current sections</p>
           {rows.map((row, index) => (
@@ -125,6 +124,6 @@ export function SectionsModal({
         </div>
         <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">Save sections</button></div>
       </form>
-    </div>
+    </AdminModal>
   )
 }

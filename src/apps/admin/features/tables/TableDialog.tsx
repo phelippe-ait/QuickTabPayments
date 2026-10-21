@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 import styles from "../../App.module.css"
-import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
+import { AdminModal } from "../../components/AdminModal"
 import type { CafeTable } from "../../types"
 
 export function TableModal({ table, tables, onClose, onSave }: { table: CafeTable | null; tables: CafeTable[]; onClose: () => void; onSave: (table: CafeTable) => void }) {
@@ -22,12 +22,11 @@ export function TableModal({ table, tables, onClose, onSave }: { table: CafeTabl
     onSave({ ...form, number: normalizedNumber, seats: form.location === "Pick-up" ? undefined : form.seats })
   }
   return (
-    <div className={`${styles["modal-backdrop"]}`} onMouseDown={onClose}>
-      <form className={`${styles["modal"]} ${styles["small-modal"]}`} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className={`${styles["modal-close"]}`} onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+    <AdminModal labelledBy="table-modal-title" describedBy="table-modal-description" onClose={onClose} panelClassName={styles["small-modal"]}>
+      <form onSubmit={submit}>
         <p className={`${styles["modal-kicker"]}`}>Seating management</p>
-        <h2>{table ? `Edit table ${table.number}` : "Add a new table"}</h2>
-        <p className={`${styles["modal-description"]}`}>Set the table identifier, location, and current availability.</p>
+        <h2 id="table-modal-title">{table ? `Edit table ${table.number}` : "Add a new table"}</h2>
+        <p className={`${styles["modal-description"]}`} id="table-modal-description">Set the table identifier, location, and current availability.</p>
         <div className={`${styles["form-grid"]}`}>
           <label className={`${styles["wide"]}`}>
             Table number
@@ -83,6 +82,6 @@ export function TableModal({ table, tables, onClose, onSave }: { table: CafeTabl
         </div>
         <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{table ? "Save changes" : "Add table"}</button></div>
       </form>
-    </div>
+    </AdminModal>
   )
 }

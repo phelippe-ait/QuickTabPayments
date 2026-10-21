@@ -1,4 +1,4 @@
-export type Section = "catalog" | "tables" | "users" | "orders";
+export type Section = "catalog" | "tables" | "users" | "orders" | "settings";
 
 export type MenuItem = {
   id: number;

@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import AdminApp from "./AdminDashboard";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { adminRoutes } from "../../routes/AppRoutes";
 import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({
@@ -44,13 +45,14 @@ vi.mock("@shared/lib/supabase", () => ({
   supabase: {},
 }));
 
-function renderAdminApp() {
+function renderAdminApp(initialEntries: string[] = ["/admin"]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const router = createMemoryRouter(adminRoutes, { initialEntries });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AdminApp />
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
 }
@@ -67,22 +69,22 @@ describe("Admin app access gate", () => {
     mocks.restaurant.error = null;
   });
 
-  it("shows the sign-in screen when signed out", () => {
+  it("shows the sign-in screen when signed out", async () => {
     renderAdminApp();
     expect(
-      screen.getByRole("heading", { name: /manager sign in/i }),
+      await screen.findByRole("heading", { name: /manager sign in/i }),
     ).toBeInTheDocument();
   });
 
-  it("blocks signed-in users without a restaurant membership", () => {
+  it("blocks signed-in users without a restaurant membership", async () => {
     mocks.auth.user = { id: "user-1", email: "staff@example.com" };
     renderAdminApp();
     expect(
-      screen.getByRole("heading", { name: /set up your restaurant/i }),
+      await screen.findByRole("heading", { name: /set up your restaurant/i }),
     ).toBeInTheDocument();
   });
 
-  it("renders the workspace for an active staff member", () => {
+  it("redirects owners from /admin to the catalog", async () => {
     mocks.auth.user = { id: "user-1", email: "owner@example.com" };
     mocks.restaurant.membership = { id: "staff-1", role: "owner" };
     mocks.restaurant.restaurant = { name: "Test Café" };
@@ -90,13 +92,13 @@ describe("Admin app access gate", () => {
 
     renderAdminApp();
     expect(
-      screen.getByRole("heading", { name: /catalog/i }),
+      await screen.findByRole("heading", { name: /^catalog$/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("Test Café")).toBeInTheDocument();
     expect(screen.getByText("Test Manager")).toBeInTheDocument();
   });
 
-  it("limits kitchen staff to order history", () => {
+  it("redirects kitchen staff from /admin to order history", async () => {
     mocks.auth.user = { id: "user-2", email: "kitchen@example.com" };
     mocks.restaurant.membership = { id: "staff-2", role: "kitchen" };
     mocks.restaurant.restaurant = { name: "Test Café" };
@@ -104,13 +106,50 @@ describe("Admin app access gate", () => {
 
     renderAdminApp();
     expect(
-      screen.getByRole("heading", { name: /order history/i }),
+      await screen.findByRole("heading", { name: /order history/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /catalog/i }),
+      screen.queryByRole("link", { name: /catalog/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /users/i }),
+      screen.queryByRole("link", { name: /users/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("blocks a kitchen deep link to an owner/manager section", async () => {
+    mocks.auth.user = { id: "user-2", email: "kitchen@example.com" };
+    mocks.restaurant.membership = { id: "staff-2", role: "kitchen" };
+    mocks.restaurant.restaurant = { name: "Test Café" };
+    mocks.restaurant.role = "kitchen";
+
+    renderAdminApp(["/admin/users"]);
+    expect(
+      await screen.findByRole("heading", {
+        name: /not available for your role/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the active nav link with aria-current", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp(["/admin/catalog"]);
+    const catalogLink = await screen.findByRole("link", { name: /catalog/i });
+    expect(catalogLink).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders the settings placeholder for owner/manager", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp(["/admin/settings"]);
+    expect(
+      await screen.findByRole("heading", { name: /^settings$/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -3,7 +3,9 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
 import { buttonVariants } from "@shared/ui/Button"
+import { AdminModal } from "../../components/AdminModal"
 import { ConfirmDialog, EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
+import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { starterOrders } from "../../data/fixtures"
 import { formatRunningTime, getOrderDate, getRefundStatus } from "./order.utils"
 
@@ -13,7 +15,8 @@ const orderTone: Record<string, StatusTone> = {
   Canceled: "danger",
 };
 
-export function OrdersPage({ onNotify }: { onNotify: (message: string) => void }) {
+export function OrdersPage() {
+  const { notify } = useAdminUi()
   const [orderList, setOrderList] = useState(starterOrders)
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("All orders")
@@ -79,7 +82,7 @@ export function OrdersPage({ onNotify }: { onNotify: (message: string) => void }
     link.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(downloadUrl)
-    onNotify(`${orders.length} ${orders.length === 1 ? "order" : "orders"} exported`)
+    notify(`${orders.length} ${orders.length === 1 ? "order" : "orders"} exported`)
   }
   const confirmRefund = () => {
     if (!selectedOrder) return
@@ -95,13 +98,13 @@ export function OrdersPage({ onNotify }: { onNotify: (message: string) => void }
     setRefundQuantities({})
     setCustomRefundAmount("")
     setConfirmingRefund(false)
-    onNotify(`Refund completed for order ${selectedOrder.id}`)
+    notify(`Refund completed for order ${selectedOrder.id}`)
   }
   const cancelOrder = () => {
     if (!selectedOrder || selectedOrder.status !== "Active") return
     setOrderList((current) => current.map((order) => order.id === selectedOrder.id ? { ...order, status: "Canceled" } : order))
     setConfirmingCancellation(false)
-    onNotify(`Order ${selectedOrder.id} canceled`)
+    notify(`Order ${selectedOrder.id} canceled`)
   }
   return (
     <>
@@ -196,12 +199,10 @@ export function OrdersPage({ onNotify }: { onNotify: (message: string) => void }
         ))}
       </div>}
       {selectedOrder && (
-        <div className={`${styles["modal-backdrop"]} ${styles["order-backdrop"]}`} onMouseDown={closeOrder}>
-          <section className={`${styles["order-detail"]}`} onMouseDown={(event) => event.stopPropagation()} aria-label={`Order ${selectedOrder.id} details`}>
-            <button className={`${styles["modal-close"]}`} onClick={closeOrder} aria-label="Close order details"><Icon name="close" /></button>
+        <AdminModal labelledBy="order-detail-title" onClose={closeOrder} panelClassName={styles["order-detail"]} backdropClassName={styles["order-backdrop"]}>
             <p className={`${styles["modal-kicker"]}`}>Order details</p>
             <div className={`${styles["order-detail-title"]}`}>
-              <div><h2>{selectedOrder.id}</h2><p>{selectedOrder.date} · Table {selectedOrder.table}{selectedOrder.status === "Active" && <strong className={`${styles["running-time"]}`}>Running {formatRunningTime(selectedOrder.date, now)}</strong>}</p></div>
+              <div><h2 id="order-detail-title">{selectedOrder.id}</h2><p>{selectedOrder.date} · Table {selectedOrder.table}{selectedOrder.status === "Active" && <strong className={`${styles["running-time"]}`}>Running {formatRunningTime(selectedOrder.date, now)}</strong>}</p></div>
               <StatusPill tone={orderTone[selectedOrder.status] ?? "neutral"}>{selectedOrder.status}</StatusPill>
             </div>
             <div className={`${styles["order-customer"]}`}>
@@ -262,8 +263,7 @@ export function OrdersPage({ onNotify }: { onNotify: (message: string) => void }
                 </div>
               </div>
             )}
-          </section>
-        </div>
+        </AdminModal>
       )}
       {confirmingRefund && selectedOrder && (
         <ConfirmDialog

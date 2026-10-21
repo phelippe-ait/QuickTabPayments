@@ -1,37 +1,36 @@
 import { useEffect, useState } from "react"
-import { createPortal } from "react-dom"
 import QRCode from "qrcode"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
+import { AdminModal } from "../../components/AdminModal"
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
+import { useAdminUi } from "../../hooks/AdminUiProvider"
+import { useAdminWorkspace } from "../../hooks/useAdminWorkspace"
 import { getTableUrl } from "./tableQr.utils"
+import { TableModal } from "./TableDialog"
 import type { CafeTable } from "../../types"
 
-export function TablesPage({
-  tables,
-  onAdd,
-  onEdit,
-  onDelete,
-  onToggleAvailability,
-  onBulkAvailability,
-  onBulkDelete,
-  onNotify,
-}: {
-  tables: CafeTable[]
-  onAdd: () => void
-  onEdit: (table: CafeTable) => void
-  onDelete: (id: number) => void
-  onToggleAvailability: (id: number) => void
-  onBulkAvailability: (ids: number[], available: boolean) => void
-  onBulkDelete: (ids: number[]) => void
-  onNotify: (message: string) => void
-}) {
+export function TablesPage() {
+  const { notify, confirm } = useAdminUi()
+  const workspace = useAdminWorkspace({ notify, confirm })
+  const tables = workspace.tables
   const [location, setLocation] = useState("All tables")
   const [selected, setSelected] = useState<number[]>([])
+  const [tableModal, setTableModal] = useState<{ open: boolean; table: CafeTable | null }>({
+    open: false,
+    table: null,
+  })
   const visible = tables.filter((table) => location === "All tables" || table.location === location)
   const available = tables.filter((table) => table.available).length
   useEffect(() => setSelected((current) => current.filter((id) => tables.some((table) => table.id === id))), [tables])
+
+  const closeTableModal = () => setTableModal({ open: false, table: null })
+  const saveTable = (table: CafeTable) => {
+    workspace.saveTable(table)
+    closeTableModal()
+  }
+
   const downloadQrSheet = async () => {
     const cards = await Promise.all(tables.map(async (table) => {
       const source = await QRCode.toDataURL(getTableUrl(table.number), { width: 360, margin: 2 })
@@ -44,11 +43,12 @@ export function TablesPage({
     link.download = "cafe-shop-table-qr-codes.html"
     link.click()
     URL.revokeObjectURL(downloadUrl)
-    onNotify("Printable QR sheet downloaded")
+    notify("Printable QR sheet downloaded")
   }
+
   return (
     <>
-      <PageHeader eyebrow="Seating management" title="Tables" description="Manage your café seating, location, and live availability." action="Add table" onAction={onAdd} />
+      <PageHeader eyebrow="Seating management" title="Tables" description="Manage your café seating, location, and live availability." action="Add table" onAction={() => setTableModal({ open: true, table: null })} />
       <div className={`${styles["table-overview"]}`}>
         <div><span>Total tables</span><strong>{tables.length}</strong></div>
         <div><span>Available now</span><strong>{available}</strong></div>
@@ -65,9 +65,9 @@ export function TablesPage({
       </div>
       {selected.length > 0 && (
         <SelectionBar count={selected.length} onClear={() => setSelected([])}>
-          <button type="button" onClick={() => onBulkAvailability(selected, true)}>Mark available</button>
-          <button type="button" onClick={() => onBulkAvailability(selected, false)}>Mark occupied</button>
-          <button type="button" className={`${styles["danger"]}`} onClick={() => onBulkDelete(selected)}>Delete</button>
+          <button type="button" onClick={() => workspace.bulkAvailabilityTables(selected, true)}>Mark available</button>
+          <button type="button" onClick={() => workspace.bulkAvailabilityTables(selected, false)}>Mark occupied</button>
+          <button type="button" className={`${styles["danger"]}`} onClick={() => workspace.bulkDeleteTables(selected)}>Delete</button>
         </SelectionBar>
       )}
       {visible.length === 0 ? (
@@ -77,10 +77,10 @@ export function TablesPage({
           <article className={`${styles["table-card-item"]} ${selected.includes(table.id) ? styles["selected"] : ""}`} key={table.id}>
             <div className={`${styles["table-card-top"]}`}>
               <label className={`${styles["inline-select"]}`} aria-label={`Select table ${table.number}`}><input type="checkbox" checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
-              <button type="button" className={`${styles["table-state"]} ${table.available ? styles["available"] : styles["occupied"]}`} onClick={() => onToggleAvailability(table.id)} title={`Mark table ${table.number} ${table.available ? "occupied" : "available"}`}><i />{table.available ? "Available" : "Occupied"}</button>
+              <button type="button" className={`${styles["table-state"]} ${table.available ? styles["available"] : styles["occupied"]}`} onClick={() => workspace.toggleTableAvailability(table.id)} title={`Mark table ${table.number} ${table.available ? "occupied" : "available"}`}><i />{table.available ? "Available" : "Occupied"}</button>
               <div className={`${styles["row-actions"]}`}>
-                <button aria-label={`Edit table ${table.number}`} onClick={() => onEdit(table)}><Icon name="edit" size={16} /></button>
-                <button aria-label={`Delete table ${table.number}`} onClick={() => onDelete(table.id)}><Icon name="trash" size={16} /></button>
+                <button aria-label={`Edit table ${table.number}`} onClick={() => setTableModal({ open: true, table })}><Icon name="edit" size={16} /></button>
+                <button aria-label={`Delete table ${table.number}`} onClick={() => workspace.deleteTable(table.id)}><Icon name="trash" size={16} /></button>
               </div>
             </div>
             <div className={`${styles["table-card-content"]}`}>
@@ -89,7 +89,7 @@ export function TablesPage({
                 <small>Table</small>
                 <strong>{table.number}</strong>
               </div>
-              <TableQrCode tableNumber={table.number} onNotify={onNotify} />
+              <TableQrCode tableNumber={table.number} onNotify={notify} />
             </div>
             {!table.available && <div className={`${styles["active-seating"]}`}><span>Current order <strong>{table.currentOrder ?? "Awaiting order"}</strong></span><span>Seated <strong>{table.seatedAt ?? "Just now"}</strong></span></div>}
             <div className={`${styles["table-location"]}`}>
@@ -99,6 +99,15 @@ export function TablesPage({
           </article>
         ))}
       </div>}
+
+      {tableModal.open && (
+        <TableModal
+          table={tableModal.table}
+          tables={tables}
+          onClose={closeTableModal}
+          onSave={saveTable}
+        />
+      )}
     </>
   )
 }
@@ -136,22 +145,18 @@ function TableQrCode({ tableNumber, onNotify }: { tableNumber: string; onNotify:
         <Icon name="download" size={12} />
         Download
       </button>
-      {previewOpen && createPortal(
-        <div className={`${styles["modal-backdrop"]}`} onMouseDown={() => setPreviewOpen(false)}>
-          <section className={`${styles["modal"]} ${styles["qr-modal"]}`} onMouseDown={(event) => event.stopPropagation()}>
-            <button type="button" className={`${styles["modal-close"]}`} onClick={() => setPreviewOpen(false)} aria-label="Close QR preview"><Icon name="close" /></button>
-            <p className={`${styles["modal-kicker"]}`}>Table ordering</p>
-            <h2>Table {tableNumber}</h2>
-            <p className={`${styles["modal-description"]}`}>Guests can scan this code to start an order assigned to this table.</p>
-            <img src={source} alt={`Large QR code for table ${tableNumber}`} />
-            <code>{getTableUrl(tableNumber)}</code>
-            <div className={`${styles["modal-actions"]}`}>
-              <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => { await navigator.clipboard.writeText(getTableUrl(tableNumber)); onNotify("Table link copied") }}>Copy link</button>
-              <button type="button" className={buttonVariants({ variant: "primary" })} onClick={downloadQrCode}><Icon name="download" size={15} />Download PNG</button>
-            </div>
-          </section>
-        </div>,
-        document.body,
+      {previewOpen && (
+        <AdminModal labelledBy="qr-preview-title" describedBy="qr-preview-description" onClose={() => setPreviewOpen(false)} panelClassName={styles["qr-modal"]}>
+          <p className={`${styles["modal-kicker"]}`}>Table ordering</p>
+          <h2 id="qr-preview-title">Table {tableNumber}</h2>
+          <p className={`${styles["modal-description"]}`} id="qr-preview-description">Guests can scan this code to start an order assigned to this table.</p>
+          <img src={source} alt={`Large QR code for table ${tableNumber}`} />
+          <code>{getTableUrl(tableNumber)}</code>
+          <div className={`${styles["modal-actions"]}`}>
+            <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => { await navigator.clipboard.writeText(getTableUrl(tableNumber)); onNotify("Table link copied") }}>Copy link</button>
+            <button type="button" className={buttonVariants({ variant: "primary" })} onClick={downloadQrCode}><Icon name="download" size={15} />Download PNG</button>
+          </div>
+        </AdminModal>
       )}
     </div>
   )
