@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { adminRoutes } from "../../routes/AppRoutes";
@@ -67,6 +67,7 @@ describe("Admin app access gate", () => {
     mocks.restaurant.role = null;
     mocks.restaurant.isLoading = false;
     mocks.restaurant.error = null;
+    mocks.auth.signOut.mockClear();
   });
 
   it("shows the sign-in screen when signed out", async () => {
@@ -146,6 +147,28 @@ describe("Admin app access gate", () => {
     renderAdminApp(["/admin/catalog"]);
     const catalogLink = await screen.findByRole("link", { name: /catalog/i });
     expect(catalogLink).toHaveAttribute("aria-current", "page");
+  });
+
+  it("asks for confirmation before signing out", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp();
+    await screen.findByRole("heading", { name: /^catalog$/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByText(/sign out of quicktab/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^sign out$/i }),
+    );
+    await waitFor(() => expect(mocks.auth.signOut).toHaveBeenCalled());
   });
 
   it("renders the settings placeholder for owner/manager", async () => {

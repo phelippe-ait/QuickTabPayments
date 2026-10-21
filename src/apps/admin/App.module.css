@@ -41,7 +41,9 @@ nav button.active { color: #fff; background: var(--color-berry); box-shadow: 0 8
 .admin-profile strong, .admin-profile small { display: block; }
 .admin-profile strong { color: var(--color-cream-3); font-size: 13px; }
 .admin-profile small { color: var(--color-muted); font-size: 11px; }
-.sidebar-footer > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; margin-top: 10px; border: 0; color: var(--color-muted); background: transparent; font-size: 13px; }
+.sidebar-footer > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; margin-top: 10px; border: 0; border-radius: 9px; color: var(--color-muted); background: transparent; font-size: 13px; transition: color .18s ease, background .18s ease; }
+.sidebar-footer > button:hover { color: #fff; background: rgba(255,255,255,.08); }
+.sidebar-footer > button:focus-visible { color: #fff; outline: 2px solid var(--color-berry); outline-offset: 2px; background: rgba(255,255,255,.08); }
 
 main { min-width: 0; background: var(--color-cream-3); }
 .content { width: min(1140px, calc(100% - 80px)); margin: 0 auto; padding: 54px 0 80px; }

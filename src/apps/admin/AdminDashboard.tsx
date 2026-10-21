@@ -12,7 +12,7 @@ import { AdminErrorBoundary } from "./components/AdminErrorBoundary"
 import { AdminShell } from "./components/layout/AdminShell"
 import { RequireStaff } from "./features/auth/AdminGate"
 import { ProfileDialog } from "./features/profile/ProfileDialog"
-import { AdminUiProvider } from "./hooks/AdminUiProvider"
+import { AdminUiProvider, useAdminUi } from "./hooks/AdminUiProvider"
 import type { Section } from "./types"
 
 export default function App() {
@@ -32,8 +32,17 @@ export default function App() {
  * `<Outlet />`, so each page owns its queries and dialogs.
  */
 function AdminLayout() {
+  return (
+    <AdminUiProvider>
+      <AdminLayoutContent />
+    </AdminUiProvider>
+  )
+}
+
+function AdminLayoutContent() {
   const { restaurant, role } = useRestaurant()
   const { profile, user, signOut } = useAuth()
+  const { confirm } = useAdminUi()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
 
@@ -43,8 +52,20 @@ function AdminLayout() {
       : ["catalog", "tables", "users", "orders", "settings"]
   const userName = getProfileName(profile, user?.email)
 
+  const requestSignOut = () => {
+    confirm({
+      title: "Sign out of QuickTab?",
+      description:
+        "You will need to sign in again to manage this restaurant. Unsaved changes are not kept.",
+      actionLabel: "Sign out",
+      onConfirm: () => {
+        void signOut()
+      },
+    })
+  }
+
   return (
-    <AdminUiProvider>
+    <>
       <AdminShell
         sections={sections}
         restaurantName={restaurant?.name ?? "Your restaurant"}
@@ -52,7 +73,7 @@ function AdminLayout() {
         userRole={role ? roleLabels[role] : ""}
         userInitials={getInitials(userName)}
         onOpenProfile={() => setProfileOpen(true)}
-        onSignOut={() => void signOut()}
+        onSignOut={requestSignOut}
         mobileNavOpen={mobileNavOpen}
         onToggleMobileNav={() => setMobileNavOpen((open) => !open)}
         onCloseMobileNav={() => setMobileNavOpen(false)}
@@ -60,6 +81,6 @@ function AdminLayout() {
         <Outlet />
       </AdminShell>
       {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} />}
-    </AdminUiProvider>
+    </>
   )
 }
