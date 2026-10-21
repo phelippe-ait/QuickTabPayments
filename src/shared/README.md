@@ -5,12 +5,32 @@ Cross-app code used by more than one of the three applications
 
 ```
 src/shared/
+├── auth/          AuthProvider + useAuth (Supabase session)
 ├── components/
 │   └── ui/        Reusable primitives (Button, Card, Modal, StatusPill, ...)
+├── data/          Typed Supabase reads/writes (client, restaurants, menu, tables, orders, refunds)
 ├── hooks/         Cross-app React hooks
-├── lib/           Framework-agnostic helpers (cn, formatters, api clients)
+├── lib/           Framework-agnostic helpers (cn, money, qr, storage, time, supabase, database.types)
+├── orders/        Order status labels, tones, and the legal transition matrix
+├── restaurant/    RestaurantProvider (membership + role context)
 └── types/         Shared domain types (aligned with /database/schema.sql)
 ```
+
+## Data layer contract
+
+- Components never call Supabase directly: page → `apps/admin/hooks/useX`
+  (TanStack Query) → `shared/data/*` → client.
+- Every data function throws `Error` with a user-facing message; hooks surface
+  failures through toasts. Success toasts only fire after the server confirms.
+- `lib/database.types.ts` is hand-maintained (the CLI is not authenticated in
+  this environment). After applying a migration, update it before using new
+  columns/RPCs.
+- Money is numeric in the database and formatted only via
+  `lib/money.ts → formatMoney`; never parse a formatted string.
+- QR URLs are built only via `lib/qr.ts → buildTableQrUrl`:
+  `{origin}/?r={slug}&t={qr_token}`.
+- Storage paths follow `lib/storage.ts`: `restaurant-assets/{restaurant_id}/…`
+  and `menu-items/{restaurant_id}/{item_id}.…` (public read, staff-gated write).
 
 ## Rules
 
