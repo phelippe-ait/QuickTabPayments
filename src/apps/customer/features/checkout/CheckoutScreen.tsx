@@ -9,18 +9,29 @@ export function CheckoutScreen({
   onClose,
   onPay,
   defaultName = "",
+  error = "",
 }: {
   total: number;
   onClose: () => void;
-  onPay: (customerName: string) => void;
+  onPay: (customerName: string) => Promise<void>;
   defaultName?: string;
+  error?: string;
 }) {
   const [customerName, setCustomerName] = useState(defaultName);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const hasCustomerName = customerName.trim().length > 0;
+  const pay = async () => {
+    if (!hasCustomerName || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onPay(customerName.trim());
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!hasCustomerName) return;
-    onPay(customerName.trim());
+    void pay();
   };
   return (
     <main className={`${styles["page-screen"]}`}>
@@ -50,8 +61,8 @@ export function CheckoutScreen({
           <button
             type="button"
             className={`${styles["express-button"]} ${styles["apple-pay"]}`}
-            onClick={() => onPay(customerName.trim())}
-            disabled={!hasCustomerName}
+            onClick={() => void pay()}
+            disabled={!hasCustomerName || isSubmitting}
           >
             <span className={`${styles["apple-mark"]}`} aria-hidden="true">
               ●
@@ -61,8 +72,8 @@ export function CheckoutScreen({
           <button
             type="button"
             className={`${styles["express-button"]} google-pay`}
-            onClick={() => onPay(customerName.trim())}
-            disabled={!hasCustomerName}
+            onClick={() => void pay()}
+            disabled={!hasCustomerName || isSubmitting}
           >
             <span className={`${styles["google-mark"]}`} aria-hidden="true">
               G
@@ -72,8 +83,8 @@ export function CheckoutScreen({
           <button
             type="button"
             className={`${styles["express-button"]} ${styles["link-pay"]}`}
-            onClick={() => onPay(customerName.trim())}
-            disabled={!hasCustomerName}
+            onClick={() => void pay()}
+            disabled={!hasCustomerName || isSubmitting}
           >
             <span className={`${styles["link-mark"]}`} aria-hidden="true">
               Link
@@ -88,6 +99,7 @@ export function CheckoutScreen({
         <Icon name="card" size={17} /> Credit/Debit Card
       </div>
       <form className={`${styles["payment-form"]}`} onSubmit={submit}>
+        {error && <p role="alert">{error}</p>}
         <label>
           Card Number:
           <input
@@ -108,8 +120,8 @@ export function CheckoutScreen({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="outline" type="submit" disabled={!hasCustomerName}>
-            Pay ${total.toFixed(2)}
+          <Button variant="outline" type="submit" disabled={!hasCustomerName || isSubmitting}>
+            {isSubmitting ? "Saving order…" : `Pay $${total.toFixed(2)}`}
           </Button>
         </div>
       </form>

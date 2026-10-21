@@ -1,17 +1,18 @@
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
 import { HeaderButton } from "../../components/CustomerUi"
-import { orderStatuses, tableNumber } from "../../data/menu"
 
 export function OrderConfirmation({
   customerName,
+  orderNumber,
   isLoggedIn,
   onClose,
   onLogin,
   onSignup,
 }: {
   customerName: string;
+  orderNumber: string;
   isLoggedIn: boolean;
   onClose: () => void;
   onLogin: () => void;
@@ -19,17 +20,6 @@ export function OrderConfirmation({
 }) {
   const [receiptContact, setReceiptContact] = useState("");
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
-  const [statusIndex, setStatusIndex] = useState(0);
-
-  useEffect(() => {
-    if (statusIndex >= orderStatuses.length - 1) return;
-    const timer = window.setTimeout(
-      () => setStatusIndex((current) => current + 1),
-      5000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [statusIndex]);
-
   const confirmReceipt = (event: FormEvent) => {
     event.preventDefault();
     if (receiptContact.trim()) setReceiptConfirmed(true);
@@ -47,43 +37,16 @@ export function OrderConfirmation({
       </header>
       <h1>{customerName}</h1>
       <strong>Your order number:</strong>
-      <div className={`${styles["order-number"]}`}>ORD-94967</div>
-      <div className={`${styles["table-number"]}`}>
-        <span>Table</span>
-        <strong>{tableNumber}</strong>
-      </div>
+      <div className={`${styles["order-number"]}`}>{orderNumber}</div>
       <section className={`${styles["order-status"]}`}>
         <h2>Order status</h2>
-        <ol className={`${styles["status-timeline"]}`}>
-          {orderStatuses.map((status, index) => (
-            <li
-              key={status.label}
-              className={
-                index < statusIndex
-                  ? styles["complete"]
-                  : index === statusIndex
-                    ? styles["current"]
-                    : ""
-              }
-              aria-current={index === statusIndex ? "step" : undefined}
-            >
-              <span
-                className={`${styles["status-marker"]}`}
-                aria-hidden="true"
-              />
-              <span>{status.label}</span>
-            </li>
-          ))}
-        </ol>
         <p className={`${styles["status-message"]}`} aria-live="polite">
-          {orderStatuses[statusIndex].message}
+          Your order is pending and has been saved.
         </p>
       </section>
       <section>
-        <h2>Location</h2>
-        <p>Café Shop</p>
-        <p>123 Main St</p>
-        <p>Sydney CBD, NSW 2000</p>
+        <h2>Payment</h2>
+        <p>Pay at the counter when you collect your order.</p>
       </section>
       {!isLoggedIn && (
         <section className={`${styles["account-prompt"]}`}>

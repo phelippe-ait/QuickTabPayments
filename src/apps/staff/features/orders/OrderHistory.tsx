@@ -9,12 +9,16 @@ export function OrderHistory({
   query,
   setQuery,
   onSelect,
+  isLoading,
+  error,
 }: {
   filteredOrders: Order[]
   totalOrders: number
   query: string
   setQuery: (value: string) => void
   onSelect: (order: Order) => void
+  isLoading: boolean
+  error: string | null
 }) {
   return (
     <>
@@ -24,7 +28,7 @@ export function OrderHistory({
           Order history
         </h1>
         <p className="mt-2 text-sm text-muted-2">
-          Review current and completed checks from today’s service.
+          Latest orders for this restaurant.
         </p>
       </section>
       <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row">
@@ -37,9 +41,7 @@ export function OrderHistory({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <button className="rounded-xl border border-line bg-paper px-4 py-3 text-left text-xs font-bold sm:text-center">
-          Today, May 24
-        </button>
+        <span className="rounded-xl border border-line bg-paper px-4 py-3 text-xs font-bold">Most recent</span>
       </div>
       <div className="overflow-hidden rounded-[22px] border border-line bg-paper">
         <div className="hidden grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] gap-4 border-b border-line-soft bg-cream-2 px-6 py-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted md:grid">
@@ -50,7 +52,11 @@ export function OrderHistory({
           <span>Total</span>
           <span />
         </div>
-        {filteredOrders.map((order) => (
+        {error ? (
+          <p role="alert" className="p-12 text-center text-sm text-muted">{error}</p>
+        ) : isLoading ? (
+          <p className="p-12 text-center text-sm text-muted">Loading recent orders…</p>
+        ) : filteredOrders.map((order) => (
           <button
             aria-label={`View details for order ${order.id}`}
             className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-line-soft px-5 py-5 text-left transition last:border-0 hover:bg-cream-3 focus-visible:bg-cream-3 focus-visible:outline-2 focus-visible:outline-berry focus-visible:outline-offset-[-2px] md:grid-cols-[0.7fr_0.8fr_1.4fr_1.2fr_0.8fr_32px] md:px-6"
@@ -75,9 +81,11 @@ export function OrderHistory({
             </span>
           </button>
         ))}
-        {filteredOrders.length === 0 && (
+        {!isLoading && !error && filteredOrders.length === 0 && (
           <p className="p-12 text-center text-sm text-muted">
-            No orders match your search.
+            {totalOrders === 0
+              ? "No recent orders found. Confirm that your account has active staff access to this restaurant."
+              : "No orders match your search."}
           </p>
         )}
       </div>
@@ -94,8 +102,8 @@ export function HistoryOrderDrawer({
   order: Order
   onClose: () => void
 }) {
-  const subtotal = order.total / 1.09
-  const tax = order.total - subtotal
+  const subtotal = order.subtotal ?? order.total / 1.09
+  const tax = order.tax ?? order.total - subtotal
   const completed = order.status === "Completed"
 
   return (
