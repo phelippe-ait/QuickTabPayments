@@ -479,7 +479,7 @@ Ground rules for every milestone:
 
 - `supabase/migrations/0011_staff_directory.sql` (fixes #5, #3, D3):
   - `public.list_staff_directory(p_restaurant_id uuid)` returns table `(staff_id uuid, user_id uuid, email text, first_name text, last_name text, role staff_role, is_active boolean, created_at timestamptz)` — `security definer`, `set search_path = public`, body selects `restaurant_staff ⋈ profiles` **only when** `is_staff_of(p_restaurant_id)`; else returns no rows. Revoke from public/anon, grant authenticated. (RPC chosen over widening `profiles` SELECT: least privilege, one controlled surface, testable.)
-  - `public.add_staff_by_email(p_restaurant_id uuid, p_email text, p_role staff_role default 'manager') returns uuid` — `security definer`; requires `is_manager_of`; rejects `p_role='owner'`; looks up `profiles` by `lower(email) = lower(p_email)` (profiles.email is `text`, not citext); raises `P0002` "No account found for <email> — ask them to sign up to QuickTab first" when missing; inserts membership (`on conflict (restaurant_id,user_id) do update set role=excluded.role, is_active=true`); promotes `profiles.role` `'customer'`→`'staff'` (allowed because the definer runs as owner — the `enforce_role_change_permission` trigger accepts `session_user='postgres'`); returns the membership id.
+  - `public.add_staff_by_email(p_restaurant_id uuid, p_email text, p_role staff_role default 'manager') returns uuid` — `security definer`; requires `is_manager_of`; rejects `p_role='owner'`; looks up `profiles` by `lower(email) = lower(p_email)` (profiles.email is `text`, not citext); raises `P0002` "No account found for <email> — ask them to sign up to QuickTab first" when missing; inserts membership (`on conflict (restaurant_id,user_id) do update set role=excluded.role, is_active=true`); returns the membership id. **Amended by 0012:** the old `profiles.role` promotion was removed with the global roles layer.
   - Policy swap on `restaurant_staff`: drop `staff_owner_manage`; create `staff_manager_manage` (all, using/with check `is_manager_of(restaurant_id)`).
   - Trigger `guard_staff_owner_rows` (before update/delete on `restaurant_staff`): non-owners may not modify/delete rows whose current or new `role='owner'` → `42501`.
   - Index: existing `idx_staff_restaurant (restaurant_id) where is_active` covers the RPC; add non-partial `create index if not exists idx_staff_restaurant_all on public.restaurant_staff(restaurant_id);` so the directory (which includes inactive rows) is indexed.
@@ -513,7 +513,7 @@ Ground rules for every milestone:
 
 **UI / role gating.** Route: owner+manager. Within it: role changes/deactivation → owner+manager; owner-row management and membership removal → owner-only.
 
-**Cross-app impact.** `restaurant_staff.role` remains the authorization source; `profiles.role` (global) is promoted to `'staff'` on add — documented so the staff app can rely on it later. Staff app will consume `fetchStaffDirectory` when wired (appendix).
+**Cross-app impact.** `restaurant_staff.role` is the only authorization source. **Amended by 0012:** the unused global `profiles.role` + `roles` lookup were removed, so there is no account-level role to promote. Staff app will consume `fetchStaffDirectory` when wired (appendix).
 
 **Acceptance criteria.**
 
@@ -692,7 +692,7 @@ Seed order matters: categories → items → tables → orders → order_items �
 | A6 | Two-write onboarding | `create_restaurant_with_owner` RPC | M2 |
 | A7 | "Delete user" semantics | Remove-membership (owner-only) + bulk deactivate | M7 |
 
-**Out of scope (with reason):** realtime order feed, dashboard overview page (stretch, cut order #1/#3 — stats live on Orders); Stripe intent/webhook work (brief); modifier UI (brief); multi-restaurant switching (brief); customer/staff rewiring (brief — see appendix); Playwright E2E (brief); automated type generation (CLI unauthenticated — documented manual step instead); "Admin" global-role management UI (profiles.role is platform-level; only the customer→staff promotion on add-by-email is exposed).
+**Out of scope (with reason):** realtime order feed, dashboard overview page (stretch, cut order #1/#3 — stats live on Orders); Stripe intent/webhook work (brief); modifier UI (brief); multi-restaurant switching (brief); customer/staff rewiring (brief — see appendix); Playwright E2E (brief); automated type generation (CLI unauthenticated — documented manual step instead); "Admin" global-role management UI (the global `profiles.role` + `roles` layer was removed in 0012).
 
 ---
 
@@ -778,9 +778,9 @@ menu-items/{restaurant_id}/{menu_item_id}.{jpg|png|webp}
 
 ### 9.6 Roles
 
-- `restaurant_staff.role` (`owner|manager|kitchen`) = per-restaurant authorization — the only thing admin gating reads.
-- `profiles.role` (`customer|staff|manager|admin` via `roles` lookup) = global account role; changed only by the escalation-checked path (`0002` trigger); `add_staff_by_email` promotes `customer→staff`.
-- The two must never be conflated in UI copy or checks.
+- `restaurant_staff.role` (`owner|manager|kitchen`, enum `staff_role`) = per-restaurant authorization — the only thing admin gating reads.
+- **Amended by 0012:** the unused global `profiles.role` column, `public.roles` lookup, and `enforce_role_change_permission` trigger were removed. There is no platform-level role system in the current schema.
+- Do not reintroduce a global role without a separate auth brief; the restaurant membership is the single source of truth.
 
 ### 9.7 Order numbers
 

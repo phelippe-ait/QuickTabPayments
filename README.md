@@ -124,9 +124,10 @@ Set `VITE_SUPABASE_URL` to the bare project origin (`https://<project-ref>.supab
    and add `http://localhost:5173/**` to the Redirect URLs.
 3. Run the SQL migrations in `supabase/migrations/` in order in the SQL Editor:
    `0001_profiles.sql` creates the `profiles` table (with RLS) and a trigger
-   that fills it whenever a user signs up; `0002_roles.sql` adds the `roles`
-   lookup table (`customer`, `staff`, `manager`, `admin`) and the
-   `profiles.role` column, defaulting existing and new profiles to `customer`.
+   that fills it whenever a user signs up. `0002_roles.sql` historically added
+   a global `roles` lookup and `profiles.role`; `0012_drop_global_roles.sql`
+   removes that unused layer. Authorization is per restaurant via
+   `restaurant_staff.role` (`owner`, `manager`, `kitchen`).
 4. Social logins (optional): enable **Google** (and later Apple/Facebook) under
    Providers. Each provider's OAuth redirect URI must be
    `https://<project-ref>.supabase.co/auth/v1/callback`.
