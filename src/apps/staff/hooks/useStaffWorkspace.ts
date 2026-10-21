@@ -1,7 +1,8 @@
-import { initialReservations, tables } from "../data/fixtures"
+import { initialReservations } from "../data/fixtures"
 import type { KitchenStatus, Order, Reservation, Table } from "../types"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../shared/lib/supabase"
+import { fetchStaffTables } from "../services/staffTables"
 import {
   fetchMyStaffRestaurantId,
   fetchStaffOrders,
@@ -32,7 +33,7 @@ export function useStaffWorkspace() {
   void testConnection()
 }, [])
   
-  const [tableList, setTableList] = useState<Table[]>(tables)
+  const [tableList, setTableList] = useState<Table[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations)
   const [ordersLoading, setOrdersLoading] = useState(true)
@@ -76,6 +77,26 @@ async function loadOrders(restaurantId: string) {
 }
 
 
+async function loadTables(restaurantId: string) {
+  try {
+    const rows = await fetchStaffTables(restaurantId)
+
+    if (cancelled) return
+
+    setTableList(
+      rows.map((row) => ({
+        id: row.id,
+        tableNumber: row.table_number,
+        locationLabel: row.location_label,
+        occupants: 0,
+        status: "available" as const,
+      })),
+    )
+  } catch (error) {
+    console.error("Failed to load staff tables:", error)
+  }
+}
+
   async function startPolling() {
 
     
@@ -90,7 +111,10 @@ async function loadOrders(restaurantId: string) {
   return
 }
 
-      await loadOrders(restaurantId)
+      await Promise.all([
+  loadOrders(restaurantId),
+  loadTables(restaurantId),
+])
 
       if (cancelled) return
 

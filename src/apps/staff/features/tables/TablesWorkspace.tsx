@@ -30,7 +30,7 @@ export function TableCard({
         <div>
           <p className={`${styles["eyebrow"]}`}>Table</p>
           <p className="mt-0.5 font-serif text-4xl">
-            {table.id.toString().padStart(2, "0")}
+            {table.tableNumber ?? table.id.toString().padStart(2, "0")}
           </p>
         </div>
         <StatusPill tone={table.status === "occupied" ? "primary" : "success"}>{table.status}</StatusPill>
@@ -53,7 +53,8 @@ export function TableCard({
       ) : (
         <div className="mt-8 flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs font-bold text-[#858c80]">
-            <Icon name="users" size={16} /> Seats {table.seats}
+            <Icon name="users" size={16} />
+{table.seats != null ? `Seats ${table.seats}` : "Capacity not set"}
           </span>
           <span className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-sage transition group-hover:bg-sage group-hover:text-white">
             <Icon name="arrow" size={15} />
@@ -83,7 +84,7 @@ export function TableEditor({
       ...table,
       status,
       guest: occupied ? guest.trim() || "Walk-in guest" : undefined,
-      occupants: occupied ? Math.max(1, Math.min(table.seats, occupants)) : 0,
+      occupants: occupied ? Math.max(1, Math.min(table.seats ?? Infinity, occupants)) : 0,
       since: occupied ? (table.since ?? "Just now") : undefined,
       total: occupied ? (table.total ?? 0) : undefined,
       items: occupied ? (table.items ?? 0) : undefined,
@@ -111,7 +112,7 @@ export function TableEditor({
         <div className="mt-8 flex items-end justify-between border-b border-line pb-7">
           <div>
             <h2 className="font-serif text-4xl">
-              Table {table.id.toString().padStart(2, "0")}
+              {table.tableNumber ?? table.id.toString().padStart(2, "0")}
             </h2>
             <p className="mt-2 text-sm text-muted-2">
               Capacity · {table.seats} guests
@@ -189,10 +190,10 @@ export function TableEditor({
               <button
                 aria-label="Increase occupants"
                 className="grid h-10 w-10 place-items-center rounded-lg bg-cream-2 text-xl font-medium transition hover:bg-line-soft disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!occupied || occupants >= table.seats}
+                disabled={!occupied || (table.seats !== undefined && occupants >= table.seats)}
                 onClick={() =>
                   setOccupants((current) =>
-                    Math.min(table.seats, Math.max(1, current) + 1),
+                    Math.min(table.seats ?? Infinity, Math.max(1, current) + 1),
                   )
                 }
               >
@@ -220,8 +221,9 @@ export function TableEditor({
   )
 }
 
-export function TablesWorkspace({ tableList, filteredTables, occupied, filter, selectedTable, onFilterChange, onSelectTable }: {
+export function TablesWorkspace({ tableList, filteredTables, occupied, filter, selectedTable, onFilterChange, onSelectTable, userName }: {
   tableList: Table[]
+    userName: string
   filteredTables: Table[]
   occupied: number
   filter: "all" | TableStatus
@@ -229,13 +231,23 @@ export function TablesWorkspace({ tableList, filteredTables, occupied, filter, s
   onFilterChange: (filter: "all" | TableStatus) => void
   onSelectTable: (table: Table) => void
 }) {
+
+    const firstName = userName.trim().split(/\s+/)[0] || "there"
+  const hour = new Date().getHours()
+
+  const greeting =
+    hour < 12
+      ? "Good morning"
+      : hour < 17
+        ? "Good afternoon"
+        : "Good evening"
   return (
             <>
               <section className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
                 <div>
                   <p className={`${styles["eyebrow"]}`}>Floor plan</p>
                   <h1 className="mt-2 font-serif text-4xl tracking-[-0.025em] md:text-5xl">
-                    Good evening, Alex.
+                    {greeting}, {firstName}.
                   </h1>
                   <p className="mt-2 text-sm text-muted-2">
                     Here’s what’s happening in the dining room.
@@ -276,7 +288,7 @@ export function TablesWorkspace({ tableList, filteredTables, occupied, filter, s
                   ))}
                 </div>
                 <p className="text-xs font-bold uppercase tracking-[0.13em] text-muted">
-                  Main dining room · 12 tables
+                  Main dining room · {tableList.length} {tableList.length === 1 ? "table" : "tables"}
                 </p>
               </div>
 
