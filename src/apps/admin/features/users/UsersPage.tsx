@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import styles from "../../App.module.css";
 import { Icon } from "@shared/ui/Icon";
+import { useRestaurant } from "@shared/restaurant/RestaurantProvider";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
 import { useAdminWorkspace } from "../../hooks/useAdminWorkspace";
@@ -9,6 +10,7 @@ import { UserModal } from "./UserDialog";
 
 export function UsersPage() {
   const { notify, confirm } = useAdminUi();
+  const { restaurant } = useRestaurant();
   const workspace = useAdminWorkspace({ notify, confirm });
   const users = workspace.users;
   const [query, setQuery] = useState("");
@@ -47,7 +49,7 @@ export function UsersPage() {
       <PageHeader
         eyebrow="Team access"
         title="Users"
-        description="Create user accounts and manage access to Café Shop."
+        description={`Create user accounts and manage access to ${restaurant?.name ?? "your restaurant"}.`}
         action="Add user"
         onAction={() => setUserModal({ open: true, user: null })}
       />

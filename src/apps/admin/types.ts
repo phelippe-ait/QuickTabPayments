@@ -1,4 +1,20 @@
+import type { OrderStatus } from "@shared/lib/database.types";
+
 export type Section = "catalog" | "tables" | "users" | "orders" | "settings";
+
+export type TableVM = {
+  id: string;
+  number: string;
+  locationLabel: string | null;
+  seats: number | null;
+  isActive: boolean;
+  qrToken: string;
+  openOrder: {
+    orderNumber: string;
+    status: OrderStatus;
+    startedAt: string;
+  } | null;
+};
 
 export type MenuItemVM = {
   id: string;

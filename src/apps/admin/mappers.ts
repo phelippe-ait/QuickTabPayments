@@ -1,8 +1,10 @@
 import type {
+  CafeTable as DbTable,
   MenuCategory,
   MenuItem as DbMenuItem,
 } from "@shared/lib/database.types"
-import type { CategoryVM, MenuItemVM } from "./types"
+import type { OpenTableOrder } from "@shared/data/orders"
+import type { CategoryVM, MenuItemVM, TableVM } from "./types"
 
 /**
  * Database rows → admin view models. Keep this free of React so the mapping
@@ -33,5 +35,26 @@ export function toMenuItemVM(
     imageUrl: row.image_url,
     isAvailable: row.is_available,
     displayOrder: row.display_order,
+  }
+}
+
+export function toTableVM(
+  row: DbTable,
+  openOrder: OpenTableOrder | undefined,
+): TableVM {
+  return {
+    id: row.id,
+    number: row.table_number,
+    locationLabel: row.location_label,
+    seats: row.seats,
+    isActive: row.is_active,
+    qrToken: row.qr_token,
+    openOrder: openOrder
+      ? {
+          orderNumber: openOrder.orderNumber,
+          status: openOrder.status,
+          startedAt: openOrder.createdAt,
+        }
+      : null,
   }
 }
