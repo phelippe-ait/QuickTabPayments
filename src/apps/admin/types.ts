@@ -1,4 +1,7 @@
-import type { OrderStatus } from "@shared/lib/database.types";
+import type {
+  OrderStatus,
+  PaymentStatus,
+} from "@shared/lib/database.types";
 
 export type Section = "catalog" | "tables" | "users" | "orders" | "settings";
 
@@ -65,6 +68,44 @@ export type CafeTable = {
   seats?: number;
   currentOrder?: string;
   seatedAt?: string;
+};
+
+export type OrderLineVM = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  imageUrl: string | null;
+  notes: string | null;
+};
+
+export type PaymentVM = {
+  id: string;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  method: string;
+  paidAt: string | null;
+  receiptUrl: string | null;
+  failureReason: string | null;
+};
+
+export type OrderVM = {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  createdAt: string;
+  createdAtLabel: string;
+  total: number;
+  subtotal: number;
+  tax: number;
+  currency: string;
+  tableNumber: string | null;
+  customerName: string;
+  lineItems: OrderLineVM[];
+  payments: PaymentVM[];
+  refundedTotal: number;
 };
 
 export type Confirmation = {

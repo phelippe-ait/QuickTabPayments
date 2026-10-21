@@ -7,12 +7,6 @@ import type {
   TablesUpdate,
 } from "@shared/lib/database.types";
 
-export type OrderCustomer = {
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-};
-
 export type OpenTableOrder = {
   orderId: string
   orderNumber: string
@@ -49,35 +43,83 @@ export function reduceOpenOrdersByTable(
   return byTable
 }
 
+export type OrderItemWithImage = OrderItem & {
+  menu_items: { image_url: string | null } | null;
+};
+
 export type OrderWithDetails = Order & {
-  order_items: OrderItem[];
+  order_items: OrderItemWithImage[];
   payments: Payment[];
   tables: { table_number: string } | null;
-  profiles: OrderCustomer | null;
 };
+
+export type OrderFilters = {
+  page?: number;
+  pageSize?: number;
+  status?: OrderStatus;
+  from?: string;
+  to?: string;
+  search?: string;
+};
+
+export type OrderPage = {
+  rows: OrderWithDetails[];
+  count: number;
+};
+
+export type DailyStatsRow = {
+  period: string;
+  orders_count: number;
+  revenue: number;
+  avg_order_value: number;
+};
+
+/** PostgREST `or` filters treat commas/parentheses as syntax: strip them. */
+export function sanitiseOrderSearch(value: string): string {
+  return value.replace(/[(),%]/g, " ").trim();
+}
 
 const orderSelect = `
   *,
-  order_items(*),
+  order_items(*, menu_items(image_url)),
   payments(*),
-  tables(table_number),
-  profiles(first_name, last_name, email)
+  tables(table_number)
 `;
 
 export async function fetchOrders(
   restaurantId: string,
-  options: { limit?: number } = {},
-): Promise<OrderWithDetails[]> {
+  options: OrderFilters = {},
+): Promise<OrderPage> {
   const client = requireSupabase();
-  const { data, error } = await client
+  const page = Math.max(1, options.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 25));
+  const from = (page - 1) * pageSize;
+
+  let query = client
     .from("orders")
-    .select(orderSelect)
+    .select(orderSelect, { count: "exact" })
     .eq("restaurant_id", restaurantId)
     .order("created_at", { ascending: false })
-    .limit(options.limit ?? 100);
+    .range(from, from + pageSize - 1);
 
+  if (options.status) query = query.eq("status", options.status);
+  if (options.from) query = query.gte("created_at", options.from);
+  if (options.to) query = query.lte("created_at", options.to);
+
+  const search = options.search ? sanitiseOrderSearch(options.search) : "";
+  if (search) {
+    query = query.or(
+      `order_number.ilike.%${search}%,customer_name_snapshot.ilike.%${search}%`,
+    );
+  }
+
+  const { data, error, count } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as OrderWithDetails[];
+
+  return {
+    rows: (data ?? []) as unknown as OrderWithDetails[],
+    count: count ?? 0,
+  };
 }
 
 export async function fetchOpenOrdersByTable(
@@ -123,6 +165,11 @@ export async function updateOrder(
   return data;
 }
 
+/**
+ * `completed_at` is "closed at": set for both completed and cancelled. It is
+ * cleared when a transition moves back into an open state (not currently
+ * possible through the status matrix, but safe if a future flow reopens one).
+ */
 export async function updateOrderStatus(
   id: string,
   status: OrderStatus,
@@ -136,9 +183,27 @@ export async function updateOrderStatus(
   });
 }
 
+export async function fetchOrderStats(
+  restaurantId: string,
+  timezone: string,
+): Promise<DailyStatsRow[]> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("restaurant_daily_stats", {
+    p_restaurant_id: restaurantId,
+    p_timezone: timezone,
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DailyStatsRow[];
+}
+
 export const orderKeys = {
   all: (restaurantId: string) => ["orders", restaurantId] as const,
+  list: (restaurantId: string, filters: OrderFilters) =>
+    ["orders", restaurantId, "list", filters] as const,
   detail: (id: string) => ["orders", "detail", id] as const,
+  stats: (restaurantId: string) =>
+    ["orders", restaurantId, "stats"] as const,
   openTables: (restaurantId: string) =>
     ["orders", restaurantId, "open-tables"] as const,
 };

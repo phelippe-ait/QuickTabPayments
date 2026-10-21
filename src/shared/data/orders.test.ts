@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { reduceOpenOrdersByTable } from "./orders"
+import { reduceOpenOrdersByTable, sanitiseOrderSearch } from "./orders"
 
 describe("reduceOpenOrdersByTable", () => {
   it("keeps the latest open order per table regardless of row order", () => {
@@ -34,6 +34,10 @@ describe("reduceOpenOrdersByTable", () => {
       createdAt: "2026-10-21T09:00:00Z",
     })
     expect(byTable["table-2"]?.orderNumber).toBe("1003")
+  })
+
+  it("strips PostgREST syntax characters from search terms", () => {
+    expect(sanitiseOrderSearch("1048, Olivia ()")).toBe("1048  Olivia")
   })
 
   it("ignores orders without a table", () => {

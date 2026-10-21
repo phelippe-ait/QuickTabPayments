@@ -34,6 +34,11 @@ const AdminSettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
+const AdminOrderDetailPage = lazy(() =>
+  import("../apps/admin/features/orders/OrderDetailPage").then((module) => ({
+    default: module.OrderDetailPage,
+  })),
+);
 
 function withSuspense(node: ReactNode) {
   return (
@@ -85,6 +90,14 @@ export const adminRoutes: RouteObject[] = [
         element: withSuspense(
           <RequireRole roles={[...anyStaff]}>
             <AdminOrdersPage />
+          </RequireRole>,
+        ),
+      },
+      {
+        path: "orders/:id",
+        element: withSuspense(
+          <RequireRole roles={[...anyStaff]}>
+            <AdminOrderDetailPage />
           </RequireRole>,
         ),
       },
