@@ -259,4 +259,32 @@ begin
       end if;
     end if;
   end loop;
+
+  -- -------------------------------------------------------------------
+  -- Refunds (only once migration 0010 exists; runs even when the orders
+  -- were seeded before the refunds table existed)
+  -- -------------------------------------------------------------------
+  if to_regclass('public.refunds') is not null then
+    insert into public.refunds (order_id, payment_id, amount, reason, status, created_by)
+    select o.id, p.id, o.total, 'Customer changed mind', 'succeeded', v_owner
+    from public.orders o
+    join public.payments p on p.order_id = o.id
+    where o.restaurant_id = v_restaurant
+      and o.order_number = '1013'
+      and p.status = 'succeeded'
+      and not exists (select 1 from public.refunds rf where rf.payment_id = p.id);
+
+    insert into public.refunds (order_id, payment_id, order_item_id, quantity, amount, reason, status, created_by)
+    select o.id, p.id, oi.id, 1, oi.unit_price_snapshot, 'One coffee remade', 'succeeded', v_owner
+    from public.orders o
+    join public.payments p on p.order_id = o.id
+    join public.order_items oi on oi.order_id = o.id
+    where o.restaurant_id = v_restaurant
+      and o.order_number = '1014'
+      and p.status = 'succeeded'
+      and oi.item_name_snapshot = 'Flat White'
+      and oi.quantity >= 1
+      and not exists (select 1 from public.refunds rf where rf.payment_id = p.id)
+    limit 1;
+  end if;
 end $$;

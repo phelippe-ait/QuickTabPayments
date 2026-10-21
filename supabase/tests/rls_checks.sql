@@ -183,3 +183,52 @@ select set_config(
 set local role authenticated;
 select * from public.restaurant_daily_stats('<restaurant-uuid>', 'Australia/Sydney');
 rollback;
+
+-- ---------------------------------------------------------------------
+-- M6 — refunds
+-- ---------------------------------------------------------------------
+
+-- (m) Over-refunding a succeeded payment is rejected by the trigger.
+-- Expected: ERROR 23514 "Refund amount exceeds the remaining payment balance".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.refunds (order_id, payment_id, amount, reason)
+select o.id, p.id, 999, 'RLS over-refund check'
+from public.orders o
+join public.payments p on p.order_id = o.id
+where o.restaurant_id = '<restaurant-uuid>'
+  and p.status = 'succeeded'
+limit 1;
+rollback;
+
+-- (n) Staff can read refund rows for their restaurant. Expected: rows.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select count(*) as visible_refunds
+from public.refunds r
+join public.orders o on o.id = r.order_id
+where o.restaurant_id = '<restaurant-uuid>';
+rollback;
+
+-- (o) No delete policy: deleting a refund removes zero rows.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+delete from public.refunds
+where id = '<refund-uuid>'
+returning id;
+rollback;

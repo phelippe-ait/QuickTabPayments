@@ -526,6 +526,77 @@ export type Database = {
           },
         ];
       };
+      refunds: {
+        Row: {
+          amount: number;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          order_id: string;
+          order_item_id: string | null;
+          payment_id: string;
+          quantity: number | null;
+          reason: string | null;
+          status: Database["public"]["Enums"]["refund_status"];
+          stripe_refund_id: string | null;
+        };
+        Insert: {
+          amount: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          order_id: string;
+          order_item_id?: string | null;
+          payment_id: string;
+          quantity?: number | null;
+          reason?: string | null;
+          status?: Database["public"]["Enums"]["refund_status"];
+          stripe_refund_id?: string | null;
+        };
+        Update: {
+          amount?: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          order_id?: string;
+          order_item_id?: string | null;
+          payment_id?: string;
+          quantity?: number | null;
+          reason?: string | null;
+          status?: Database["public"]["Enums"]["refund_status"];
+          stripe_refund_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "refunds_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refunds_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refunds_order_item_id_fkey";
+            columns: ["order_item_id"];
+            isOneToOne: false;
+            referencedRelation: "order_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refunds_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "payments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       restaurant_staff: {
         Row: {
           created_at: string;
@@ -769,6 +840,7 @@ export type Database = {
         | "cancelled";
       payment_method_type: "card" | "apple_pay" | "google_pay" | "other";
       payment_status: "pending" | "succeeded" | "failed" | "refunded";
+      refund_status: "requested" | "succeeded" | "failed";
       staff_role: "owner" | "manager" | "kitchen";
     };
     CompositeTypes: Record<string, never>;
@@ -799,3 +871,5 @@ export type Payment = Tables<"payments">;
 export type OrderStatus = Enums<"order_status">;
 export type PaymentStatus = Enums<"payment_status">;
 export type PaymentMethodType = Enums<"payment_method_type">;
+export type Refund = Tables<"refunds">;
+export type RefundStatus = Enums<"refund_status">;
