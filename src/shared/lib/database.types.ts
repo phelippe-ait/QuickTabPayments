@@ -599,6 +599,53 @@ export type Database = {
           },
         ]
       }
+      restaurant_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_restaurant_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          restaurant_name: string
+          restaurant_slug: string
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_restaurant_id?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          restaurant_name: string
+          restaurant_slug: string
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_restaurant_id?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          restaurant_name?: string
+          restaurant_slug?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_invites_accepted_restaurant_id_fkey"
+            columns: ["accepted_restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurant_staff: {
         Row: {
           created_at: string
@@ -760,6 +807,33 @@ export type Database = {
         }
         Returns: string
       }
+      claim_restaurant_invite: {
+        Args: { p_name?: string; p_slug?: string }
+        Returns: {
+          address: string | null
+          cover_image_url: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          owner_id: string
+          phone: string | null
+          slug: string
+          tax_rate: number
+          timezone: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "restaurants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_restaurant_with_owner: {
         Args: { p_name: string; p_slug: string }
         Returns: {
@@ -786,6 +860,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_my_restaurant_invite: {
+        Args: never
+        Returns: {
+          email: string
+          expires_at: string
+          id: string
+          restaurant_name: string
+          restaurant_slug: string
+        }[]
       }
       is_manager_of: { Args: { p_restaurant_id: string }; Returns: boolean }
       is_owner_of: { Args: { p_restaurant_id: string }; Returns: boolean }
