@@ -174,7 +174,7 @@ export function ItemModal({
           <label>
             Prep time (minutes)
             <input required min="0" step="1" type="number" value={prepTimeMinutes} onChange={(event) => setPrepTimeMinutes(event.target.value)} />
-            <small className="mt-1.5 block text-[10px] font-normal text-muted">Shown to guests when prep times are enabled; also sets the order ETA.</small>
+            <small className="mt-1.5 block text-[10px] font-normal text-muted">Stored for kitchen operations only; guests do not see prep times or order ETAs.</small>
           </label>
           <label className={`${styles["wide"]}`}>Description<textarea required value={description} onChange={(event) => setDescription(event.target.value)} placeholder="A short description of the item" /></label>
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Available to order</strong><small>Show this item on the customer menu</small></span><input type="checkbox" checked={isAvailable} onChange={(event) => setIsAvailable(event.target.checked)} /></label>
