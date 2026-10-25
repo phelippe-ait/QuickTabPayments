@@ -18,6 +18,7 @@ const item: MenuItemVM = {
   price: 4.7,
   imageUrl: null,
   isAvailable: true,
+  prepTimeMinutes: 10,
   displayOrder: 0,
 }
 
@@ -68,6 +69,7 @@ describe("CatalogPage", () => {
     mocks.menu.isLoading = false
     mocks.menu.error = null
     mocks.menu.refetch = mocks.refetch
+    mocks.notify.mockClear()
   })
 
   it("shows a loading state", () => {

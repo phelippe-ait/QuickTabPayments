@@ -44,11 +44,6 @@ export function ProductModal({
             <strong>Allergens:</strong> {item.allergens.join(", ")}
           </p>
         )}
-        {item.prepTimeMinutes > 0 && (
-          <p className={`${styles["modal-meta"]}`}>
-            <strong>Prep time:</strong> about {item.prepTimeMinutes} min
-          </p>
-        )}
         <div className={`${styles["modal-footer"]}`}>
           <div className={`${styles["quantity"]}`}>
             <button

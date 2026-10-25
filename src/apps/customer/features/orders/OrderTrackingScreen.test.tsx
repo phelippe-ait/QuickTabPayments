@@ -19,7 +19,6 @@ const trackedOrder = {
   total: 4.7,
   currency: "AUD",
   createdAt: "2026-10-25T02:00:00Z",
-  pickupTimeEstimate: null,
   tableNumber: "T05",
   restaurantName: "QuickTab Demo Cafe",
   items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],

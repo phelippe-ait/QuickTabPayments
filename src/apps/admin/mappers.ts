@@ -35,6 +35,7 @@ export function toMenuItemVM(
     price: row.price,
     imageUrl: row.image_url,
     isAvailable: row.is_available,
+    prepTimeMinutes: row.prep_time_minutes,
     displayOrder: row.display_order,
   }
 }

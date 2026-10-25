@@ -27,6 +27,9 @@ export function ItemModal({
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? categories[0]?.id ?? "")
   const [description, setDescription] = useState(item?.description ?? "")
   const [price, setPrice] = useState(item ? String(item.price) : "")
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState(
+    item ? String(item.prepTimeMinutes) : "10",
+  )
   const [isAvailable, setIsAvailable] = useState(item?.isAvailable ?? true)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl ?? null)
@@ -58,6 +61,7 @@ export function ItemModal({
 
     const trimmedName = name.trim()
     const priceValue = Number(price)
+    const prepTimeValue = Number(prepTimeMinutes)
 
     if (!trimmedName) {
       setFormError("Item name is required.")
@@ -69,6 +73,14 @@ export function ItemModal({
     }
     if (!Number.isFinite(priceValue) || priceValue < 0) {
       setFormError("Price must be zero or more.")
+      return
+    }
+    if (
+      !prepTimeMinutes.trim() ||
+      !Number.isInteger(prepTimeValue) ||
+      prepTimeValue < 0
+    ) {
+      setFormError("Prep time must be a whole number of minutes.")
       return
     }
 
@@ -89,6 +101,7 @@ export function ItemModal({
             price: priceValue,
             image_url: imageUrl,
             is_available: isAvailable,
+            prep_time_minutes: prepTimeValue,
           })
         : await onCreate({
             id,
@@ -98,6 +111,7 @@ export function ItemModal({
             price: priceValue,
             imageUrl,
             isAvailable,
+            prepTimeMinutes: prepTimeValue,
           })
 
       if (ok) onClose()
@@ -157,6 +171,11 @@ export function ItemModal({
             </select>
           </label>
           <label>Price ($)<input required min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
+          <label>
+            Prep time (minutes)
+            <input required min="0" step="1" type="number" value={prepTimeMinutes} onChange={(event) => setPrepTimeMinutes(event.target.value)} />
+            <small className="mt-1.5 block text-[10px] font-normal text-muted">Shown to guests when prep times are enabled; also sets the order ETA.</small>
+          </label>
           <label className={`${styles["wide"]}`}>Description<textarea required value={description} onChange={(event) => setDescription(event.target.value)} placeholder="A short description of the item" /></label>
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Available to order</strong><small>Show this item on the customer menu</small></span><input type="checkbox" checked={isAvailable} onChange={(event) => setIsAvailable(event.target.checked)} /></label>
         </div>

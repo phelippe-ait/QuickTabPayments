@@ -10,7 +10,20 @@ function compareOrder(
   return a.name.localeCompare(b.name)
 }
 
-export function toMenuItem(row: MenuItemRow): MenuItem {
+type CustomerMenuItemRow = Pick<
+  MenuItemRow,
+  | "id"
+  | "category_id"
+  | "name"
+  | "description"
+  | "price"
+  | "image_url"
+  | "is_available"
+  | "display_order"
+  | "allergens"
+>
+
+export function toMenuItem(row: CustomerMenuItemRow): MenuItem {
   return {
     id: row.id,
     name: row.name,
@@ -18,7 +31,6 @@ export function toMenuItem(row: MenuItemRow): MenuItem {
     price: Number(row.price),
     imageUrl: row.image_url,
     allergens: row.allergens ?? [],
-    prepTimeMinutes: row.prep_time_minutes,
     categoryId: row.category_id,
     displayOrder: row.display_order,
   }
@@ -31,7 +43,7 @@ export function toMenuItem(row: MenuItemRow): MenuItem {
  */
 export function mapMenu(
   categoryRows: MenuCategoryRow[],
-  itemRows: MenuItemRow[],
+  itemRows: CustomerMenuItemRow[],
 ): MenuCategory[] {
   const categories = categoryRows
     .filter((row) => row.is_active)
@@ -77,7 +89,7 @@ export async function fetchMenu(restaurantId: string): Promise<MenuCategory[]> {
     client
       .from("menu_items")
       .select(
-        "id, restaurant_id, category_id, name, description, price, image_url, is_available, display_order, prep_time_minutes, allergens, created_at, updated_at",
+        "id, restaurant_id, category_id, name, description, price, image_url, is_available, display_order, allergens, created_at, updated_at",
       )
       .eq("restaurant_id", restaurantId)
       .eq("is_available", true)

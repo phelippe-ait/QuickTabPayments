@@ -53,6 +53,7 @@ describe("toMenuItemVM", () => {
       price: 4.7,
       imageUrl: "https://example.test/flat-white.webp",
       isAvailable: true,
+      prepTimeMinutes: 10,
       displayOrder: 3,
     })
   })

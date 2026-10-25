@@ -51,10 +51,6 @@ export function readLastOrder(source: QrSource): PlacedOrder | null {
         typeof row.tableNumber === "string" ? row.tableNumber : "",
       customerName:
         typeof row.customerName === "string" ? row.customerName : "",
-      pickupTimeEstimate:
-        typeof row.pickupTimeEstimate === "string"
-          ? row.pickupTimeEstimate
-          : null,
       createdAt:
         typeof row.createdAt === "string" ? row.createdAt : "",
       paymentMethod: isSimulatedPaymentMethod(row.paymentMethod)

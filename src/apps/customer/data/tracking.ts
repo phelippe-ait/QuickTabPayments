@@ -17,7 +17,6 @@ export type TrackingOrder = {
   total: number
   currency: string
   createdAt: string
-  pickupTimeEstimate: string | null
   tableNumber: string | null
   restaurantName: string
   items: TrackingOrderItem[]
@@ -63,10 +62,6 @@ export function mapTracking(raw: unknown): TrackingOrder | null {
     total: num(row.total),
     currency: typeof row.currency === "string" ? row.currency : "AUD",
     createdAt: typeof row.created_at === "string" ? row.created_at : "",
-    pickupTimeEstimate:
-      typeof row.pickup_time_estimate === "string"
-        ? row.pickup_time_estimate
-        : null,
     tableNumber:
       typeof row.table_number === "string" ? row.table_number : null,
     restaurantName:

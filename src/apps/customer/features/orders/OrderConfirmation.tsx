@@ -27,16 +27,6 @@ function statusBadgeVariant(status: OrderStatus): BadgeProps["variant"] {
   return tone === "primary" ? "default" : tone
 }
 
-function formatEta(value: string | null): string | null {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date)
-}
-
 export function OrderConfirmation({
   order,
   isLoggedIn,
@@ -72,7 +62,6 @@ export function OrderConfirmation({
     )
   }
 
-  const eta = formatEta(order.pickupTimeEstimate)
   const trackHref = trackingUrl(order.orderNumber, order.trackingToken)
   const paymentLabel = order.paymentMethod
     ? simulatedPaymentLabels[order.paymentMethod]
@@ -148,12 +137,6 @@ export function OrderConfirmation({
                 <dd>{formatMoney(order.total, order.currency)}</dd>
               </div>
             </dl>
-
-            {eta && (
-              <p className="mt-4 rounded-lg bg-cream-2 p-3 text-center text-[12px] text-ink-mid">
-                Estimated ready around <strong>{eta}</strong>.
-              </p>
-            )}
 
             {paymentLabel && (
               <div className="mt-3 rounded-lg bg-sage-soft p-3 text-center text-[12px] text-sage-strong">

@@ -18,7 +18,6 @@ export type MenuItem = {
   /** Optional CSS background position retained for seeded demo imagery. */
   imagePosition?: string;
   allergens: string[];
-  prepTimeMinutes: number;
   categoryId: string;
   displayOrder: number;
 };

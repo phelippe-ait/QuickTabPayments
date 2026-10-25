@@ -17,6 +17,7 @@ const item: MenuItemVM = {
   price: 4.7,
   imageUrl: null,
   isAvailable: true,
+  prepTimeMinutes: 10,
   displayOrder: 0,
 }
 
@@ -92,6 +93,9 @@ describe("ItemModal", () => {
     fireEvent.change(screen.getByLabelText(/price/i), {
       target: { value: "5.80" },
     })
+    fireEvent.change(screen.getByLabelText(/prep time/i), {
+      target: { value: "6" },
+    })
     fireEvent.change(screen.getByLabelText(/description/i), {
       target: { value: "Whisked to order" },
     })
@@ -106,9 +110,40 @@ describe("ItemModal", () => {
         price: 5.8,
         imageUrl: null,
         isAvailable: true,
+        prepTimeMinutes: 6,
       }),
     )
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it("rejects an invalid prep time", () => {
+    const onCreate = vi.fn(async () => true)
+    render(
+      <ItemModal
+        item={null}
+        categories={categories}
+        restaurantId="restaurant-1"
+        onClose={vi.fn()}
+        onCreate={onCreate}
+        onUpdate={vi.fn(async () => true)}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/item name/i), {
+      target: { value: "Matcha" },
+    })
+    fireEvent.change(screen.getByLabelText(/price/i), {
+      target: { value: "5.80" },
+    })
+    fireEvent.change(screen.getByLabelText(/prep time/i), {
+      target: { value: "-1" },
+    })
+    submitForm()
+
+    expect(
+      screen.getByText(/prep time must be a whole number/i),
+    ).toBeInTheDocument()
+    expect(onCreate).not.toHaveBeenCalled()
   })
 })
 

@@ -147,17 +147,6 @@ export function OrderTrackingScreen() {
     }
   }, [user, order?.orderId, refresh])
 
-  const eta = order?.pickupTimeEstimate
-    ? new Date(order.pickupTimeEstimate)
-    : null
-  const etaLabel =
-    eta && !Number.isNaN(eta.getTime())
-      ? new Intl.DateTimeFormat(undefined, {
-          hour: "numeric",
-          minute: "2-digit",
-        }).format(eta)
-      : null
-
   const currentIndex = order
     ? STEPS.findIndex((step) => step.status === order.status)
     : -1
@@ -256,11 +245,6 @@ export function OrderTrackingScreen() {
                 {order.tableNumber && (
                   <p className="text-[12px] text-ink-mid">
                     Table {order.tableNumber}
-                  </p>
-                )}
-                {etaLabel && order.status !== "completed" && order.status !== "cancelled" && (
-                  <p className="text-[12px] text-ink-mid">
-                    Estimated ready around <strong>{etaLabel}</strong>
                   </p>
                 )}
               </CardHeader>

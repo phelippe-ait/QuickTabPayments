@@ -28,6 +28,7 @@ export type NewMenuItemInput = {
   price: number
   imageUrl: string | null
   isAvailable: boolean
+  prepTimeMinutes: number
 }
 
 type UseMenuOptions = {
@@ -132,6 +133,7 @@ export function useMenu(
             price: input.price,
             image_url: input.imageUrl,
             is_available: input.isAvailable,
+            prep_time_minutes: input.prepTimeMinutes,
             display_order: nextItemOrder,
           }),
       }),

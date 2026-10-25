@@ -21,7 +21,6 @@ export type PlacedOrder = {
   restaurantName: string
   tableNumber: string
   customerName: string
-  pickupTimeEstimate: string | null
   createdAt: string
   items: PlacedOrderItem[]
   /** Client-only simulation metadata; not written to the database. */
@@ -126,10 +125,6 @@ export function mapPlacedOrder(raw: unknown): PlacedOrder | null {
     tableNumber: typeof row.table_number === "string" ? row.table_number : "",
     customerName:
       typeof row.customer_name === "string" ? row.customer_name : "",
-    pickupTimeEstimate:
-      typeof row.pickup_time_estimate === "string"
-        ? row.pickup_time_estimate
-        : null,
     createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     items,
   }

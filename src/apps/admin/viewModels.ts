@@ -18,6 +18,7 @@ export type MenuItemVM = {
   price: number;
   imageUrl: string | null;
   isAvailable: boolean;
+  prepTimeMinutes: number;
   displayOrder: number;
 };
 

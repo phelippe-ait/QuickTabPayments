@@ -167,6 +167,9 @@ only as a documented development fallback.
   restaurant + table. A refresh or same-tab Google OAuth redirect keeps the cart.
 - The customer menu is loaded live from `menu_categories` / `menu_items`; admin
   edits, price changes, availability, and Storage images appear after reload.
+- Admin → Catalog can edit each item's **prep time (minutes)**. Customers do
+  not see per-item prep estimates or the order ETA; the value remains stored
+  server-side for future operational use.
 - Checkout collects a name and optional notes, then offers four **simulated**
   payment methods: Credit/Debit Card, Apple Pay, Google Pay, and Link. Selecting
   one runs a short fake authorization and then places the order. No Stripe SDK,

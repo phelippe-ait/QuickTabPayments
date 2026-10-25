@@ -93,9 +93,9 @@ describe("mapMenu", () => {
       price: 4.7,
       imageUrl: null,
       allergens: ["milk"],
-      prepTimeMinutes: 4,
       categoryId: "a",
     })
+    expect(menu[0].items[0]).not.toHaveProperty("prepTimeMinutes")
   })
 
   it("exposes every available item id for cart reconciliation", () => {
