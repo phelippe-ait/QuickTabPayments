@@ -4,7 +4,7 @@ import styles from "../../App.module.css"
 import { AdminModal } from "../../components/AdminModal"
 import { buttonVariants } from "@shared/ui/Button"
 import { useAuth } from "@shared/auth/AuthContext"
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { restaurantKeys } from "@shared/data/restaurants"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 

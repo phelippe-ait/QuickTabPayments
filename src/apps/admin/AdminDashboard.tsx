@@ -1,13 +1,13 @@
 import { useState } from "react"
 import { Outlet } from "react-router"
 import { useAuth } from "@shared/auth/AuthContext"
+import { RestaurantProvider } from "@shared/restaurant/RestaurantProvider"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import {
   getInitials,
   getProfileName,
-  RestaurantProvider,
   roleLabels,
-  useRestaurant,
-} from "@shared/restaurant/RestaurantProvider"
+} from "@shared/restaurant/restaurantHelpers"
 import { AdminErrorBoundary } from "./components/AdminErrorBoundary"
 import { AdminShell } from "./components/layout/AdminShell"
 import { RequireStaff } from "./features/auth/AdminGate"

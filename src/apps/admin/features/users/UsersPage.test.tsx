@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   addByEmail: vi.fn(async () => true),
 }))
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({
     restaurant: { id: "restaurant-1", name: "Test Café" },
     role: mocks.viewerRole,

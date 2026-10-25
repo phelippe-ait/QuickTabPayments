@@ -22,7 +22,7 @@ vi.mock("@shared/auth/AuthContext", () => ({
   }),
 }))
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({ restaurant: { id: "restaurant-1" } }),
 }))
 

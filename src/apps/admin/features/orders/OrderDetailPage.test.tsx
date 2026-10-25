@@ -56,7 +56,7 @@ const mocks = vi.hoisted(() => ({
   createRefund: vi.fn(async () => true),
 }))
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({
     restaurant: {
       id: "restaurant-1",

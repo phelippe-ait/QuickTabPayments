@@ -1,5 +1,5 @@
 import { Navigate } from "react-router"
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 
 /**
  * `/admin` has no page of its own: owners/managers land on the catalog, kitchen

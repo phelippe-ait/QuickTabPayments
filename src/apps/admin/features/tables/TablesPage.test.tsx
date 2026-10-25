@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   error: null as Error | null,
 }))
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({
     restaurant: {
       id: "restaurant-1",

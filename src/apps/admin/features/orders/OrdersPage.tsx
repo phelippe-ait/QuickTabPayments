@@ -5,7 +5,7 @@ import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
 import { Button } from "@shared/ui/Button"
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
 import { endOfDayInZone, startOfDayInZone } from "@shared/lib/time"
 import {

@@ -1,35 +1,12 @@
-/* eslint-disable react-refresh/only-export-components -- provider + hook share a file */
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@shared/auth/AuthContext";
 import {
   fetchPrimaryMembership,
   restaurantKeys,
-  type Membership,
 } from "@shared/data/restaurants";
-import type { Profile, StaffRole } from "@shared/lib/database.types";
-
-export const roleLabels: Record<StaffRole, string> = {
-  owner: "Owner",
-  manager: "Manager",
-  kitchen: "Kitchen",
-};
-
-type RestaurantContextValue = {
-  membership: Membership | null;
-  restaurant: Membership["restaurant"] | null;
-  role: StaffRole | null;
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => void;
-};
-
-const RestaurantContext = createContext<RestaurantContextValue | null>(null);
+import { RestaurantContext } from "./RestaurantContext";
+import type { RestaurantContextValue } from "./RestaurantContext";
 
 /**
  * Loads the signed-in user's active restaurant. Mount inside `AuthProvider`.
@@ -64,32 +41,4 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
       {children}
     </RestaurantContext.Provider>
   );
-}
-
-export function useRestaurant(): RestaurantContextValue {
-  const value = useContext(RestaurantContext);
-  if (!value) {
-    throw new Error("useRestaurant must be used inside RestaurantProvider");
-  }
-  return value;
-}
-
-export function getProfileName(profile: Profile | null, email?: string | null) {
-  if (profile) {
-    const name = [profile.first_name, profile.last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    if (name) return name;
-  }
-  return email?.split("@")[0] ?? "Account";
-}
-
-export function getInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }

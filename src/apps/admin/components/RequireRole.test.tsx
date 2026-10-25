@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   role: null as "owner" | "manager" | "kitchen" | null,
 }));
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({ role: mocks.role }),
   roleLabels: { owner: "Owner", manager: "Manager", kitchen: "Kitchen" },
 }));

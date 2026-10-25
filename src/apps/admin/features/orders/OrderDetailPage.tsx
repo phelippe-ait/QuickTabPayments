@@ -6,7 +6,7 @@ import { StatusPill } from "@shared/ui/StatusPill"
 import { Button, buttonVariants } from "@shared/ui/Button"
 import { EmptyState, PageHeader } from "../../components/AdminUi"
 import { useAuth } from "@shared/auth/AuthContext"
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
 import {
   ORDER_STATUSES,

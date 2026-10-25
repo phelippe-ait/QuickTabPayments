@@ -1,44 +1,73 @@
-import { useEffect, useState, type FormEvent } from "react"
-import styles from "../../App.module.css"
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider"
-import { Button } from "@shared/ui/Button"
-import { EmptyState, PageHeader } from "../../components/AdminUi"
-import { useAdminUi } from "../../hooks/AdminUiProvider"
-import { useRestaurantSettings } from "../../hooks/useRestaurantSettings"
-import { IMAGE_ACCEPT, validateImageFile, type RestaurantAssetKind } from "@shared/lib/storage"
-import { percentToTaxRate, taxRateToPercent } from "./settings.utils"
+import { useEffect, useState, type FormEvent } from "react";
+import styles from "../../App.module.css";
+import { useRestaurant } from "@shared/restaurant/useRestaurant";
+import { Button } from "@shared/ui/Button";
+import { EmptyState, PageHeader } from "../../components/AdminUi";
+import { useAdminUi } from "../../hooks/AdminUiProvider";
+import { useRestaurantSettings } from "../../hooks/useRestaurantSettings";
+import {
+  IMAGE_ACCEPT,
+  validateImageFile,
+  type RestaurantAssetKind,
+} from "@shared/lib/storage";
+import { percentToTaxRate, taxRateToPercent } from "./settings.utils";
 
-const currencies = ["AUD", "NZD", "USD", "GBP", "EUR", "CAD", "SGD", "JPY"]
+const currencies = [
+  "AUD",
+  "NZD",
+  "USD",
+  "GBP",
+  "EUR",
+  "CAD",
+  "SGD",
+  "JPY",
+  "CNY",
+  "INR",
+  "BRL",
+  "MXN",
+  "ZAR",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "HKD",
+  "KRW",
+  "MYR",
+  "THB",
+  "IDR",
+  "PHP",
+  "VND",
+];
 
 type SettingsForm = {
-  name: string
-  slug: string
-  description: string
-  address: string
-  phone: string
-  email: string
-  currency: string
-  timezone: string
-  taxPercent: string
-}
+  name: string;
+  slug: string;
+  description: string;
+  address: string;
+  phone: string;
+  email: string;
+  currency: string;
+  timezone: string;
+  taxPercent: string;
+};
 
 export function SettingsPage() {
-  const { restaurant, role } = useRestaurant()
-  const { notify } = useAdminUi()
-  const restaurantId = restaurant?.id ?? ""
+  const { restaurant, role } = useRestaurant();
+  const { notify } = useAdminUi();
+  const restaurantId = restaurant?.id ?? "";
   const settings = useRestaurantSettings(restaurantId, {
     onSaved: notify,
     onError: notify,
-  })
-  const source = settings.restaurant ?? restaurant
-  const isOwner = role === "owner"
+  });
+  const source = settings.restaurant ?? restaurant;
+  const isOwner = role === "owner";
 
-  const [form, setForm] = useState<SettingsForm | null>(null)
-  const [brandingError, setBrandingError] = useState("")
-  const [taxError, setTaxError] = useState("")
+  const [form, setForm] = useState<SettingsForm | null>(null);
+  const [brandingError, setBrandingError] = useState("");
+  const [taxError, setTaxError] = useState("");
 
   useEffect(() => {
-    if (!source) return
+    if (!source) return;
     setForm({
       name: source.name,
       slug: source.slug,
@@ -49,8 +78,8 @@ export function SettingsPage() {
       currency: source.currency,
       timezone: source.timezone,
       taxPercent: taxRateToPercent(source.tax_rate),
-    })
-  }, [source])
+    });
+  }, [source]);
 
   if (settings.error) {
     return (
@@ -70,7 +99,7 @@ export function SettingsPage() {
           </Button>
         </div>
       </>
-    )
+    );
   }
 
   if (!source || !form) {
@@ -85,35 +114,37 @@ export function SettingsPage() {
           Loading restaurant settings…
         </div>
       </>
-    )
+    );
   }
 
   const update = (patch: Partial<SettingsForm>) =>
-    setForm((current) => (current ? { ...current, ...patch } : current))
+    setForm((current) => (current ? { ...current, ...patch } : current));
 
   const handleUpload = (kind: RestaurantAssetKind, file: File | undefined) => {
-    if (!file) return
+    if (!file) return;
     try {
-      validateImageFile(file)
+      validateImageFile(file);
     } catch (error) {
-      setBrandingError(error instanceof Error ? error.message : "Choose another image.")
-      return
+      setBrandingError(
+        error instanceof Error ? error.message : "Choose another image.",
+      );
+      return;
     }
-    setBrandingError("")
-    settings.uploadBranding(kind, file)
-  }
+    setBrandingError("");
+    settings.uploadBranding(kind, file);
+  };
 
   const submit = (event: FormEvent) => {
-    event.preventDefault()
-    setTaxError("")
+    event.preventDefault();
+    setTaxError("");
 
-    const taxRate = percentToTaxRate(form.taxPercent)
+    const taxRate = percentToTaxRate(form.taxPercent);
     if (Number.isNaN(taxRate) || taxRate < 0 || taxRate > 1) {
-      setTaxError("Enter a tax rate between 0 and 100.")
-      return
+      setTaxError("Enter a tax rate between 0 and 100.");
+      return;
     }
 
-    if (!form.name.trim()) return
+    if (!form.name.trim()) return;
 
     settings.save({
       name: form.name.trim(),
@@ -127,8 +158,8 @@ export function SettingsPage() {
       ...(isOwner && form.slug.trim() !== source.slug
         ? { slug: form.slug.trim() }
         : {}),
-    })
-  }
+    });
+  };
 
   return (
     <>
@@ -165,7 +196,10 @@ export function SettingsPage() {
                 disabled={!isOwner}
                 aria-describedby="settings-slug-hint"
               />
-              <small className="mt-1.5 block text-[10px] font-normal text-muted" id="settings-slug-hint">
+              <small
+                className="mt-1.5 block text-[10px] font-normal text-muted"
+                id="settings-slug-hint"
+              >
                 {isOwner
                   ? "Changing this breaks QR links printed with the old address."
                   : "Only the restaurant owner can change the web address."}
@@ -175,7 +209,9 @@ export function SettingsPage() {
               Description
               <textarea
                 value={form.description}
-                onChange={(event) => update({ description: event.target.value })}
+                onChange={(event) =>
+                  update({ description: event.target.value })
+                }
                 placeholder="A short description of your café"
               />
             </label>
@@ -246,12 +282,15 @@ export function SettingsPage() {
                 aria-invalid={Boolean(taxError)}
                 aria-describedby={taxError ? "settings-tax-error" : undefined}
                 onChange={(event) => {
-                  update({ taxPercent: event.target.value })
-                  setTaxError("")
+                  update({ taxPercent: event.target.value });
+                  setTaxError("");
                 }}
               />
               {taxError && (
-                <small className={styles["field-error"]} id="settings-tax-error">
+                <small
+                  className={styles["field-error"]}
+                  id="settings-tax-error"
+                >
                   {taxError}
                 </small>
               )}
@@ -310,7 +349,7 @@ export function SettingsPage() {
         </div>
       </form>
     </>
-  )
+  );
 }
 
 function BrandingField({
@@ -322,13 +361,13 @@ function BrandingField({
   disabled,
   onFile,
 }: {
-  label: string
-  description: string
-  imageUrl: string | null
-  alt: string
-  accept: string
-  disabled: boolean
-  onFile: (file: File | undefined) => void
+  label: string;
+  description: string;
+  imageUrl: string | null;
+  alt: string;
+  accept: string;
+  disabled: boolean;
+  onFile: (file: File | undefined) => void;
 }) {
   return (
     <div className="rounded-[10px] border border-line bg-white p-4">
@@ -360,14 +399,14 @@ function BrandingField({
               accept={accept}
               disabled={disabled}
               onChange={(event) => {
-                const file = event.target.files?.[0]
-                event.target.value = ""
-                onFile(file)
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                onFile(file);
               }}
             />
           </label>
         </div>
       </div>
     </div>
-  )
+  );
 }

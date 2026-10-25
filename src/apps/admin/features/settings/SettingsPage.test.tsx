@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@shared/restaurant/RestaurantProvider", () => ({
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => ({
     restaurant: mocks.restaurant,
     role: mocks.role,

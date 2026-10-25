@@ -40,7 +40,13 @@ vi.mock("@shared/auth/AuthContext", () => ({
 
 vi.mock("@shared/restaurant/RestaurantProvider", () => ({
   RestaurantProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock("@shared/restaurant/useRestaurant", () => ({
   useRestaurant: () => mocks.restaurant,
+}));
+
+vi.mock("@shared/restaurant/restaurantHelpers", () => ({
   roleLabels: { owner: "Owner", manager: "Manager", kitchen: "Kitchen" },
   getProfileName: () => "Test Manager",
   getInitials: () => "TM",

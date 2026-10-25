@@ -48,18 +48,20 @@ export function AdminShell({ sections, restaurantName, userName, userRole, userI
         <span /><span /><span />
       </button>
       {mobileNavOpen && <button type="button" className={styles["nav-scrim"]} onClick={onCloseMobileNav} aria-label="Close navigation" />}
-      <aside id="admin-sidebar" className={mobileNavOpen ? styles["open"] : ""}>
-        <div className={styles["brand"]}><span><Icon name="coffee" size={25} /></span><div><strong>{restaurantName}</strong><small>Admin workspace</small></div></div>
-        <nav aria-label="Admin sections">
+      <aside id="admin-sidebar" className={`${styles["sidebar"]} ${mobileNavOpen ? styles["open"] : ""}`}>
+        <div className={styles["brand"]}><span><Icon name="coffee" size={23} /></span><div><strong>{restaurantName}</strong><small>Admin workspace</small></div></div>
+        <nav className={styles["sidebar-nav"]} aria-label="Admin sections">
           <p>Workspace</p>
           {sections.map((item) => (
             <NavLink
               key={item}
               to={`/admin/${item}`}
-              className={({ isActive }) => isActive ? styles["active"] : ""}
+              className={({ isActive }) => `${styles["nav-link"]} ${isActive ? styles["active"] : ""}`}
               onClick={onCloseMobileNav}
             >
-              <Icon name={sectionIcons[item]} />{sectionLabels[item]}
+              <Icon name={sectionIcons[item]} />
+              <span>{sectionLabels[item]}</span>
+              <i aria-hidden="true" />
             </NavLink>
           ))}
         </nav>

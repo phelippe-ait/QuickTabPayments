@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@shared/auth/AuthContext";
-import { useRestaurant } from "@shared/restaurant/RestaurantProvider";
+import { useRestaurant } from "@shared/restaurant/useRestaurant";
 import { claimRestaurantInvite, fetchMyRestaurantInvite, inviteKeys, type RestaurantInvite } from "@shared/data/invites";
 import {
   isSupabaseConfigured,

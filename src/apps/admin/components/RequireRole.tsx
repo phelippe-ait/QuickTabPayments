@@ -1,10 +1,8 @@
 import type { ReactNode } from "react"
 import { Link } from "react-router"
 import { useAuth } from "@shared/auth/AuthContext"
-import {
-  roleLabels,
-  useRestaurant,
-} from "@shared/restaurant/RestaurantProvider"
+import { roleLabels } from "@shared/restaurant/restaurantHelpers"
+import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import type { StaffRole } from "@shared/lib/database.types"
 import { Button, buttonVariants } from "@shared/ui/Button"
 
