@@ -44,3 +44,11 @@ dist-ssr
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Submission-only files: include them in the folder/zip you hand over, but do
+# not publish them in the public GitHub repository.
+/DEMO_CREDENTIALS.md
+/supabase/data.sql
+/supabase/auth_data.sql
+/supabase/public_data.sql
+/supabase/*.dump
