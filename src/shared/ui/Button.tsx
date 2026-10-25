@@ -23,10 +23,10 @@ const sizes: Record<ButtonSize, string> = {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "border-0 bg-berry text-white shadow-[0_7px_16px_rgba(200,77,100,0.18)] hover:bg-berry-strong hover:-translate-y-px",
+    "border-0 bg-berry-deep text-white shadow-[0_7px_16px_rgba(163,55,76,0.22)] hover:bg-berry-dark hover:-translate-y-px",
   secondary: "border border-line bg-white text-ink-mid hover:border-placeholder",
-  outline: "border border-berry bg-transparent text-berry hover:bg-berry-soft",
-  danger: "border-0 bg-berry text-white hover:bg-berry-strong",
+  outline: "border border-berry-deep bg-transparent text-berry-deep hover:bg-berry-soft",
+  danger: "border-0 bg-berry-deep text-white hover:bg-berry-dark",
   ghost: "border-0 bg-transparent text-ink-mid hover:bg-cream",
 };
 

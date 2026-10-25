@@ -32,6 +32,12 @@ describe("Button", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it("uses the higher-contrast berry background for filled variants", () => {
+    expect(buttonVariants({ variant: "primary" })).toContain("bg-berry-deep");
+    expect(buttonVariants({ variant: "danger" })).toContain("bg-berry-deep");
+    expect(buttonVariants({ variant: "primary" })).toContain("hover:bg-berry-dark");
+  });
+
   it("buttonVariants is shared with Button", () => {
     render(<Button variant="primary">Both</Button>);
     const classes = buttonVariants({ variant: "primary" });

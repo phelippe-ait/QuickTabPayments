@@ -160,7 +160,7 @@ async function loadTables(restaurantId: string) {
       const loadOrders = async () => {
         const { data, error } = await client
           .from("orders")
-          .select("id, restaurant_id, table_id, customer_id, order_number, status, subtotal, tax, total, notes, pickup_time_estimate, created_at, updated_at, completed_at")
+          .select("id, restaurant_id, table_id, customer_id, customer_name_snapshot, order_number, status, subtotal, tax, total, notes, pickup_time_estimate, created_at, updated_at, completed_at")
           .eq("restaurant_id", restaurant.id)
           .order("created_at", { ascending: false })
           .limit(100)

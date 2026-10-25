@@ -24,6 +24,8 @@
   /* Brand — berry */
   --color-berry: #c84d64;
   --color-berry-strong: #b84057;
+  --color-berry-deep: #a3374c;
+  --color-berry-dark: #8f2f42;
   --color-berry-soft: #f6e5e8;
   --color-berry-alt: #ba4f60;
 
@@ -95,22 +97,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/*
+ * Keep element resets inside Tailwind's base layer. Unlayered rules beat
+ * layered utilities, which previously forced every button to `color: inherit`
+ * and made white text on filled buttons render grey.
+ */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+    color: inherit;
+  }
 }
 
 input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   font-size: 16px !important;
-}
-
-button {
-  cursor: pointer;
-  color: inherit;
 }
 
 button:focus-visible,

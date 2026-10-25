@@ -3,6 +3,7 @@ import styles from "../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
 import type { Confirmation } from "../types"
+import { AdminModal } from "./AdminModal"
 
 export function SelectionBar({ count, children, onClear }: { count: number; children: ReactNode; onClear: () => void }) {
   return (
@@ -26,26 +27,32 @@ export function EmptyState({ title, description }: { title: string; description:
 
 export function ConfirmDialog({ confirmation, onClose }: { confirmation: Confirmation; onClose: () => void }) {
   return (
-    <div className={`${styles["modal-backdrop"]} ${styles["confirmation-backdrop"]}`} onMouseDown={onClose}>
-      <section className={`${styles["modal"]} ${styles["confirmation-modal"]}`} role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" onMouseDown={(event) => event.stopPropagation()}>
-        <p className={`${styles["modal-kicker"]}`}>Please confirm</p>
-        <h2 id="confirmation-title">{confirmation.title}</h2>
-        <p className={`${styles["modal-description"]}`}>{confirmation.description}</p>
-        <div className={`${styles["modal-actions"]}`}>
-          <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className={buttonVariants({ variant: "danger" })}
-            onClick={() => {
-              confirmation.onConfirm()
-              onClose()
-            }}
-          >
-            {confirmation.actionLabel}
-          </button>
-        </div>
-      </section>
-    </div>
+    <AdminModal
+      labelledBy="confirmation-title"
+      describedBy="confirmation-description"
+      role="alertdialog"
+      onClose={onClose}
+      panelClassName={styles["confirmation-modal"]}
+      backdropClassName={styles["confirmation-backdrop"]}
+      showClose={false}
+    >
+      <p className={`${styles["modal-kicker"]}`}>Please confirm</p>
+      <h2 id="confirmation-title">{confirmation.title}</h2>
+      <p className={`${styles["modal-description"]}`} id="confirmation-description">{confirmation.description}</p>
+      <div className={`${styles["modal-actions"]}`}>
+        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button>
+        <button
+          type="button"
+          className={buttonVariants({ variant: "danger" })}
+          onClick={() => {
+            confirmation.onConfirm()
+            onClose()
+          }}
+        >
+          {confirmation.actionLabel}
+        </button>
+      </div>
+    </AdminModal>
   )
 }
 export function PageHeader({ eyebrow, title, description, action, onAction }: { eyebrow: string; title: string; description: string; action?: string; onAction?: () => void }) {

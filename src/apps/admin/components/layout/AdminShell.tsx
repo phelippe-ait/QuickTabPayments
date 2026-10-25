@@ -1,34 +1,80 @@
 import type { ReactNode } from "react"
+import { NavLink } from "react-router"
 import styles from "../../App.module.css"
-import { Icon } from "@shared/ui/Icon"
+import { Icon, type IconName } from "@shared/ui/Icon"
 import type { Section } from "../../types"
 
 type AdminShellProps = {
-  section: Section
+  sections: Section[]
+  restaurantName: string
+  userName: string
+  userRole: string
+  userInitials: string
+  onOpenProfile: () => void
+  onSignOut: () => void
   mobileNavOpen: boolean
-  onNavigate: (section: Section) => void
   onToggleMobileNav: () => void
   onCloseMobileNav: () => void
   children: ReactNode
 }
 
-export function AdminShell({ section, mobileNavOpen, onNavigate, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
+const sectionLabels: Record<Section, string> = {
+  catalog: "Catalog",
+  tables: "Tables",
+  users: "Users",
+  orders: "Order history",
+  settings: "Settings",
+}
+
+const sectionIcons: Record<Section, IconName> = {
+  catalog: "catalog",
+  tables: "tables",
+  users: "users",
+  orders: "orders",
+  settings: "settings",
+}
+
+export function AdminShell({ sections, restaurantName, userName, userRole, userInitials, onOpenProfile, onSignOut, mobileNavOpen, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
   return (
     <div className={styles["app-shell"]}>
-      <button className={styles["mobile-menu"]} onClick={onToggleMobileNav} aria-label="Open navigation"><span /><span /><span /></button>
-      {mobileNavOpen && <button className={styles["nav-scrim"]} onClick={onCloseMobileNav} aria-label="Close navigation" />}
-      <aside className={mobileNavOpen ? styles["open"] : ""}>
-        <div className={styles["brand"]}><span><Icon name="coffee" size={25} /></span><div><strong>Café Shop</strong><small>Admin workspace</small></div></div>
-        <nav>
+      <button
+        type="button"
+        className={styles["mobile-menu"]}
+        onClick={onToggleMobileNav}
+        aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+        aria-expanded={mobileNavOpen}
+        aria-controls="admin-sidebar"
+      >
+        <span /><span /><span />
+      </button>
+      {mobileNavOpen && <button type="button" className={styles["nav-scrim"]} onClick={onCloseMobileNav} aria-label="Close navigation" />}
+      <aside id="admin-sidebar" className={mobileNavOpen ? styles["open"] : ""}>
+        <div className={styles["brand"]}><span><Icon name="coffee" size={25} /></span><div><strong>{restaurantName}</strong><small>Admin workspace</small></div></div>
+        <nav aria-label="Admin sections">
           <p>Workspace</p>
-          <button className={section === "catalog" ? styles["active"] : ""} onClick={() => onNavigate("catalog")}><Icon name="catalog" />Catalog</button>
-          <button className={section === "tables" ? styles["active"] : ""} onClick={() => onNavigate("tables")}><Icon name="tables" />Tables</button>
-          <button className={section === "users" ? styles["active"] : ""} onClick={() => onNavigate("users")}><Icon name="users" />Users</button>
-          <button className={section === "orders" ? styles["active"] : ""} onClick={() => onNavigate("orders")}><Icon name="orders" />Order history</button>
+          {sections.map((item) => (
+            <NavLink
+              key={item}
+              to={`/admin/${item}`}
+              className={({ isActive }) => isActive ? styles["active"] : ""}
+              onClick={onCloseMobileNav}
+            >
+              <Icon name={sectionIcons[item]} />{sectionLabels[item]}
+            </NavLink>
+          ))}
         </nav>
         <div className={styles["sidebar-footer"]}>
-          <div className={styles["admin-profile"]}><span>MJ</span><div><strong>Maya Johnson</strong><small>Manager</small></div><Icon name="chevron" size={15} /></div>
-          <button><Icon name="logout" />Sign out</button>
+          <button
+            type="button"
+            className={styles["admin-profile"]}
+            onClick={onOpenProfile}
+            aria-haspopup="dialog"
+            aria-label={`Profile settings for ${userName}`}
+            title="Profile settings"
+          >
+            <span>{userInitials}</span><div><strong>{userName}</strong><small>{userRole}</small></div><Icon name="chevron" size={15} />
+          </button>
+          <button type="button" onClick={onSignOut}><Icon name="logout" />Sign out</button>
         </div>
       </aside>
       <main>

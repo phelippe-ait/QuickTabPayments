@@ -1,29 +1,163 @@
 import { type FormEvent, useState } from "react"
 import styles from "../../App.module.css"
-import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
-import type { User } from "../../types"
+import { AdminModal } from "../../components/AdminModal"
+import { roleLabels } from "@shared/restaurant/RestaurantProvider"
+import type { StaffRole } from "@shared/lib/database.types"
+import type { StaffVM } from "../../viewModels"
+import { assignableRoles, staffPermissions } from "./staff.utils"
 
-export function UserModal({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (user: User) => void }) {
-  const [form, setForm] = useState<User>(() => user ?? { id: Date.now(), name: "", email: "", role: "Staff", status: "Active", initials: "" })
-  const submit = (event: FormEvent) => {
+type UserModalProps = {
+  mode: { kind: "edit"; member: StaffVM } | { kind: "add" }
+  viewerRole: StaffRole
+  viewerUserId: string
+  activeOwnerCount: number
+  onClose: () => void
+  onSaveRole: (staffId: string, role: StaffRole) => Promise<boolean>
+  onSetActive: (staffId: string, isActive: boolean) => Promise<boolean>
+  onAdd: (email: string, role: StaffRole) => Promise<boolean>
+}
+
+export function UserModal({
+  mode,
+  viewerRole,
+  viewerUserId,
+  activeOwnerCount,
+  onClose,
+  onSaveRole,
+  onSetActive,
+  onAdd,
+}: UserModalProps) {
+  const editing = mode.kind === "edit"
+  const member = editing ? mode.member : null
+  const permissions = member
+    ? staffPermissions({
+        viewerRole,
+        viewerUserId,
+        member,
+        activeOwnerCount,
+      })
+    : null
+  const roleChoices = (
+    editing ? assignableRoles(viewerRole) : assignableRoles(viewerRole).filter((role) => role !== "owner")
+  ) as StaffRole[]
+
+  const [role, setRole] = useState<StaffRole>(member?.role ?? "manager")
+  const [isActive, setIsActive] = useState(member?.isActive ?? true)
+  const [email, setEmail] = useState("")
+  const [pending, setPending] = useState(false)
+  const [formError, setFormError] = useState("")
+
+  const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const initials = form.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()
-    onSave({ ...form, initials })
+    setFormError("")
+    setPending(true)
+
+    if (editing && member) {
+      let ok = true
+      if (role !== member.role) {
+        ok = await onSaveRole(member.staffId, role)
+      }
+      if (ok && isActive !== member.isActive) {
+        ok = await onSetActive(member.staffId, isActive)
+      }
+      setPending(false)
+      if (ok) onClose()
+      return
+    }
+
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setFormError("Enter the email they signed up with.")
+      setPending(false)
+      return
+    }
+
+    const ok = await onAdd(trimmed, role)
+    setPending(false)
+    if (ok) onClose()
   }
+
   return (
-    <div className={`${styles["modal-backdrop"]}`} onMouseDown={onClose}>
-      <form className={`${styles["modal"]} ${styles["small-modal"]}`} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className={`${styles["modal-close"]}`} onClick={onClose} aria-label="Close"><Icon name="close" /></button>
-        <p className={`${styles["modal-kicker"]}`}>Team access</p><h2>{user ? "Edit user" : "Add a new user"}</h2><p className={`${styles["modal-description"]}`}>Create an account and choose its access level.</p>
-        <div className={`${styles["form-grid"]}`}>
-          <label className={`${styles["wide"]}`}>Full name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Full name" /></label>
-          <label className={`${styles["wide"]}`}>Email address<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@cafeshop.co" /></label>
-          <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option>Staff</option><option>Manager</option><option>Admin</option></select></label>
-          <label>Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as User["status"] })}><option>Active</option><option>Inactive</option></select></label>
+    <AdminModal labelledBy="user-modal-title" describedBy="user-modal-description" onClose={onClose} panelClassName={styles["small-modal"]}>
+      <form onSubmit={submit}>
+        <p className={`${styles["modal-kicker"]}`}>Team access</p>
+        <h2 id="user-modal-title">{editing ? `Manage ${member?.name}` : "Add a team member"}</h2>
+        <p className={`${styles["modal-description"]}`} id="user-modal-description">
+          {editing
+            ? "Roles control what this person can see in the admin app."
+            : "They must sign up to QuickTab first — this links their existing account."}
+        </p>
+
+        {editing && member && permissions ? (
+          <div className={`${styles["form-grid"]}`}>
+            <label className={`${styles["wide"]}`}>
+              Name
+              <input value={member.name} readOnly disabled />
+            </label>
+            <label className={`${styles["wide"]}`}>
+              Email
+              <input value={member.email} readOnly disabled />
+            </label>
+            <label>
+              Role
+              <select
+                value={role}
+                disabled={!permissions.canChangeRole || pending}
+                onChange={(event) => setRole(event.target.value as StaffRole)}
+              >
+                {roleChoices.map((choice) => (
+                  <option key={choice} value={choice}>{roleLabels[choice]}</option>
+                ))}
+              </select>
+            </label>
+            <label className={`${styles["switch-row"]}`}>
+              <span><strong>Active</strong><small>Inactive members lose access.</small></span>
+              <input
+                type="checkbox"
+                checked={isActive}
+                disabled={!permissions.canToggleActive || pending}
+                onChange={(event) => setIsActive(event.target.checked)}
+              />
+            </label>
+            {permissions.lockedReason && (
+              <p className="text-[11px] text-muted" role="note">{permissions.lockedReason}</p>
+            )}
+          </div>
+        ) : (
+          <div className={`${styles["form-grid"]}`}>
+            <label className={`${styles["wide"]}`}>
+              Email address
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@example.com"
+              />
+              <small className="mt-1.5 block text-[10px] font-normal text-muted">
+                They must have signed up to QuickTab already.
+              </small>
+            </label>
+            <label className={`${styles["wide"]}`}>
+              Role
+              <select value={role} onChange={(event) => setRole(event.target.value as StaffRole)}>
+                {roleChoices.map((choice) => (
+                  <option key={choice} value={choice}>{roleLabels[choice]}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {formError && <p className="mt-3 text-[12px] text-danger" role="alert">{formError}</p>}
+        <div className={`${styles["modal-actions"]}`}>
+          <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button>
+          <button className={buttonVariants({ variant: "primary" })} type="submit" disabled={pending}>
+            {pending ? "Saving…" : editing ? "Save changes" : "Add team member"}
+          </button>
         </div>
-        <div className={`${styles["modal-actions"]}`}><button type="button" className={buttonVariants({ variant: "secondary" })} onClick={onClose}>Cancel</button><button className={buttonVariants({ variant: "primary" })} type="submit">{user ? "Save changes" : "Add user"}</button></div>
       </form>
-    </div>
+    </AdminModal>
   )
 }
