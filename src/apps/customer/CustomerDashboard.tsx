@@ -11,12 +11,15 @@ import { OrderConfirmation } from "./features/orders/OrderConfirmation"
 import { OrdersScreen } from "./features/orders/OrdersScreen"
 import { AuthScreen } from "./features/auth/AuthScreen"
 import type { Product, Screen } from "./types"
+import { createOrder, type CreatedOrder } from "./data/orders"
 
 export default function App() {
   const { user, profile } = useAuth()
   const [screen, setScreen] = useState<Screen>("menu")
   const [selected, setSelected] = useState<Product | null>(null)
   const [customerName, setCustomerName] = useState("")
+  const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null)
+  const [checkoutError, setCheckoutError] = useState("")
   const [authReturnScreen, setAuthReturnScreen] = useState<"menu" | "confirmation">("menu")
   const cart = useCart()
 
@@ -70,23 +73,38 @@ export default function App() {
         total={cart.total}
         defaultName={profileName}
         onClose={() => setScreen("cart")}
-        onPay={(name) => {
-          setCustomerName(name)
-          setScreen("confirmation")
+        error={checkoutError}
+        onPay={async (name) => {
+          setCheckoutError("")
+          try {
+            const order = await createOrder({
+              customerName: name,
+              customerId: user?.id ?? null,
+              items: cart.items,
+              total: cart.total,
+            })
+            setCustomerName(name)
+            setCreatedOrder(order)
+            setScreen("confirmation")
+          } catch (error) {
+            setCheckoutError(error instanceof Error ? error.message : "Could not save your order.")
+          }
         }}
       />}
       {screen === "confirmation" && <OrderConfirmation
         customerName={customerName}
+        orderNumber={createdOrder?.orderNumber ?? ""}
         isLoggedIn={Boolean(user)}
         onLogin={() => openAuth("login", "confirmation")}
         onSignup={() => openAuth("signup", "confirmation")}
         onClose={() => {
           cart.clear()
           setCustomerName("")
+          setCreatedOrder(null)
           menu()
         }}
       />}
-      {screen === "orders" && <OrdersScreen onClose={menu} />}
+      {screen === "orders" && user && <OrdersScreen customerId={user.id} onClose={menu} />}
       {(screen === "login" || screen === "signup") && <AuthScreen kind={screen} onBack={closeAuth} onContinue={closeAuth} />}
       <footer className={styles["technology-footer"]}>Developed by QuickTab Payments Team</footer>
       {selected && <ProductModal

@@ -6,6 +6,7 @@ import { KitchenWorkspace } from "./features/kitchen/KitchenWorkspace"
 import { HistoryOrderDrawer, OrderHistory } from "./features/orders/OrderHistory"
 import { ReservationWorkspace } from "./features/reservations/ReservationWorkspace"
 import type { Order, Table, TableStatus, View } from "./types"
+import { useAuth } from "@shared/auth/AuthContext"
 
 export default function App() {
   const [view, setView] = useState<View>("tables")
@@ -15,16 +16,26 @@ export default function App() {
   const [query, setQuery] = useState("")
   const workspace = useStaffWorkspace()
 
+  const { user, profile } = useAuth()
+
+const userName =
+  [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ") ||
+  user?.user_metadata?.full_name ||
+  user?.email?.split("@")[0] ||
+  "Staff member"
+
   const filteredTables = useMemo(
     () => workspace.tableList.filter((table) => filter === "all" || table.status === filter),
     [filter, workspace.tableList],
   )
   const filteredOrders = useMemo(() => {
     const term = query.toLowerCase()
-    return workspace.orders.filter((order) =>
+    return workspace.historyOrders.filter((order) =>
       [order.id, order.table, order.guest, order.status].some((value) => value.toLowerCase().includes(term)),
     )
-  }, [workspace.orders, query])
+  }, [workspace.historyOrders, query])
   const occupied = workspace.tableList.filter((table) => table.status === "occupied").length
 
   const saveTable = (table: Table) => {
@@ -33,8 +44,9 @@ export default function App() {
   }
 
   return (
-    <StaffShell view={view} onViewChange={setView}>
+    <StaffShell view={view} onViewChange={setView} userName={userName}>
       {view === "tables" && <TablesWorkspace
+        userName={userName}
         tableList={workspace.tableList}
         filteredTables={filteredTables}
         occupied={occupied}
@@ -44,13 +56,17 @@ export default function App() {
         onSelectTable={setSelectedTable}
       />}
       {view === "kitchen" && <KitchenWorkspace
-        orders={workspace.activeKitchenOrders}
-        previousOrders={workspace.previousKitchenOrders}
-        onStatusChange={workspace.updateKitchenStatus}
-      />}
+  orders={workspace.activeKitchenOrders}
+  previousOrders={workspace.previousKitchenOrders}
+  onStatusChange={workspace.updateKitchenStatus}
+  ordersLoading={workspace.ordersLoading}
+  ordersError={workspace.ordersError}
+/>}
       {view === "history" && <OrderHistory
         filteredOrders={filteredOrders}
-        totalOrders={workspace.orders.length}
+        totalOrders={workspace.historyOrders.length}
+        isLoading={workspace.historyLoading}
+        error={workspace.historyError}
         query={query}
         setQuery={setQuery}
         onSelect={setSelectedOrder}
