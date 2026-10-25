@@ -15,9 +15,21 @@ dist-ssr
 # Environment variables (keep .env.example committed)
 .env
 
-# Local agent/skill tooling (not part of the app)
-.agents/
-skills-lock.json
+# AI / agent tooling and working docs (not part of the app)
+/.agents/
+/skills-lock.json
+/docs/
+/AGENTS.md
+/CLAUDE.md
+/.claude/
+/.cursor/
+/.cursorrules
+/.windsurf/
+/.opencode/
+/opencode.json
+/.mcp.json
+/.aider*
+/.continue/
 
 # Editor directories and files
 .vscode/*
