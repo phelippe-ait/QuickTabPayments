@@ -285,19 +285,26 @@ rollback;
 -- ---------------------------------------------------------------------
 -- M8 / Phase 5 — guest placement + tracking (0015)
 -- ---------------------------------------------------------------------
--- Placeholders:
---   <restaurant-slug>          demo restaurant slug (quicktab-demo-cafe)
---   <active-table-token>       tables.qr_token for an ACTIVE table
---   <inactive-table-token>     tables.qr_token for a DEACTIVATED table
---   <menu-item-uuid>           an available item of <restaurant-slug>
---   <other-restaurant-item>    an available item of a DIFFERENT restaurant
+-- Fully self-contained: NO placeholders to substitute. Each check runs in
+-- its own transaction and ROLLS BACK, creating throwaway fixtures as
+-- needed (tables with 'rls-test-*' qr_tokens, a 'rls-test-other'
+-- restaurant with fixed 'fa11…' uuids). Nothing is written permanently.
 --
--- Helper query:
--- select r.slug, t.table_number, t.qr_token, t.is_active
---   from public.tables t join public.restaurants r on r.id = t.restaurant_id
---  where r.slug = 'quicktab-demo-cafe' order by t.table_number;
+-- Requirements: migration 0015 applied; seed data present (at least one
+-- active restaurant with one available menu item, and one profile row to
+-- own the throwaway fixture restaurant).
+--
+-- Run top to bottom in the SQL Editor and confirm:
+--   (t)  all five grant columns are true
+--   (u)  NOTICE  phase5 place_order ok (token=…, total=…)
+--   (v)  NOTICE  phase5 inactive table rejected ok
+--   (w)  NOTICE  phase5 cross-restaurant item rejected ok
+--   (x)  NOTICE  phase5 empty cart rejected ok
+--   (y)  NOTICE  phase5 resolve_qr_context table_inactive ok
+--   (z)  NOTICE  phase5 resolve_qr_context table_not_found ok
+--   (aa) visible_orders = 0
 
--- (t) Function grants. Expected: anon true, authenticated true for both.
+-- (t) Function grants. Expected: all five columns true.
 select
   has_function_privilege(
     'anon', 'public.place_order(text,text,text,text,jsonb)', 'execute'
@@ -310,12 +317,23 @@ select
   ) as anon_can_track,
   has_function_privilege(
     'authenticated', 'public.get_order_tracking(text)', 'execute'
-  ) as authenticated_can_track;
+  ) as authenticated_can_track,
+  has_function_privilege(
+    'anon', 'public.resolve_qr_context(text,text)', 'execute'
+  ) as anon_can_resolve_qr;
 
--- (u) Guest place_order + tracking happy path. All assertions run inside one
--- rollback transaction, so no demo data is changed. Expected: NOTICE
--- "phase5 place_order ok" and anon order count 0.
+-- (u) Guest place_order + tracking happy path, tampered price ignored.
+-- Rolls back; no order survives.
 begin;
+
+-- Fixture: an active table with a known qr_token on the first active restaurant.
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+select id, 'RLS-TEST-ACT', 'rls-test-active-token', 'RLS fixture', true
+  from public.restaurants
+ where is_active
+ order by created_at
+ limit 1;
+
 select set_config(
   'request.jwt.claims',
   json_build_object('role', 'anon')::text,
@@ -325,25 +343,45 @@ set local role anon;
 
 do $$
 declare
+  v_restaurant_id  uuid;
+  v_slug           text;
+  v_item_id        uuid;
   v_expected_price numeric;
   v_placed         jsonb;
   v_tracked        jsonb;
   v_token          text;
   v_items          int;
 begin
-  select price into v_expected_price
-  from public.menu_items
-  where id = '<menu-item-uuid>' and is_available;
+  select r.id, r.slug
+    into v_restaurant_id, v_slug
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+  if v_slug is null then
+    raise exception 'no active restaurant found; run seed.sql first';
+  end if;
+
+  select m.id, m.price
+    into v_item_id, v_expected_price
+    from public.menu_items m
+   where m.restaurant_id = v_restaurant_id
+     and m.is_available
+   order by m.created_at
+   limit 1;
+  if v_item_id is null then
+    raise exception 'no available menu item for %; seed a menu first', v_slug;
+  end if;
 
   -- A tampered client price in the payload must be ignored.
   v_placed := public.place_order(
-    '<restaurant-slug>',
-    '<active-table-token>',
+    v_slug,
+    'rls-test-active-token',
     'RLS Phase 5 Guest',
     'Window seat please',
     jsonb_build_array(
       jsonb_build_object(
-        'menu_item_id', '<menu-item-uuid>',
+        'menu_item_id', v_item_id,
         'quantity', 2,
         'unit_price', 0.01
       )
@@ -398,46 +436,134 @@ end $$;
 rollback;
 
 -- (v) Guest cannot place an order with a deactivated table.
--- Expected: ERROR P0001 table_not_found (the whole call rolls back).
+-- Expected: NOTICE phase5 inactive table rejected ok (place_order raises
+-- table_not_found and nothing is written).
 begin;
+
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+select id, 'RLS-TEST-INACT', 'rls-test-inactive-token', 'RLS fixture', false
+  from public.restaurants
+ where is_active
+ order by created_at
+ limit 1;
+
 select set_config(
   'request.jwt.claims',
   json_build_object('role', 'anon')::text,
   true
 );
 set local role anon;
-select public.place_order(
-  '<restaurant-slug>',
-  '<inactive-table-token>',
-  'RLS Deactivated Table',
-  null,
-  jsonb_build_array(
-    jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
-  )
-);
+
+do $$
+declare
+  v_slug    text;
+  v_item_id uuid;
+  v_placed  jsonb;
+begin
+  select r.slug
+    into v_slug
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+
+  select m.id
+    into v_item_id
+    from public.menu_items m
+   where m.restaurant_id = (select id from public.restaurants where slug = v_slug)
+     and m.is_available
+   order by m.created_at
+   limit 1;
+
+  begin
+    v_placed := public.place_order(
+      v_slug,
+      'rls-test-inactive-token',
+      'RLS Deactivated Table',
+      null,
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)
+      )
+    );
+    raise exception 'expected table_not_found, but order % was placed',
+      v_placed->>'order_number';
+  exception when sqlstate 'P0001' then
+    if position('table_not_found' in sqlerrm) = 0 then
+      raise;
+    end if;
+    raise notice 'phase5 inactive table rejected ok';
+  end;
+end $$;
 rollback;
 
 -- (w) Cross-restaurant menu items are rejected and nothing is written.
--- Expected: ERROR P0001 menu_item_unavailable.
+-- Expected: NOTICE phase5 cross-restaurant item rejected ok.
 begin;
+
+-- Fixtures: a throwaway second restaurant owning one menu item.
+insert into public.restaurants (id, owner_id, slug, name, is_active)
+select 'fa110000-0000-4000-8000-000000000001', p.id, 'rls-test-other', 'RLS Other Restaurant', true
+  from public.profiles p
+ limit 1;
+
+insert into public.menu_categories (id, restaurant_id, name)
+values ('fa110000-0000-4000-8000-000000000002', 'fa110000-0000-4000-8000-000000000001', 'RLS Test');
+
+insert into public.menu_items (id, restaurant_id, category_id, name, price)
+values ('fa110000-0000-4000-8000-000000000003', 'fa110000-0000-4000-8000-000000000001', 'fa110000-0000-4000-8000-000000000002', 'RLS Test Item', 9.90);
+
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+select id, 'RLS-TEST-ACT', 'rls-test-active-token', 'RLS fixture', true
+  from public.restaurants
+ where is_active and slug <> 'rls-test-other'
+ order by created_at
+ limit 1;
+
 select set_config(
   'request.jwt.claims',
   json_build_object('role', 'anon')::text,
   true
 );
 set local role anon;
-select public.place_order(
-  '<restaurant-slug>',
-  '<active-table-token>',
-  'RLS Cross Restaurant',
-  null,
-  jsonb_build_array(
-    jsonb_build_object('menu_item_id', '<other-restaurant-item>', 'quantity', 1)
-  )
-);
+
+do $$
+declare
+  v_slug   text;
+  v_placed jsonb;
+begin
+  select r.slug
+    into v_slug
+    from public.restaurants r
+   where r.is_active and r.slug <> 'rls-test-other'
+   order by r.created_at
+   limit 1;
+
+  begin
+    v_placed := public.place_order(
+      v_slug,
+      'rls-test-active-token',
+      'RLS Cross Restaurant',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', 'fa110000-0000-4000-8000-000000000003',
+          'quantity', 1
+        )
+      )
+    );
+    raise exception 'expected menu_item_unavailable, but order % was placed',
+      v_placed->>'order_number';
+  exception when sqlstate 'P0001' then
+    if position('menu_item_unavailable' in sqlerrm) = 0 then
+      raise;
+    end if;
+    raise notice 'phase5 cross-restaurant item rejected ok';
+  end;
+end $$;
 rollback;
 
--- (x) An empty cart is rejected. Expected: ERROR P0001 empty_cart.
+-- (x) An empty cart is rejected before anything else is looked at.
+-- Expected: NOTICE phase5 empty cart rejected ok.
 begin;
 select set_config(
   'request.jwt.claims',
@@ -445,33 +571,101 @@ select set_config(
   true
 );
 set local role anon;
-select public.place_order(
-  '<restaurant-slug>', '<active-table-token>', 'RLS Empty Cart', null, '[]'::jsonb
-);
+
+do $$
+declare
+  v_placed jsonb;
+begin
+  begin
+    v_placed := public.place_order(
+      'any-slug', 'any-token', 'RLS Empty Cart', null, '[]'::jsonb
+    );
+    raise exception 'expected empty_cart, but order % was placed',
+      v_placed->>'order_number';
+  exception when sqlstate 'P0001' then
+    if position('empty_cart' in sqlerrm) = 0 then
+      raise;
+    end if;
+    raise notice 'phase5 empty cart rejected ok';
+  end;
+end $$;
 rollback;
 
 -- (y) resolve_qr_context distinguishes a deactivated table.
--- Expected: {"error": "table_inactive"}.
+-- Expected: NOTICE phase5 resolve_qr_context table_inactive ok.
 begin;
+
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+select id, 'RLS-TEST-INACT', 'rls-test-inactive-token', 'RLS fixture', false
+  from public.restaurants
+ where is_active
+ order by created_at
+ limit 1;
+
 select set_config(
   'request.jwt.claims',
   json_build_object('role', 'anon')::text,
   true
 );
 set local role anon;
-select public.resolve_qr_context('<restaurant-slug>', '<inactive-table-token>');
+
+do $$
+declare
+  v_slug text;
+  v_out  jsonb;
+begin
+  select r.slug
+    into v_slug
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+
+  v_out := public.resolve_qr_context(v_slug, 'rls-test-inactive-token');
+  if v_out->>'error' is distinct from 'table_inactive' then
+    raise exception 'expected table_inactive, got %', v_out;
+  end if;
+  raise notice 'phase5 resolve_qr_context table_inactive ok';
+end $$;
 rollback;
 
 -- (z) A wrong-restaurant table token is rejected by the resolver.
--- Expected: {"error": "table_not_found"}.
+-- Expected: NOTICE phase5 resolve_qr_context table_not_found ok.
 begin;
+
+insert into public.restaurants (id, owner_id, slug, name, is_active)
+select 'fa110000-0000-4000-8000-000000000001', p.id, 'rls-test-other', 'RLS Other Restaurant', true
+  from public.profiles p
+ limit 1;
+
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+values ('fa110000-0000-4000-8000-000000000001', 'RLS-TEST-OTHER', 'rls-test-other-token', 'RLS fixture', true);
+
 select set_config(
   'request.jwt.claims',
   json_build_object('role', 'anon')::text,
   true
 );
 set local role anon;
-select public.resolve_qr_context('<restaurant-slug>', '<other-restaurant-table-token>');
+
+do $$
+declare
+  v_slug text;
+  v_out  jsonb;
+begin
+  select r.slug
+    into v_slug
+    from public.restaurants r
+   where r.is_active and r.slug <> 'rls-test-other'
+   order by r.created_at
+   limit 1;
+
+  v_out := public.resolve_qr_context(v_slug, 'rls-test-other-token');
+  if v_out->>'error' is distinct from 'table_not_found' then
+    raise exception 'expected table_not_found, got %', v_out;
+  end if;
+  raise notice 'phase5 resolve_qr_context table_not_found ok';
+end $$;
 rollback;
 
 -- (aa) Orders RLS is unchanged: anon still cannot select arbitrary rows.
@@ -485,4 +679,3 @@ select set_config(
 set local role anon;
 select count(*) as visible_orders from public.orders;
 rollback;
-
