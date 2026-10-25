@@ -20,6 +20,7 @@ import type { OrderStatus } from "@shared/lib/database.types"
 import { HeaderButton } from "../../components/CustomerUi"
 import { trackingUrl } from "../../data/tracking"
 import type { PlacedOrder } from "../../data/placeOrder"
+import { simulatedPaymentLabels } from "../../types"
 
 function statusBadgeVariant(status: OrderStatus): BadgeProps["variant"] {
   const tone = orderStatusTones[status]
@@ -73,6 +74,9 @@ export function OrderConfirmation({
 
   const eta = formatEta(order.pickupTimeEstimate)
   const trackHref = trackingUrl(order.orderNumber, order.trackingToken)
+  const paymentLabel = order.paymentMethod
+    ? simulatedPaymentLabels[order.paymentMethod]
+    : null
 
   return (
     <main className={`${styles["page-screen"]} ${styles["confirmation"]}`}>
@@ -147,14 +151,18 @@ export function OrderConfirmation({
 
             {eta && (
               <p className="mt-4 rounded-lg bg-cream-2 p-3 text-center text-[12px] text-ink-mid">
-                Estimated ready around <strong>{eta}</strong>. Pay at the counter
-                when you collect.
+                Estimated ready around <strong>{eta}</strong>.
               </p>
             )}
 
-            <p className="mt-3 text-center text-[11px] text-muted">
-              Payment is collected at the counter in this phase.
-            </p>
+            {paymentLabel && (
+              <div className="mt-3 rounded-lg bg-sage-soft p-3 text-center text-[12px] text-sage-strong">
+                <strong>Paid with {paymentLabel}</strong>
+                <span className="mt-0.5 block text-[10px] font-normal">
+                  Test mode — no money moved.
+                </span>
+              </div>
+            )}
 
             <div className="mt-5 flex flex-col gap-2">
               <Link

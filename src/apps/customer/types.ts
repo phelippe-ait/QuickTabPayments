@@ -60,6 +60,35 @@ export type QrErrorCode =
   | "table_inactive"
   | "unknown";
 
+/**
+ * Payment methods offered at checkout. They are simulated in Phase 5; the
+ * Stripe integration in Phase 6 will use the same identifiers.
+ */
+export const simulatedPaymentMethods = [
+  "card",
+  "apple_pay",
+  "google_pay",
+  "link",
+] as const;
+
+export type SimulatedPaymentMethod = (typeof simulatedPaymentMethods)[number];
+
+export const simulatedPaymentLabels: Record<SimulatedPaymentMethod, string> = {
+  card: "Credit / Debit Card",
+  apple_pay: "Apple Pay",
+  google_pay: "Google Pay",
+  link: "Link",
+};
+
+export function isSimulatedPaymentMethod(
+  value: unknown,
+): value is SimulatedPaymentMethod {
+  return (
+    typeof value === "string" &&
+    (simulatedPaymentMethods as readonly string[]).includes(value)
+  );
+}
+
 export function qrErrorMessage(code: QrErrorCode): string {
   switch (code) {
     case "missing_params":

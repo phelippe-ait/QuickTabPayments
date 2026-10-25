@@ -1,6 +1,6 @@
 import { requireSupabase } from "@shared/data/client"
 import type { OrderStatus } from "@shared/lib/database.types"
-import type { CartItem } from "../types"
+import type { CartItem, SimulatedPaymentMethod } from "../types"
 
 export type PlacedOrderItem = {
   name: string
@@ -24,6 +24,8 @@ export type PlacedOrder = {
   pickupTimeEstimate: string | null
   createdAt: string
   items: PlacedOrderItem[]
+  /** Client-only simulation metadata; not written to the database. */
+  paymentMethod?: SimulatedPaymentMethod
 }
 
 export type PlaceOrderErrorCode =

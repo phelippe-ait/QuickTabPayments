@@ -23,6 +23,7 @@ const order: PlacedOrder = {
   customerName: "Olivia",
   pickupTimeEstimate: "2026-10-25T02:10:00Z",
   createdAt: "2026-10-25T02:00:00Z",
+  paymentMethod: "google_pay",
   items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
 }
 
@@ -52,5 +53,14 @@ describe("last order persistence", () => {
   it("ignores malformed storage", () => {
     window.sessionStorage.setItem(lastOrderStorageKey(source), "{bad")
     expect(readLastOrder(source)).toBeNull()
+  })
+
+  it("drops an unknown payment method but keeps the order", () => {
+    window.sessionStorage.setItem(
+      lastOrderStorageKey(source),
+      JSON.stringify({ ...order, paymentMethod: "crypto" }),
+    )
+    expect(readLastOrder(source)?.paymentMethod).toBeUndefined()
+    expect(readLastOrder(source)?.orderNumber).toBe(order.orderNumber)
   })
 })

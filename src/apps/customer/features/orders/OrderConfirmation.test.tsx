@@ -18,6 +18,7 @@ const order: PlacedOrder = {
   customerName: "Olivia",
   pickupTimeEstimate: "2026-10-25T02:10:00Z",
   createdAt: "2026-10-25T02:00:00Z",
+  paymentMethod: "apple_pay",
   items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
 }
 
@@ -43,6 +44,7 @@ describe("OrderConfirmation", () => {
     expect(screen.getByText("Table T05")).toBeInTheDocument()
     expect(screen.getByText(/Flat White/)).toBeInTheDocument()
     expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
+    expect(screen.getByText("Paid with Apple Pay")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Track order" })).toHaveAttribute(
       "href",
       "/order/QT-261025-0001?token=token-1",

@@ -1,3 +1,4 @@
+import { isSimulatedPaymentMethod } from "../types"
 import type { PlacedOrder } from "./placeOrder"
 import type { QrSource } from "./qrContext"
 
@@ -56,6 +57,9 @@ export function readLastOrder(source: QrSource): PlacedOrder | null {
           : null,
       createdAt:
         typeof row.createdAt === "string" ? row.createdAt : "",
+      paymentMethod: isSimulatedPaymentMethod(row.paymentMethod)
+        ? row.paymentMethod
+        : undefined,
       items: Array.isArray(row.items)
         ? row.items.flatMap((entry) => {
             if (!entry || typeof entry !== "object") return []

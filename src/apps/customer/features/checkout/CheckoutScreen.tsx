@@ -4,17 +4,23 @@ import { Button } from "@shared/ui/Button";
 import { Icon } from "@shared/ui/Icon";
 import { formatMoney, roundMoney, splitInclusiveTax } from "@shared/lib/money";
 import { HeaderButton } from "../../components/CustomerUi";
-import type { CartItem } from "../../types";
+import { simulatePayment } from "../../data/simulatedPayment";
+import {
+  simulatedPaymentLabels,
+  type CartItem,
+  type SimulatedPaymentMethod,
+} from "../../types";
 
 export type PlaceOrderInput = {
   customerName: string;
   notes: string;
+  paymentMethod: SimulatedPaymentMethod;
 };
 
 /**
- * Phase 5 order placement. Payment is intentionally absent: this screen only
- * collects the customer's name/notes and shows GST-inclusive totals. Phase 6
- * (Stripe) will add a payment step before submitOrder().
+ * Checkout with simulated payment methods. Selecting a method runs a short
+ * fake authorization and then places the order through the existing RPC.
+ * Phase 6 replaces `simulatePayment` with Stripe; no payment data is stored.
  */
 export function CheckoutScreen({
   items,
@@ -39,7 +45,8 @@ export function CheckoutScreen({
 }) {
   const [customerName, setCustomerName] = useState(defaultName);
   const [notes, setNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingMethod, setProcessingMethod] =
+    useState<SimulatedPaymentMethod | null>(null);
   const hasCustomerName = customerName.trim().length > 0;
 
   const total = useMemo(
@@ -48,20 +55,25 @@ export function CheckoutScreen({
   );
   const { subtotal, tax } = splitInclusiveTax(total, taxRate);
   const taxPercent = Math.round(taxRate * 100);
-  const canSubmit = hasCustomerName && canCheckout && !isSubmitting;
+  const canPay = hasCustomerName && canCheckout && !processingMethod;
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!canSubmit) return;
-    setIsSubmitting(true);
+  const pay = async (method: SimulatedPaymentMethod) => {
+    if (!canPay) return;
+    setProcessingMethod(method);
     try {
+      await simulatePayment(method);
       await onPlaceOrder({
         customerName: customerName.trim(),
         notes: notes.trim(),
+        paymentMethod: method,
       });
     } finally {
-      setIsSubmitting(false);
+      setProcessingMethod(null);
     }
+  };
+
+  const preventSubmit = (event: FormEvent) => {
+    event.preventDefault();
   };
 
   return (
@@ -77,7 +89,7 @@ export function CheckoutScreen({
         <span>Ordering for</span> <strong>Table {tableNumber}</strong>
       </p>
 
-      <form onSubmit={submit}>
+      <form onSubmit={preventSubmit}>
         <label className={`${styles["checkout-field"]}`}>
           <span>Name for the order</span>
           <input
@@ -143,21 +155,73 @@ export function CheckoutScreen({
           </p>
         )}
 
-        <div className="mb-5 flex items-start gap-2 rounded-lg bg-cream-2 p-3 text-[11px] leading-relaxed text-ink-mid">
-          <Icon name="card" size={16} />
-          <span>
-            No payment is taken online yet. Pay at the counter when you collect
-            your order.
-          </span>
-        </div>
+        <section
+          className={`${styles["express-checkout"]}`}
+          aria-labelledby="payment-method-title"
+        >
+          <h2 id="payment-method-title">Choose how you&apos;d like to pay</h2>
+          <p className={styles["payment-test-note"]}>
+            <Icon name="card" size={15} />
+            <span>
+              Test mode — payment is simulated. No money moves and no card
+              details are required.
+            </span>
+          </p>
+          <div className={`${styles["express-options"]}`}>
+            <button
+              type="button"
+              className={`${styles["express-button"]}`}
+              onClick={() => void pay("card")}
+              disabled={!canPay}
+            >
+              <Icon name="card" size={17} />
+              Credit / Debit Card
+            </button>
+            <button
+              type="button"
+              className={`${styles["express-button"]} ${styles["apple-pay"]}`}
+              onClick={() => void pay("apple_pay")}
+              disabled={!canPay}
+            >
+              <Icon name="apple" size={17} />
+              Apple Pay
+            </button>
+            <button
+              type="button"
+              className={`${styles["express-button"]} google-pay`}
+              onClick={() => void pay("google_pay")}
+              disabled={!canPay}
+            >
+              <Icon name="google" size={18} />
+              Google Pay
+            </button>
+            <button
+              type="button"
+              className={`${styles["express-button"]} ${styles["link-pay"]}`}
+              onClick={() => void pay("link")}
+              disabled={!canPay}
+            >
+              Link
+            </button>
+          </div>
+          <p
+            className={styles["payment-hint"]}
+            role="status"
+            aria-live="polite"
+          >
+            {processingMethod
+              ? `Processing ${simulatedPaymentLabels[processingMethod]}…`
+              : "Selecting a payment method will place your order."}
+          </p>
+        </section>
 
-        {/* Phase 6: payment step goes here (Stripe PaymentIntent) before submitOrder(). */}
         <div className={`${styles["form-actions"]}`}>
-          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={Boolean(processingMethod)}
+          >
             Back to cart
-          </Button>
-          <Button variant="primary" type="submit" disabled={!canSubmit}>
-            {isSubmitting ? "Placing order…" : "Place order"}
           </Button>
         </div>
       </form>

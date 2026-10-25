@@ -217,7 +217,10 @@
 .receipt-contact input::placeholder { color: var(--color-placeholder); }
 .express-checkout { margin-bottom: 20px; }
 .express-checkout h2 { margin: 2px 0 12px; color: var(--color-muted-2); font-size: 13px; }
-.express-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.payment-test-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--color-cream-2); color: var(--color-ink-mid); font-size: 10.5px; line-height: 1.5; }
+.payment-test-note svg { flex: 0 0 auto; margin-top: 1px; }
+.payment-hint { margin: 10px 0 0; color: var(--color-muted); font-size: 10px; text-align: center; }
+.express-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .express-button {
   height: 44px; border: 1px solid var(--color-line); border-radius: 7px; display: flex; align-items: center;
   justify-content: center; gap: 6px; background: white; color: #242224; font-size: 11px; font-weight: 600;

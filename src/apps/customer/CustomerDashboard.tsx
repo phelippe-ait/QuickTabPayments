@@ -169,7 +169,7 @@ function CustomerShell() {
             setScreen("cart")
           }}
           error={checkoutError}
-          onPlaceOrder={async ({ customerName, notes }) => {
+          onPlaceOrder={async ({ customerName, notes, paymentMethod }) => {
             setCheckoutError("")
             try {
               const order = await placeOrder({
@@ -179,9 +179,10 @@ function CustomerShell() {
                 notes,
                 items: cart.items,
               })
-              if (source) saveLastOrder(source, order)
+              const placedOrder: PlacedOrder = { ...order, paymentMethod }
+              if (source) saveLastOrder(source, placedOrder)
               cart.clear()
-              setCreatedOrder(order)
+              setCreatedOrder(placedOrder)
               setScreen("confirmation")
             } catch (error) {
               if (

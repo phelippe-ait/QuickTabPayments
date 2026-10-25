@@ -167,8 +167,10 @@ only as a documented development fallback.
   restaurant + table. A refresh or same-tab Google OAuth redirect keeps the cart.
 - The customer menu is loaded live from `menu_categories` / `menu_items`; admin
   edits, price changes, availability, and Storage images appear after reload.
-- Checkout is an **order placement** step, not payment. It collects a name and
-  optional notes. Payment is collected at the counter until Phase 6.
+- Checkout collects a name and optional notes, then offers four **simulated**
+  payment methods: Credit/Debit Card, Apple Pay, Google Pay, and Link. Selecting
+  one runs a short fake authorization and then places the order. No Stripe SDK,
+  network request, or `payments` row is involved; Stripe remains Phase 6.
 - `place_order(...)` is a `SECURITY DEFINER` RPC. It validates the restaurant,
   table and every menu item, recomputes all prices/tax/totals server-side, and
   inserts `orders` + `order_items` atomically. The client only sends menu item
