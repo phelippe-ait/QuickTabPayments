@@ -281,3 +281,208 @@ select set_config(
 set local role authenticated;
 select public.add_staff_by_email('<restaurant-uuid>', 'nobody@example.test', 'manager');
 rollback;
+
+-- ---------------------------------------------------------------------
+-- M8 / Phase 5 — guest placement + tracking (0015)
+-- ---------------------------------------------------------------------
+-- Placeholders:
+--   <restaurant-slug>          demo restaurant slug (quicktab-demo-cafe)
+--   <active-table-token>       tables.qr_token for an ACTIVE table
+--   <inactive-table-token>     tables.qr_token for a DEACTIVATED table
+--   <menu-item-uuid>           an available item of <restaurant-slug>
+--   <other-restaurant-item>    an available item of a DIFFERENT restaurant
+--
+-- Helper query:
+-- select r.slug, t.table_number, t.qr_token, t.is_active
+--   from public.tables t join public.restaurants r on r.id = t.restaurant_id
+--  where r.slug = 'quicktab-demo-cafe' order by t.table_number;
+
+-- (t) Function grants. Expected: anon true, authenticated true for both.
+select
+  has_function_privilege(
+    'anon', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+  ) as anon_can_place_order,
+  has_function_privilege(
+    'authenticated', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+  ) as authenticated_can_place_order,
+  has_function_privilege(
+    'anon', 'public.get_order_tracking(text)', 'execute'
+  ) as anon_can_track,
+  has_function_privilege(
+    'authenticated', 'public.get_order_tracking(text)', 'execute'
+  ) as authenticated_can_track;
+
+-- (u) Guest place_order + tracking happy path. All assertions run inside one
+-- rollback transaction, so no demo data is changed. Expected: NOTICE
+-- "phase5 place_order ok" and anon order count 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+
+do $$
+declare
+  v_expected_price numeric;
+  v_placed         jsonb;
+  v_tracked        jsonb;
+  v_token          text;
+  v_items          int;
+begin
+  select price into v_expected_price
+  from public.menu_items
+  where id = '<menu-item-uuid>' and is_available;
+
+  -- A tampered client price in the payload must be ignored.
+  v_placed := public.place_order(
+    '<restaurant-slug>',
+    '<active-table-token>',
+    'RLS Phase 5 Guest',
+    'Window seat please',
+    jsonb_build_array(
+      jsonb_build_object(
+        'menu_item_id', '<menu-item-uuid>',
+        'quantity', 2,
+        'unit_price', 0.01
+      )
+    )
+  );
+
+  if v_placed->>'status' <> 'confirmed' then
+    raise exception 'expected status confirmed, got %', v_placed->>'status';
+  end if;
+
+  if (v_placed->>'total')::numeric <> round(v_expected_price * 2, 2) then
+    raise exception 'server total % did not equal menu price x 2 %',
+      v_placed->>'total', round(v_expected_price * 2, 2);
+  end if;
+
+  if (v_placed->>'subtotal')::numeric + (v_placed->>'tax')::numeric
+     <> (v_placed->>'total')::numeric then
+    raise exception 'GST-inclusive split did not reconcile';
+  end if;
+
+  v_token := v_placed->>'tracking_token';
+  if v_token is null or length(v_token) = 0 then
+    raise exception 'place_order did not return a tracking token';
+  end if;
+
+  v_tracked := public.get_order_tracking(v_token);
+  if v_tracked is null then
+    raise exception 'get_order_tracking returned null for a valid token';
+  end if;
+
+  v_items := jsonb_array_length(v_tracked->'items');
+  if v_items <> 1 then
+    raise exception 'expected 1 tracking line item, got %', v_items;
+  end if;
+
+  if (v_tracked->>'total')::numeric <> (v_placed->>'total')::numeric then
+    raise exception 'tracking total did not match the placed total';
+  end if;
+
+  if public.get_order_tracking('definitely-not-a-token') is not null then
+    raise exception 'invalid tracking token must return null';
+  end if;
+
+  -- Anon must not be able to read orders directly.
+  if (select count(*) from public.orders) <> 0 then
+    raise exception 'anon could read orders rows';
+  end if;
+
+  raise notice 'phase5 place_order ok (token=%, total=%)',
+    left(v_token, 8) || '…', v_placed->>'total';
+end $$;
+rollback;
+
+-- (v) Guest cannot place an order with a deactivated table.
+-- Expected: ERROR P0001 table_not_found (the whole call rolls back).
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select public.place_order(
+  '<restaurant-slug>',
+  '<inactive-table-token>',
+  'RLS Deactivated Table',
+  null,
+  jsonb_build_array(
+    jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+  )
+);
+rollback;
+
+-- (w) Cross-restaurant menu items are rejected and nothing is written.
+-- Expected: ERROR P0001 menu_item_unavailable.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select public.place_order(
+  '<restaurant-slug>',
+  '<active-table-token>',
+  'RLS Cross Restaurant',
+  null,
+  jsonb_build_array(
+    jsonb_build_object('menu_item_id', '<other-restaurant-item>', 'quantity', 1)
+  )
+);
+rollback;
+
+-- (x) An empty cart is rejected. Expected: ERROR P0001 empty_cart.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select public.place_order(
+  '<restaurant-slug>', '<active-table-token>', 'RLS Empty Cart', null, '[]'::jsonb
+);
+rollback;
+
+-- (y) resolve_qr_context distinguishes a deactivated table.
+-- Expected: {"error": "table_inactive"}.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select public.resolve_qr_context('<restaurant-slug>', '<inactive-table-token>');
+rollback;
+
+-- (z) A wrong-restaurant table token is rejected by the resolver.
+-- Expected: {"error": "table_not_found"}.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select public.resolve_qr_context('<restaurant-slug>', '<other-restaurant-table-token>');
+rollback;
+
+-- (aa) Orders RLS is unchanged: anon still cannot select arbitrary rows.
+-- Expected: visible_orders = 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select count(*) as visible_orders from public.orders;
+rollback;
+

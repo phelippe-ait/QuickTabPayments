@@ -2,7 +2,7 @@
 
 QuickTab is a scan-to-order QR food pickup platform designed for cafés and takeaway restaurants.
 
-Customers scan a physical QR code and open the restaurant's menu directly in their browser. They can browse the menu, place an order, and pay without downloading a mobile application.
+Customers scan a physical QR code and open the restaurant's menu directly in their browser. They can browse the live menu, place an order at their table, and track its progress without downloading a mobile application. Online payment is intentionally deferred to Phase 6 (Stripe).
 
 QuickTab is designed as a tool for individual restaurants rather than a marketplace. Each restaurant can have its own website and table-level QR codes.
 
@@ -10,7 +10,7 @@ QuickTab is designed as a tool for individual restaurants rather than a marketpl
 
 - Provide a simple QR-based ordering experience.
 - Allow customers to browse a restaurant menu from their phone.
-- Support online ordering and secure payment processing.
+- Support table-based ordering and live order-status tracking.
 - Give individual restaurants their own ordering experience.
 - Reduce the friction of app downloads for customers.
 
@@ -24,12 +24,12 @@ QuickTab is designed as a tool for individual restaurants rather than a marketpl
 | Backend & Database | Supabase (PostgreSQL) |
 | Authentication | Supabase Auth |
 | Real-Time Communication | Supabase Realtime |
-| Payment Processing | Stripe |
+| Payment Processing | Stripe — **deferred to Phase 6; not installed** |
 | QR Code Generation | node-qrcode |
-| Component Library | shadcn/ui |
+| Component Library | shadcn/ui for net-new Phase 5+ components; hand-rolled `src/shared/ui` elsewhere |
 | Hosting & Deployment | Vercel |
 | Unit Testing | Vitest |
-| End-to-End Testing | Playwright |
+| End-to-End Testing | Not configured (planned) |
 
 ## Getting Started
 
@@ -81,8 +81,9 @@ The app serves three surfaces from the same build:
 
 | Route | App |
 | --- | --- |
-| `/` | Customer app (browse, order, pay) |
-| `/staff` | Staff dashboard |
+| `/` | Customer app (browse, order, track) |
+| `/order/:orderNumber?token=…` | Public guest order tracking |
+| `/staff` | Staff dashboard (unguarded until Phase 7) |
 | `/admin` | Admin dashboard |
 
 ## Available Scripts
@@ -116,6 +117,10 @@ Never put the `service_role`/secret key in a `VITE_` variable. `.env.local` is g
 Set `VITE_SUPABASE_URL` to the bare project origin (`https://<project-ref>.supabase.co`)
 — no trailing slash and no `/rest/v1` path, or the client will build invalid request URLs.
 
+Optional: `VITE_RESTAURANT_SLUG=quicktab-demo-cafe` is a development-only fallback
+used when the app is opened without `?r=&t=` QR params. Remove it to require a
+table QR scan.
+
 ### Authentication setup
 
 1. **Authentication → Providers → Email**: enable it. For local development you can
@@ -128,12 +133,66 @@ Set `VITE_SUPABASE_URL` to the bare project origin (`https://<project-ref>.supab
    a global `roles` lookup and `profiles.role`; `0012_drop_global_roles.sql`
    removes that unused layer. Authorization is per restaurant via
    `restaurant_staff.role` (`owner`, `manager`, `kitchen`).
-4. Social logins (optional): enable **Google** (and later Apple/Facebook) under
-   Providers. Each provider's OAuth redirect URI must be
-   `https://<project-ref>.supabase.co/auth/v1/callback`.
+4. Social logins (optional): enable **Google** under Providers. Its OAuth redirect
+   URI must be `https://<project-ref>.supabase.co/auth/v1/callback`. Apple and
+   Facebook are intentionally deferred; their buttons stay disabled.
 
-In the customer app the Google, Apple, and Facebook buttons are shown but disabled
-until those providers are configured; email is the live sign-in method.
+In the customer app **Google and email/password** are the supported sign-in
+methods. Apple and Facebook remain visible but disabled until configured.
+
+### QR scanning contract
+
+Every table QR code encodes:
+
+```text
+{origin}/?r={restaurant.slug}&t={table.qr_token}
+```
+
+On boot the customer app:
+
+1. parses `r` and `t` (`parseQrParams`);
+2. resolves them through the `resolve_qr_context` RPC (active restaurant +
+   active table, so a token from another restaurant is rejected);
+3. keeps the resolved restaurant/table in memory and session storage;
+4. removes `r`/`t` from the visible URL with `history.replaceState`.
+
+Missing or partial params, an unknown restaurant, a wrong-restaurant token, and
+a deactivated table each render a distinct error screen. Opening `/` with no QR
+params uses `VITE_RESTAURANT_SLUG` (plus that restaurant's first active table)
+only as a documented development fallback.
+
+### Order placement and guest tracking
+
+- Cart lines are keyed by `menu_item_id` and persisted in `sessionStorage` per
+  restaurant + table. A refresh or same-tab Google OAuth redirect keeps the cart.
+- The customer menu is loaded live from `menu_categories` / `menu_items`; admin
+  edits, price changes, availability, and Storage images appear after reload.
+- Checkout is an **order placement** step, not payment. It collects a name and
+  optional notes. Payment is collected at the counter until Phase 6.
+- `place_order(...)` is a `SECURITY DEFINER` RPC. It validates the restaurant,
+  table and every menu item, recomputes all prices/tax/totals server-side, and
+  inserts `orders` + `order_items` atomically. The client only sends menu item
+  ids and quantities.
+- Pricing is **GST-inclusive**: `total = Σ(price × qty)`,
+  `tax = round(total × rate / (1 + rate), 2)`, `subtotal = total − tax`.
+- Each order gets an opaque `orders.tracking_token`. The public tracking route
+  reads `get_order_tracking(token)` and never exposes arbitrary order rows.
+  Guests poll every ~7 seconds (Realtime is RLS-filtered for anon); signed-in
+  owners/staff also receive Realtime updates. Polling stops at
+  `completed`/`cancelled`.
+- Customer order history reads `order_items` and links to the same tracking page.
+
+### Database migrations and checks
+
+Migrations are applied manually in the Supabase SQL Editor, in order
+(`0001` … `0015_phase5_order_placement.sql`). `0015` adds `tracking_token`,
+`place_order`, `get_order_tracking`, and `resolve_qr_context`.
+
+`supabase/tests/rls_checks.sql` is a manual verification script: fill in the
+`<...>` placeholders from the helper queries at the top of each section, run it
+in the SQL Editor, and compare the printed results/comments. Phase 5 checks cover
+guest placement, tampered prices, cross-restaurant items, deactivated tables,
+guest tracking, and the unchanged `orders` select policy.
 
 ## Project Structure
 
@@ -145,7 +204,7 @@ QuickTabPayments/
 ├── public/                     # Static assets served as-is
 ├── src/
 │   ├── apps/
-│   │   ├── customer/           # Customer app (route: /)
+│   │   ├── customer/           # Customer app (QR menu, cart, checkout, tracking)
 │   │   ├── staff/              # Staff dashboard (route: /staff)
 │   │   └── admin/              # Admin dashboard (route: /admin)
 │   ├── routes/
@@ -154,13 +213,14 @@ QuickTabPayments/
 │   │   ├── auth/               # AuthContext + useAuth hook
 │   │   ├── lib/                # Supabase client, generated DB types, helpers
 │   │   ├── types/              # Shared TypeScript types
-│   │   └── ui/                 # Shared UI components (Button, Icon, StatusPill)
+│   │   └── ui/                 # Shared UI + shadcn primitives
 │   ├── test/
 │   │   └── setup.ts            # Vitest setup (Testing Library, jsdom shims)
 │   ├── index.css
 │   └── main.tsx                # App entry point
 ├── supabase/
-│   └── migrations/             # SQL migrations (run in the Supabase SQL Editor)
+│   ├── migrations/             # SQL migrations (run in the Supabase SQL Editor)
+│   └── tests/                  # Manual RLS / RPC verification checks
 ├── .env.example
 ├── index.html
 ├── package.json
@@ -192,8 +252,8 @@ npm run test        # Run the suite once
 npm run test:watch  # Re-run on change while developing
 ```
 
-End-to-end coverage is planned with **Playwright**, but it is not configured in
-the repository yet.
+The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
+mappers, and shared helpers. No end-to-end suite is configured in this phase.
 
 ## Deployment
 
@@ -208,8 +268,13 @@ npm run build
 The generated production files are placed in the `dist/` directory.
 
 When deploying to Vercel, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in
-the project's environment variables, and add the deployed domain to Supabase under
-**Authentication → URL Configuration** (Site URL and Redirect URLs).
+the project's environment variables, and in Supabase **Authentication → URL
+Configuration** set the Site URL to the deployed origin and add both
+`https://<domain>/**` and `http://localhost:5173/**` to the Redirect URLs. The
+`vercel.json` SPA rewrite keeps `/admin`, `/staff`, and `/order/:number` working
+on a hard refresh.
+
+Known risk (until Phase 7): the `/staff` route has no auth gate.
 
 ## Project Documentation
 

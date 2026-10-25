@@ -1,16 +1,19 @@
 import { useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
+import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
 import { ProductPhoto } from "./ProductPhoto"
-import type { Product } from "../../types"
+import type { MenuItem } from "../../types"
 
 export function ProductModal({
-  product,
+  item,
+  currency,
   onClose,
   onAdd,
 }: {
-  product: Product;
+  item: MenuItem;
+  currency: string;
   onClose: () => void;
   onAdd: (quantity: number) => void;
 }) {
@@ -21,7 +24,7 @@ export function ProductModal({
         className={`${styles["product-modal"]}`}
         role="dialog"
         aria-modal="true"
-        aria-label={product.name}
+        aria-label={item.name}
       >
         <div className={`${styles["modal-close"]}`}>
           <HeaderButton
@@ -30,35 +33,22 @@ export function ProductModal({
             onClick={onClose}
           />
         </div>
-        <ProductPhoto product={product} large />
-        <h2>{product.name}</h2>
-        <p>{product.description}</p>
+        <ProductPhoto item={item} large />
+        <h2>{item.name}</h2>
+        <p>{item.description || "Ask our team about this item."}</p>
         <div className={`${styles["modal-price"]}`}>
-          ${product.price.toFixed(2)}
+          {formatMoney(item.price, currency)}
         </div>
-        {product.category === "Hot Beverages" && (
-          <>
-            <label className={`${styles["option-row"]}`}>
-              <span>Size</span>
-              <select defaultValue="Regular">
-                <option>Regular</option>
-                <option>Large</option>
-              </select>
-            </label>
-            <label className={`${styles["option-row"]}`}>
-              <span>Choice of milk</span>
-              <select defaultValue="Full Cream Milk">
-                <option>Full Cream Milk</option>
-                <option>Oat Milk</option>
-                <option>Almond Milk</option>
-              </select>
-            </label>
-          </>
+        {item.allergens.length > 0 && (
+          <p className={`${styles["modal-meta"]}`}>
+            <strong>Allergens:</strong> {item.allergens.join(", ")}
+          </p>
         )}
-        <label className={`${styles["instructions"]}`}>
-          <span>Special Instructions:</span>
-          <textarea placeholder="e.g., no ice, extra hot, etc." />
-        </label>
+        {item.prepTimeMinutes > 0 && (
+          <p className={`${styles["modal-meta"]}`}>
+            <strong>Prep time:</strong> about {item.prepTimeMinutes} min
+          </p>
+        )}
         <div className={`${styles["modal-footer"]}`}>
           <div className={`${styles["quantity"]}`}>
             <button

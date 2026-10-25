@@ -1,12 +1,14 @@
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
+import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
 import type { CartItem } from "../../types"
 
 export function CartScreen({
   items,
   total,
+  currency,
   onClose,
   onRemove,
   onDecrease,
@@ -15,10 +17,11 @@ export function CartScreen({
 }: {
   items: CartItem[];
   total: number;
+  currency: string;
   onClose: () => void;
-  onRemove: (productName: string) => void;
-  onDecrease: (productName: string) => void;
-  onIncrease: (productName: string) => void;
+  onRemove: (menuItemId: string) => void;
+  onDecrease: (menuItemId: string) => void;
+  onIncrease: (menuItemId: string) => void;
   onCheckout: () => void;
 }) {
   return (
@@ -28,32 +31,32 @@ export function CartScreen({
         <HeaderButton icon="close" label="Close cart" onClick={onClose} />
       </header>
       {items.length > 0 ? (
-        items.map(({ product, quantity }) => (
-          <article className={`${styles["order-card"]}`} key={product.name}>
+        items.map((item) => (
+          <article className={`${styles["order-card"]}`} key={item.menuItemId}>
             <div>
               <span className={`${styles["item-name"]}`}>
-                <span>{product.name}</span>
-                <small>${product.price.toFixed(2)} each</small>
+                <span>{item.name}</span>
+                <small>{formatMoney(item.unitPrice, currency)} each</small>
               </span>
-              <span>${(product.price * quantity).toFixed(2)}</span>
+              <span>{formatMoney(item.unitPrice * item.quantity, currency)}</span>
             </div>
             <div>
               <span className={`${styles["qty-pill"]}`}>
                 <button
-                  aria-label={`Decrease ${product.name} quantity`}
-                  onClick={() => onDecrease(product.name)}
+                  aria-label={`Decrease ${item.name} quantity`}
+                  onClick={() => onDecrease(item.menuItemId)}
                 >
                   −
                 </button>
-                <span>{quantity}</span>
+                <span>{item.quantity}</span>
                 <button
-                  aria-label={`Increase ${product.name} quantity`}
-                  onClick={() => onIncrease(product.name)}
+                  aria-label={`Increase ${item.name} quantity`}
+                  onClick={() => onIncrease(item.menuItemId)}
                 >
                   +
                 </button>
               </span>
-              <button onClick={() => onRemove(product.name)}>Remove</button>
+              <button onClick={() => onRemove(item.menuItemId)}>Remove</button>
             </div>
           </article>
         ))
@@ -63,14 +66,14 @@ export function CartScreen({
             <Icon name="cart" size={34} />
           </span>
           <h2>Your cart is empty</h2>
-          <p>Add a drink from our hot beverage menu.</p>
+          <p>Add something from the menu to get started.</p>
           <Button variant="outline" className="w-auto px-6" onClick={onClose}>
             Browse menu
           </Button>
         </div>
       )}
       <div className={`${styles["checkout-dock"]}`}>
-        <strong>Total: ${total.toFixed(2)}</strong>
+        <strong>Total: {formatMoney(total, currency)}</strong>
         <button disabled={!items.length} onClick={onCheckout}>
           Checkout
         </button>

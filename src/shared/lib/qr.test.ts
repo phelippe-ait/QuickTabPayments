@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildTableQrUrl } from "./qr"
+import { buildTableQrUrl, parseQrParams } from "./qr"
 
 describe("buildTableQrUrl", () => {
   it("builds the canonical slug + token URL", () => {
@@ -34,5 +34,49 @@ describe("buildTableQrUrl", () => {
         qrToken: "abcd1234",
       }),
     ).toBe("https://quicktab.example/?r=cafe&t=abcd1234")
+  })
+})
+
+describe("parseQrParams", () => {
+  it("parses a complete QR contract", () => {
+    expect(parseQrParams("?r=quicktab-demo-cafe&t=abc123")).toEqual({
+      status: "ok",
+      slug: "quicktab-demo-cafe",
+      tableToken: "abc123",
+    })
+  })
+
+  it("trims whitespace around values", () => {
+    expect(parseQrParams("?r=%20cafe%20&t=%20token%20")).toEqual({
+      status: "ok",
+      slug: "cafe",
+      tableToken: "token",
+    })
+  })
+
+  it("returns none when no QR params are present", () => {
+    expect(parseQrParams("")).toEqual({ status: "none" })
+    expect(parseQrParams("?utm_source=poster")).toEqual({ status: "none" })
+  })
+
+  it("flags a missing table token (r alone)", () => {
+    expect(parseQrParams("?r=quicktab-demo-cafe")).toEqual({
+      status: "incomplete",
+      missing: ["t"],
+    })
+  })
+
+  it("flags a missing restaurant slug (t alone)", () => {
+    expect(parseQrParams("?t=abc123")).toEqual({
+      status: "incomplete",
+      missing: ["r"],
+    })
+  })
+
+  it("treats blank values as missing", () => {
+    expect(parseQrParams("?r=&t=")).toEqual({
+      status: "incomplete",
+      missing: ["r", "t"],
+    })
   })
 })

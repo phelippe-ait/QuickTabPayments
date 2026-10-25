@@ -22,11 +22,12 @@ src/shared/
   (TanStack Query) → `shared/data/*` → client.
 - Every data function throws `Error` with a user-facing message; hooks surface
   failures through toasts. Success toasts only fire after the server confirms.
-- `lib/database.types.ts` is hand-maintained (the CLI is not authenticated in
-  this environment). After applying a migration, update it before using new
-  columns/RPCs.
+- `lib/database.types.ts` is maintained locally: the linked project's types can
+  be regenerated with `npx supabase gen types typescript --linked`, then the
+  `PublicSchema`/shorthand exports at the bottom are kept by hand.
 - Money is numeric in the database and formatted only via
-  `lib/money.ts → formatMoney`; never parse a formatted string.
+  `lib/money.ts → formatMoney`; never parse a formatted string. GST-inclusive
+  splits use `splitInclusiveTax` (mirrors `place_order`).
 - QR URLs are built only via `lib/qr.ts → buildTableQrUrl`:
   `{origin}/?r={slug}&t={qr_token}`.
 - Storage paths follow `lib/storage.ts`: `restaurant-assets/{restaurant_id}/…`

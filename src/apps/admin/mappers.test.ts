@@ -79,6 +79,7 @@ const orderRow: OrderWithDetails = {
   subtotal: 12.4,
   tax: 1.24,
   total: 13.64,
+  tracking_token: "tracking-token-1",
   notes: null,
   pickup_time_estimate: null,
   created_at: "2026-10-21T08:30:00Z",

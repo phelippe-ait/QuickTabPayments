@@ -6,6 +6,11 @@ import { AdminIndexRedirect } from "../apps/admin/components/AdminIndexRedirect"
 import { RequireRole } from "../apps/admin/components/RequireRole";
 
 const CustomerApp = lazy(() => import("../apps/customer/CustomerDashboard"));
+const OrderTrackingPage = lazy(() =>
+  import("../apps/customer/features/orders/OrderTrackingScreen").then((module) => ({
+    default: module.OrderTrackingScreen,
+  })),
+);
 const StaffApp = lazy(() => import("../apps/staff/StaffDashboard"));
 const AdminApp = lazy(() => import("../apps/admin/AdminDashboard"));
 
@@ -121,6 +126,11 @@ const router = createBrowserRouter([
   {
     path: "/staff",
     element: withSuspense(<StaffApp />),
+  },
+  {
+    // Public guest tracking link; authorised by the opaque `token` query param.
+    path: "/order/:orderNumber",
+    element: withSuspense(<OrderTrackingPage />),
   },
   ...adminRoutes,
 ]);

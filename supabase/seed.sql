@@ -1,8 +1,9 @@
 -- =====================================================================
 -- QuickTab — demo seed data
 -- ---------------------------------------------------------------------
--- Run AFTER migrations 0009 (and again after 0010 to add refund rows).
--- Target: the existing restaurant with slug = 'quicktab-demo-cafe'.
+-- Run AFTER migrations 0015_phase5_order_placement.sql (and again after any
+-- later order/menu migration). Target: the existing restaurant with slug =
+-- 'quicktab-demo-cafe'.
 --
 -- Prerequisites (dashboard → Authentication → Users, email confirmed):
 --   owner@quicktab.demo  (may already exist)
@@ -209,12 +210,14 @@ begin
     join public.menu_items mi
       on mi.restaurant_id = v_restaurant and mi.name = (line ->> 'item');
 
+    -- GST-inclusive: the line totals are what the customer pays. Tax is the
+    -- GST component already contained inside that total.
     update public.orders o
-       set subtotal = totals.subtotal,
-           tax = round(totals.subtotal * 0.10, 2),
-           total = totals.subtotal + round(totals.subtotal * 0.10, 2)
+       set total = totals.total,
+           tax = round(totals.total * 0.10 / 1.10, 2),
+           subtotal = totals.total - round(totals.total * 0.10 / 1.10, 2)
       from (
-        select coalesce(sum(subtotal), 0) as subtotal
+        select round(coalesce(sum(subtotal), 0), 2) as total
         from public.order_items
         where order_id = v_order
       ) as totals

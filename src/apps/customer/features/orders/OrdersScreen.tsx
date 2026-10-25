@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from "react"
+import { Link } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
+import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
-import { getCustomerOrderHistory, type CustomerOrder } from "../../data/orders"
+import {
+  getCustomerOrderHistory,
+  type CustomerOrder,
+} from "../../data/orders"
+import { trackingUrl } from "../../data/tracking"
 
 export function OrdersScreen({ onClose, customerId }: { onClose: () => void; customerId: string }) {
   const [orders, setOrders] = useState<CustomerOrder[]>([])
@@ -64,7 +70,11 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
               <div className={styles["history-order-heading"]}>
                 <div className={styles["item-name"]}>
                   <strong>Order {order.orderNumber}</strong>
-                  <small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}</small>
+                  <small>
+                    {order.restaurantName ? `${order.restaurantName} · ` : ""}
+                    {order.tableNumber ? `Table ${order.tableNumber} · ` : ""}
+                    {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}
+                  </small>
                 </div>
                 <span className={styles["order-status-pill"]}>{order.status}</span>
               </div>
@@ -72,15 +82,23 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
                 {order.items.map((item, index) => (
                   <li key={`${item.name}-${index}`}>
                     <span>{item.quantity} × {item.name}</span>
-                    <span>${item.subtotal.toFixed(2)}</span>
+                    <span>{formatMoney(item.subtotal, order.currency)}</span>
                   </li>
                 ))}
                 {order.items.length === 0 && <li>Items unavailable</li>}
               </ul>
               <div className={styles["history-order-total"]}>
                 <span>Total</span>
-                <strong>${order.total.toFixed(2)}</strong>
+                <strong>{formatMoney(order.total, order.currency)}</strong>
               </div>
+              {order.trackingToken && (
+                <Link
+                  className={styles["history-track-link"]}
+                  to={trackingUrl(order.orderNumber, order.trackingToken)}
+                >
+                  Track order
+                </Link>
+              )}
             </article>
           ))}
         </section>

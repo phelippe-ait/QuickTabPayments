@@ -347,6 +347,7 @@ export type Database = {
           table_id: string | null
           tax: number
           total: number
+          tracking_token: string
           updated_at: string
         }
         Insert: {
@@ -364,6 +365,7 @@ export type Database = {
           table_id?: string | null
           tax?: number
           total?: number
+          tracking_token?: string
           updated_at?: string
         }
         Update: {
@@ -381,6 +383,7 @@ export type Database = {
           table_id?: string | null
           tax?: number
           total?: number
+          tracking_token?: string
           updated_at?: string
         }
         Relationships: [
@@ -871,6 +874,10 @@ export type Database = {
           restaurant_slug: string
         }[]
       }
+      get_order_tracking: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       is_manager_of: { Args: { p_restaurant_id: string }; Returns: boolean }
       is_owner_of: { Args: { p_restaurant_id: string }; Returns: boolean }
       is_staff_of: { Args: { p_restaurant_id: string }; Returns: boolean }
@@ -886,6 +893,20 @@ export type Database = {
           staff_id: string
           user_id: string
         }[]
+      }
+      place_order: {
+        Args: {
+          p_customer_name: string
+          p_items: Json
+          p_notes?: string | null
+          p_restaurant_slug: string
+          p_table_token: string
+        }
+        Returns: Json
+      }
+      resolve_qr_context: {
+        Args: { p_slug: string; p_token: string }
+        Returns: Json
       }
       restaurant_daily_stats: {
         Args: { p_restaurant_id: string; p_timezone?: string }
