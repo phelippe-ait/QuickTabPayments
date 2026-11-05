@@ -154,7 +154,9 @@ export function ProductModal({
                       type={group.selectionType === "single" ? "radio" : "checkbox"}
                       name={`modifier-${group.id}`}
                       checked={checked}
-                      disabled={maximum === 0 || (!checked && selectedCount >= maximum)}
+                      disabled={maximum === 0 || (
+                        group.selectionType === "multiple" && !checked && selectedCount >= maximum
+                      )}
                       onChange={() => toggleOption(group.id, option.id, maximum)}
                     />
                     <span>{option.name}</span>
