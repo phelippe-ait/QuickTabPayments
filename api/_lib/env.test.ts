@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
-import { serverEnv } from "./env";
+import { serverEnv } from "./env.js";
 
 const saved = { ...process.env };
 

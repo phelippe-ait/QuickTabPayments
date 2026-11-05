@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import handler from "./refunds";
+import handler from "./refunds.js";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import handler from "./create-payment-intent";
+import handler from "./create-payment-intent.js";
 
 const mocks = vi.hoisted(() => ({
   userRpc: vi.fn(),

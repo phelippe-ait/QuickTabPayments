@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import handler from "./stripe";
+import handler from "./stripe.js";
 
 const mocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),

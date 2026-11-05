@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { serverEnv } from "./env";
+import { serverEnv } from "./env.js";
 
 let stripe: Stripe | null = null;
 

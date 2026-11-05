@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { serverEnv } from "./env";
+import { serverEnv } from "./env.js";
 
 /** Bypasses RLS. Server-only. */
 export function adminClient(): SupabaseClient {

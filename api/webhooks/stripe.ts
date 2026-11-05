@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type Stripe from "stripe";
-import { getStripe } from "../_lib/stripe";
-import { adminClient } from "../_lib/supabaseAdmin";
-import { serverEnv } from "../_lib/env";
-import { readRawBody } from "../_lib/http";
+import { getStripe } from "../_lib/stripe.js";
+import { adminClient } from "../_lib/supabaseAdmin.js";
+import { serverEnv } from "../_lib/env.js";
+import { readRawBody } from "../_lib/http.js";
 
 /**
  * Stripe webhook. Signature-verified and idempotent: the RPCs guard on the

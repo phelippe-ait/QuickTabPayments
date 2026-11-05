@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type Stripe from "stripe";
-import { getStripe } from "./_lib/stripe";
-import { adminClient } from "./_lib/supabaseAdmin";
-import { bearer, json } from "./_lib/http";
+import { getStripe } from "./_lib/stripe.js";
+import { adminClient } from "./_lib/supabaseAdmin.js";
+import { bearer, json } from "./_lib/http.js";
 
 type Body = {
   orderId?: string;

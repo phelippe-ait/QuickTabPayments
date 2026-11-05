@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getStripe } from "./_lib/stripe";
-import { adminClient, userClient } from "./_lib/supabaseAdmin";
-import { bearer, json } from "./_lib/http";
+import { getStripe } from "./_lib/stripe.js";
+import { adminClient, userClient } from "./_lib/supabaseAdmin.js";
+import { bearer, json } from "./_lib/http.js";
 
 type ItemInput = { menu_item_id: string; quantity: number };
 type LocationInput = { latitude: number; longitude: number };

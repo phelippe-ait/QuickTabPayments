@@ -10,9 +10,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import createPaymentIntent from "../api/create-payment-intent";
-import stripeWebhook from "../api/webhooks/stripe";
-import refunds from "../api/refunds";
+import createPaymentIntent from "../api/create-payment-intent.js";
+import stripeWebhook from "../api/webhooks/stripe.js";
+import refunds from "../api/refunds.js";
 
 const PORT = Number(process.env.API_PORT ?? 3001);
 const HOST = "127.0.0.1";
