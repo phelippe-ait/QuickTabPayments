@@ -322,7 +322,22 @@ export function MenuScreen({
                       >
                         <span className={`${styles["product-copy"]}`}>
                           <strong>{item.name}</strong>
-                          <span>{item.description}</span>
+                          <span className={`${styles["product-description"]}`}>{item.description}</span>
+                          {(item.dietaryTags.length > 0 || item.allergens.length > 0) && (
+                            <span className={`${styles["product-tags"]}`} aria-label="Dietary and allergen information">
+                              {[
+                                ...item.dietaryTags.map((tag) => ({ tag, kind: "dietary" as const })),
+                                ...item.allergens.map((tag) => ({ tag, kind: "allergen" as const })),
+                              ].slice(0, 4).map(({ tag, kind }) => (
+                                <span className={`${styles["menu-tag"]} ${kind === "dietary" ? styles["dietary-tag"] : styles["allergen-tag"]}`} key={`${kind}-${tag}`}>
+                                  {kind === "allergen" ? "⚠ " : tag === "Vegetarian" ? "V " : tag === "Vegan" ? "VG " : tag === "Halal" ? "H " : "• "}{tag.replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                                </span>
+                              ))}
+                              {item.dietaryTags.length + item.allergens.length > 4 && (
+                                <span className={`${styles["tag-overflow"]}`}>+{item.dietaryTags.length + item.allergens.length - 4}</span>
+                              )}
+                            </span>
+                          )}
                           <em>{formatMoney(item.price, qr.currency)}</em>
                         </span>
                         <ProductPhoto item={item} />

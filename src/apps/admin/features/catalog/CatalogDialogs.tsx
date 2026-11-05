@@ -8,6 +8,29 @@ import type { TablesUpdate } from "@shared/lib/database.types"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import type { NewMenuItemInput } from "../../hooks/useMenu"
 
+const COMMON_ALLERGENS = [
+  "Milk", "Eggs", "Peanuts", "Tree nuts", "Soy", "Wheat", "Gluten",
+  "Sesame", "Fish", "Crustaceans", "Molluscs", "Lupin",
+]
+
+const DIETARY_TAGS = [
+  "Vegetarian", "Vegan", "Halal", "Pescatarian", "Gluten-free", "Dairy-free",
+]
+
+function toggleValue(values: string[], value: string): string[] {
+  const key = value.toLocaleLowerCase()
+  return values.some((entry) => entry.toLocaleLowerCase() === key)
+    ? values.filter((entry) => entry.toLocaleLowerCase() !== key)
+    : [...values, value]
+}
+
+function withCustomTags(selected: string[], custom: string): string[] {
+  const values = [...selected, ...custom.split(",").map((tag) => tag.trim()).filter(Boolean)]
+  return values.filter((tag, index) =>
+    values.findIndex((candidate) => candidate.toLocaleLowerCase() === tag.toLocaleLowerCase()) === index,
+  )
+}
+
 export function ItemModal({
   item,
   categories,
@@ -31,6 +54,14 @@ export function ItemModal({
     item ? String(item.prepTimeMinutes) : "10",
   )
   const [isAvailable, setIsAvailable] = useState(item?.isAvailable ?? true)
+  const [allergens, setAllergens] = useState(item?.allergens ?? [])
+  const [dietaryTags, setDietaryTags] = useState(item?.dietaryTags ?? [])
+  const [customAllergens, setCustomAllergens] = useState(
+    () => (item?.allergens ?? []).filter((value) => !COMMON_ALLERGENS.some((tag) => tag.toLocaleLowerCase() === value.toLocaleLowerCase())).join(", "),
+  )
+  const [customDietaryTags, setCustomDietaryTags] = useState(
+    () => (item?.dietaryTags ?? []).filter((value) => !DIETARY_TAGS.some((tag) => tag.toLocaleLowerCase() === value.toLocaleLowerCase())).join(", "),
+  )
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl ?? null)
   const [imageError, setImageError] = useState("")
@@ -85,6 +116,8 @@ export function ItemModal({
     }
 
     setPending(true)
+    const savedAllergens = withCustomTags(allergens, customAllergens)
+    const savedDietaryTags = withCustomTags(dietaryTags, customDietaryTags)
     const id = item?.id ?? crypto.randomUUID()
     let imageUrl = item?.imageUrl ?? null
 
@@ -102,6 +135,8 @@ export function ItemModal({
             image_url: imageUrl,
             is_available: isAvailable,
             prep_time_minutes: prepTimeValue,
+            allergens: savedAllergens,
+            dietary_tags: savedDietaryTags,
           })
         : await onCreate({
             id,
@@ -112,6 +147,8 @@ export function ItemModal({
             imageUrl,
             isAvailable,
             prepTimeMinutes: prepTimeValue,
+            allergens: savedAllergens,
+            dietaryTags: savedDietaryTags,
           })
 
       if (ok) onClose()
@@ -177,6 +214,35 @@ export function ItemModal({
             <small className="mt-1.5 block text-[10px] font-normal text-muted">Stored for kitchen operations only; guests do not see prep times or order ETAs.</small>
           </label>
           <label className={`${styles["wide"]}`}>Description<textarea required value={description} onChange={(event) => setDescription(event.target.value)} placeholder="A short description of the item" /></label>
+          <fieldset className={`${styles["wide"]} ${styles["tag-fieldset"]}`}>
+            <legend>Allergens</legend>
+            <small className={`${styles["tag-help"]}`}>Select every allergen present. Ask your kitchen team if you are unsure.</small>
+            <div className={`${styles["tag-options"]}`}>
+              {COMMON_ALLERGENS.map((allergen) => (
+                <label key={allergen} className={`${styles["tag-option"]}`}>
+                  <input type="checkbox" checked={allergens.some((value) => value.toLocaleLowerCase() === allergen.toLocaleLowerCase())} onChange={() => setAllergens((current) => toggleValue(current, allergen))} />
+                  {allergen}
+                </label>
+              ))}
+            </div>
+            <label className={`${styles["tag-custom"]}`}>Other allergens, comma-separated
+              <input value={customAllergens} onChange={(event) => setCustomAllergens(event.target.value)} placeholder="e.g. mustard" />
+            </label>
+          </fieldset>
+          <fieldset className={`${styles["wide"]} ${styles["tag-fieldset"]}`}>
+            <legend>Dietary tags</legend>
+            <div className={`${styles["tag-options"]}`}>
+              {DIETARY_TAGS.map((tag) => (
+                <label key={tag} className={`${styles["tag-option"]}`}>
+                  <input type="checkbox" checked={dietaryTags.some((value) => value.toLocaleLowerCase() === tag.toLocaleLowerCase())} onChange={() => setDietaryTags((current) => toggleValue(current, tag))} />
+                  {tag}
+                </label>
+              ))}
+            </div>
+            <label className={`${styles["tag-custom"]}`}>Other dietary tags, comma-separated
+              <input value={customDietaryTags} onChange={(event) => setCustomDietaryTags(event.target.value)} placeholder="e.g. low sugar" />
+            </label>
+          </fieldset>
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Available to order</strong><small>Show this item on the customer menu</small></span><input type="checkbox" checked={isAvailable} onChange={(event) => setIsAvailable(event.target.checked)} /></label>
         </div>
         {formError && <p className="mt-3 text-[12px] text-danger" role="alert">{formError}</p>}

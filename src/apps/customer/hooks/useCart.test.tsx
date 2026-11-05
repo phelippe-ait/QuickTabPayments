@@ -10,6 +10,7 @@ const coffee: MenuItem = {
   price: 4.7,
   imageUrl: null,
   allergens: [],
+  dietaryTags: [],
   categoryId: "category-1",
   displayOrder: 0,
 }
@@ -21,6 +22,7 @@ const toast: MenuItem = {
   price: 11.5,
   imageUrl: null,
   allergens: [],
+  dietaryTags: [],
   categoryId: "category-1",
   displayOrder: 1,
 }

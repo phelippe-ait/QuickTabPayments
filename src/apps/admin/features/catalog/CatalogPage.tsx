@@ -126,6 +126,11 @@ export function CatalogPage() {
                   <p className={`${styles["category-label"]}`}>{item.categoryName}</p>
                   <div className={`${styles["name-price"]}`}><h3>{item.name}</h3><strong>{formatMoney(item.price, currency)}</strong></div>
                   <p>{item.description}</p>
+                  {(item.dietaryTags.length > 0 || item.allergens.length > 0) && (
+                    <div className={`${styles["admin-menu-tags"]}`} aria-label="Dietary and allergen tags">
+                      {[...item.dietaryTags, ...item.allergens.map((allergen) => `⚠ ${allergen}`)].map((tag) => <span key={tag}>{tag}</span>)}
+                    </div>
+                  )}
                 </div>
               </article>
             ))}

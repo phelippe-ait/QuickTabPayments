@@ -27,6 +27,8 @@ export type NewMenuItemInput = {
   description: string
   price: number
   imageUrl: string | null
+  allergens: string[]
+  dietaryTags: string[]
   isAvailable: boolean
   prepTimeMinutes: number
 }
@@ -134,6 +136,8 @@ export function useMenu(
             image_url: input.imageUrl,
             is_available: input.isAvailable,
             prep_time_minutes: input.prepTimeMinutes,
+            allergens: input.allergens,
+            dietary_tags: input.dietaryTags,
             display_order: nextItemOrder,
           }),
       }),

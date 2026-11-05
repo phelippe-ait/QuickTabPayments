@@ -18,7 +18,7 @@
 -- demo accounts, or any menu/order data. See README.md → "Database setup" for
 -- the data import steps.
 --
--- Generated from 15 migrations:
+-- Generated from 16 migrations:
 --   - 0001_profiles.sql
 --   - 0002_roles.sql
 --   - 0003_schema.sql
@@ -34,6 +34,7 @@
 --   - 0013_staff_management_guards.sql
 --   - 0014_restaurant_invites.sql
 --   - 0015_phase5_order_placement.sql
+--   - 20261105025454_add_menu_item_dietary_tags.sql
 -- ===========================================================================
 
 -- ===========================================================================
@@ -2626,3 +2627,14 @@ grant execute on function public.resolve_qr_context(text, text)
 -- ---------------------------------------------------------------------
 -- End of migration
 -- ---------------------------------------------------------------------
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261105025454_add_menu_item_dietary_tags.sql
+-- ===========================================================================
+
+-- Store dietary claims separately from allergen disclosures on menu items.
+alter table public.menu_items
+  add column if not exists dietary_tags text[] not null default '{}';
+
+comment on column public.menu_items.dietary_tags is
+  'Dietary labels shown to customers, such as Vegetarian, Vegan, and Halal.';

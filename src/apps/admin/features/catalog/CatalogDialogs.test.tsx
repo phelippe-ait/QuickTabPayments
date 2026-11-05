@@ -16,6 +16,8 @@ const item: MenuItemVM = {
   description: "Smooth and creamy",
   price: 4.7,
   imageUrl: null,
+  allergens: [],
+  dietaryTags: [],
   isAvailable: true,
   prepTimeMinutes: 10,
   displayOrder: 0,
