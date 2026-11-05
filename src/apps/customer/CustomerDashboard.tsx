@@ -197,7 +197,9 @@ function CustomerShell() {
             setScreen("cart")
           }}
           error={checkoutError}
-          onRequestLocation={requestCustomerLocation}
+          onRequestLocation={
+            currentContext.geofenceEnabled ? requestCustomerLocation : undefined
+          }
           onSetupError={async (setupError) => {
             if (
               setupError instanceof PaymentSetupError &&

@@ -18,6 +18,7 @@ type ResolveRow = {
   restaurant_name?: string
   currency?: string
   tax_rate?: number
+  geofence_enabled?: boolean
   table_id?: string
   table_token?: string
   table_number?: string
@@ -63,6 +64,7 @@ export function mapResolveResult(raw: unknown): QrResolution {
       restaurantName: row.restaurant_name,
       currency: row.currency ?? "AUD",
       taxRate: Number(row.tax_rate ?? 0),
+      geofenceEnabled: row.geofence_enabled === true,
       tableId: row.table_id,
       tableToken: row.table_token,
       tableNumber: row.table_number,
@@ -117,19 +119,7 @@ export async function resolveDevQrContext(slug: string): Promise<QrResolution> {
   if (tableError) throw new Error(tableError.message)
   if (!table) return { ok: false, error: "table_not_found" }
 
-  return {
-    ok: true,
-    context: {
-      restaurantId: restaurant.id,
-      restaurantSlug: restaurant.slug,
-      restaurantName: restaurant.name,
-      currency: restaurant.currency,
-      taxRate: Number(restaurant.tax_rate),
-      tableId: table.id,
-      tableToken: table.qr_token,
-      tableNumber: table.table_number,
-    },
-  }
+  return resolveQrContext(slug, table.qr_token)
 }
 
 export function readStoredQrSource(): QrSource | null {

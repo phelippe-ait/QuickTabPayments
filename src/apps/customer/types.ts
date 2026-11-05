@@ -75,6 +75,7 @@ export type QrContext = {
   restaurantName: string;
   currency: string;
   taxRate: number;
+  geofenceEnabled?: boolean;
   tableId: string;
   tableToken: string;
   tableNumber: string;

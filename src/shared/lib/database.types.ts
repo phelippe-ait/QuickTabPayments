@@ -761,6 +761,7 @@ export type Database = {
       }
       restaurant_locations: {
         Row: {
+          geofence_enabled: boolean
           label: string
           latitude: number
           longitude: number
@@ -768,6 +769,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          geofence_enabled?: boolean
           label: string
           latitude: number
           longitude: number
@@ -775,6 +777,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          geofence_enabled?: boolean
           label?: string
           latitude?: number
           longitude?: number

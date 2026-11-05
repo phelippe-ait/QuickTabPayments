@@ -13,7 +13,7 @@ import {
 import { isValidTimezone, percentToTaxRate, taxRateToPercent } from "./settings.utils";
 import { findAddressMatches, type AddressMatch } from "./geocodeAddress";
 
-type LocationPoint = AddressMatch;
+type LocationPoint = AddressMatch & { geofence_enabled: boolean };
 
 const currencies = [
   "AUD",
@@ -73,6 +73,8 @@ export function SettingsPage() {
   const [isLookingUpAddress, setIsLookingUpAddress] = useState(false);
   const [addressLookupError, setAddressLookupError] = useState("");
   const [clearSavedLocation, setClearSavedLocation] = useState(false);
+  const [geofenceEnabled, setGeofenceEnabled] = useState(false);
+  const [geofenceError, setGeofenceError] = useState("");
 
   useEffect(() => {
     if (settings.isLocationPending) return;
@@ -82,9 +84,11 @@ export function SettingsPage() {
             latitude: settings.location.latitude,
             longitude: settings.location.longitude,
             label: settings.location.label,
+            geofence_enabled: settings.location.geofence_enabled,
           }
         : null,
     );
+    setGeofenceEnabled(settings.location?.geofence_enabled ?? false);
     setClearSavedLocation(false);
   }, [settings.isLocationPending, settings.location]);
   const [timezoneError, setTimezoneError] = useState("");
@@ -205,6 +209,11 @@ export function SettingsPage() {
 
     if (!form.name.trim()) return;
 
+    if (geofenceEnabled && !locationPoint) {
+      setGeofenceError("Find and select the restaurant address before enabling the 500 m check.");
+      return;
+    }
+
     settings.save({
       name: form.name.trim(),
       description: form.description.trim() || null,
@@ -222,6 +231,7 @@ export function SettingsPage() {
           latitude: locationPoint.latitude,
           longitude: locationPoint.longitude,
           label: locationPoint.label,
+          geofence_enabled: geofenceEnabled,
         }
       : clearSavedLocation
         ? null
@@ -290,6 +300,8 @@ export function SettingsPage() {
                   update({ address: event.target.value });
                   setLocationPoint(null);
                   setClearSavedLocation(true);
+                  setGeofenceEnabled(false);
+                  setGeofenceError("");
                   setAddressMatches([]);
                   setAddressLookupError("");
                 }}
@@ -341,7 +353,10 @@ export function SettingsPage() {
                       type="button"
                       className="rounded-lg border border-line bg-white px-3 py-2 text-left text-xs text-ink-mid hover:bg-sand"
                       onClick={() => {
-                        setLocationPoint(match);
+                        setLocationPoint({
+                          ...match,
+                          geofence_enabled: geofenceEnabled,
+                        });
                         setClearSavedLocation(false);
                         setAddressMatches([]);
                         setAddressLookupError("");
@@ -361,6 +376,29 @@ export function SettingsPage() {
                 <small className="mt-2 block text-[10px] text-danger" role="alert">
                   Could not load the saved restaurant location: {settings.locationError.message}
                 </small>
+              )}
+              <label className="mt-4 flex items-start gap-2 text-xs font-medium text-ink-mid">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={geofenceEnabled}
+                  disabled={!locationPoint}
+                  onChange={(event) => {
+                    setGeofenceEnabled(event.target.checked);
+                    setGeofenceError("");
+                  }}
+                />
+                <span>
+                  Enforce the 500 m ordering area
+                  <small className="mt-1 block text-[10px] font-normal text-muted">
+                    Off by default. Turn this on after the team finishes testing.
+                  </small>
+                </span>
+              </label>
+              {geofenceError && (
+                <p className="mt-2 text-xs text-danger" role="alert">
+                  {geofenceError}
+                </p>
               )}
             </label>
             <label>

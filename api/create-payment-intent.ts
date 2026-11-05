@@ -51,8 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? { modifier_ids: item.modifier_ids }
           : {}),
       })),
-      p_customer_latitude: location?.latitude ?? null,
-      p_customer_longitude: location?.longitude ?? null,
+      ...(location
+        ? {
+            p_customer_latitude: location.latitude,
+            p_customer_longitude: location.longitude,
+          }
+        : {}),
     });
 
     if (placeErr) return json(res, 400, { error: placeErr.message });

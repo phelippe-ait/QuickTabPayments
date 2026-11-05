@@ -18,6 +18,7 @@ export type RestaurantLocation = {
   latitude: number;
   longitude: number;
   label: string;
+  geofence_enabled: boolean;
   updated_at: string;
 };
 
@@ -107,7 +108,7 @@ export async function fetchRestaurantLocation(
   const client = requireSupabase();
   const { data, error } = await client
     .from("restaurant_locations")
-    .select("restaurant_id, latitude, longitude, label, updated_at")
+    .select("restaurant_id, latitude, longitude, label, geofence_enabled, updated_at")
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
 
@@ -117,7 +118,12 @@ export async function fetchRestaurantLocation(
 
 export async function saveRestaurantLocation(
   restaurantId: string,
-  point: { latitude: number; longitude: number; label: string } | null,
+  point: {
+    latitude: number;
+    longitude: number;
+    label: string;
+    geofence_enabled: boolean;
+  } | null,
 ): Promise<void> {
   const client = requireSupabase();
   if (!point) {
@@ -134,6 +140,7 @@ export async function saveRestaurantLocation(
     latitude: point.latitude,
     longitude: point.longitude,
     label: point.label,
+    geofence_enabled: point.geofence_enabled,
   });
   if (error) throw new Error(error.message);
 }

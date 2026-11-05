@@ -53,7 +53,12 @@ export function useRestaurantSettings(
   const saveMutation = useMutation({
     mutationFn: async (input: {
       patch: TablesUpdate<"restaurants">
-      location?: { latitude: number; longitude: number; label: string } | null
+      location?: {
+        latitude: number
+        longitude: number
+        label: string
+        geofence_enabled: boolean
+      } | null
     }) => {
       const restaurant = await updateRestaurant(restaurantId, input.patch)
       if (input.location !== undefined) {
@@ -98,7 +103,12 @@ export function useRestaurantSettings(
     refetch: () => void query.refetch(),
     save: (
       patch: TablesUpdate<"restaurants">,
-      location?: { latitude: number; longitude: number; label: string } | null,
+      location?: {
+        latitude: number
+        longitude: number
+        label: string
+        geofence_enabled: boolean
+      } | null,
     ) => saveMutation.mutate({ patch, location }),
     location: locationQuery.data ?? null,
     isLocationPending: locationQuery.isPending,

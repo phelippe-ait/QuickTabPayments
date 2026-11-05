@@ -189,8 +189,12 @@ export async function placeOrder(input: {
     p_customer_name: input.customerName.trim(),
     p_notes: input.notes?.trim() || null,
     p_items: items,
-    p_customer_latitude: input.location?.latitude ?? null,
-    p_customer_longitude: input.location?.longitude ?? null,
+    ...(input.location
+      ? {
+          p_customer_latitude: input.location.latitude,
+          p_customer_longitude: input.location.longitude,
+        }
+      : {}),
   })
 
   if (error) {
