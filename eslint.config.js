@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'playwright-report', 'test-results', 'blob-report']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -17,6 +17,24 @@ export default defineConfig([
     ],
     languageOptions: {
       globals: globals.browser,
+    },
+  },
+  {
+    // Vercel serverless functions and Playwright configs run in Node.
+    files: ['api/**/*.ts', 'e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    // Staff workspace data hook: early-return guards legitimately mark loading
+    // as finished when there is no restaurant to query.
+    files: ['src/apps/staff/hooks/useStaffWorkspace.ts'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
   {

@@ -73,6 +73,7 @@ export type PaymentVM = {
   paidAt: string | null;
   receiptUrl: string | null;
   failureReason: string | null;
+  stripePaymentIntentId?: string | null;
 };
 
 export type OrderVM = {

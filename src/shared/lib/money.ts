@@ -38,3 +38,12 @@ export function splitInclusiveTax(
   const tax = roundMoney((safeTotal * safeRate) / (1 + safeRate))
   return { subtotal: roundMoney(safeTotal - tax), tax }
 }
+
+/**
+ * Consistent label for the GST line: include the percentage when we know it,
+ * and never print a confusing "GST (included, 0%)".
+ */
+export function inclusiveTaxLabel(taxRate: number): string {
+  const percent = Math.round(taxRate * 100)
+  return percent > 0 ? `GST (included, ${percent}%)` : "GST (included)"
+}

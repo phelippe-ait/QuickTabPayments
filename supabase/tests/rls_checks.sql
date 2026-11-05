@@ -679,3 +679,142 @@ select set_config(
 set local role anon;
 select count(*) as visible_orders from public.orders;
 rollback;
+
+-- =====================================================================
+-- Phase 6 — payments (manual checks)
+-- =====================================================================
+-- Payment write RPCs must be service_role-only. Expected: anon=false,
+-- authenticated=false, service_role=true for each.
+select
+  has_function_privilege(
+    'anon',
+    'public.record_payment_intent(uuid,numeric,text,text,text)',
+    'EXECUTE'
+  ) as anon_can_record_payment,
+  has_function_privilege(
+    'authenticated',
+    'public.record_payment_intent(uuid,numeric,text,text,text)',
+    'EXECUTE'
+  ) as auth_can_record_payment,
+  has_function_privilege(
+    'service_role',
+    'public.record_payment_intent(uuid,numeric,text,text,text)',
+    'EXECUTE'
+  ) as service_can_record_payment,
+  has_function_privilege(
+    'anon',
+    'public.apply_payment_succeeded(text,text,text)',
+    'EXECUTE'
+  ) as anon_can_apply_payment,
+  has_function_privilege(
+    'service_role',
+    'public.apply_payment_succeeded(text,text,text)',
+    'EXECUTE'
+  ) as service_can_apply_payment;
+
+-- 0018 lockdown: the remaining two payment RPCs. Same expectation —
+-- anon=false, authenticated=false, service_role=true. (On Supabase,
+-- `revoke ... from public` alone does NOT remove the default-privilege
+-- grants to anon/authenticated; 0018 revokes from all three explicitly.)
+select
+  has_function_privilege(
+    'anon',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as anon_can_fail_payment,
+  has_function_privilege(
+    'authenticated',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as auth_can_fail_payment,
+  has_function_privilege(
+    'service_role',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as service_can_fail_payment,
+  has_function_privilege(
+    'anon',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as anon_can_apply_refund,
+  has_function_privilege(
+    'authenticated',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as auth_can_apply_refund,
+  has_function_privilege(
+    'service_role',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as service_can_apply_refund;
+
+-- place_order now creates `pending` orders. Place a real order as anon and
+-- assert the returned status; the rollback discards the fixture.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+
+do $$
+declare
+  v_slug  text;
+  v_token text;
+  v_item  uuid;
+  v_out   jsonb;
+begin
+  select r.slug into v_slug
+    from public.restaurants r
+   where r.is_active and r.slug <> 'rls-test-other'
+   order by r.created_at limit 1;
+
+  select t.qr_token into v_token
+    from public.tables t
+    join public.restaurants r on r.id = t.restaurant_id
+   where r.slug = v_slug and t.is_active
+   order by t.table_number limit 1;
+
+  select mi.id into v_item
+    from public.menu_items mi
+    join public.restaurants r on r.id = mi.restaurant_id
+   where r.slug = v_slug and mi.is_available
+   limit 1;
+
+  if v_slug is null or v_token is null or v_item is null then
+    raise notice 'phase6 place_order check skipped (no demo data)';
+    return;
+  end if;
+
+  v_out := public.place_order(
+    v_slug,
+    v_token,
+    'RLS payment check',
+    null,
+    jsonb_build_array(jsonb_build_object(
+      'menu_item_id', v_item,
+      'quantity', 1
+    ))
+  );
+
+  if v_out->>'status' is distinct from 'pending' then
+    raise exception 'expected pending order, got %', v_out->>'status';
+  end if;
+  raise notice 'phase6 place_order creates pending orders ok';
+end $$;
+rollback;
+
+-- Phase 7 — guest order claiming. Only signed-in users may claim.
+-- Expected: anon=false, authenticated=true.
+select
+  has_function_privilege(
+    'anon',
+    'public.claim_guest_order(text)',
+    'EXECUTE'
+  ) as anon_can_claim_guest_order,
+  has_function_privilege(
+    'authenticated',
+    'public.claim_guest_order(text)',
+    'EXECUTE'
+  ) as auth_can_claim_guest_order;

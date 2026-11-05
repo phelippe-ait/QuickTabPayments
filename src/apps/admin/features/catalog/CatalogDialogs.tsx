@@ -3,6 +3,7 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
+import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { uploadMenuItemImage, validateImageFile } from "@shared/lib/storage"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
@@ -281,6 +282,7 @@ export function SectionsModal({
   const [moveFromId, setMoveFromId] = useState<string | null>(null)
   const [moveTargetId, setMoveTargetId] = useState("")
   const [pending, setPending] = useState(false)
+  const { confirm } = useAdminUi()
 
   const moveSource = categories.find((category) => category.id === moveFromId) ?? null
   const movingItems = moveSource
@@ -374,7 +376,20 @@ export function SectionsModal({
                   disabled={pending || categories.length === 1}
                   aria-label={`Delete ${category.name}`}
                   title={categories.length === 1 ? "At least one section is required" : `Delete ${category.name}`}
-                  onClick={() => void deleteSection(category)}
+                  onClick={() =>
+                    confirm({
+                      title: `Delete “${category.name}”?`,
+                      description:
+                        items.filter((item) => item.categoryId === category.id)
+                          .length > 0
+                          ? "This section still has items. You'll be asked to move them before the section is removed."
+                          : "Items keep their category id; this section will be removed.",
+                      actionLabel: "Delete section",
+                      onConfirm: () => {
+                        void deleteSection(category)
+                      },
+                    })
+                  }
                 >
                   <Icon name="trash" size={15} />
                 </button>

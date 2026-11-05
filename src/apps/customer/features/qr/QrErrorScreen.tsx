@@ -1,6 +1,7 @@
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
 import { qrErrorMessage, type QrErrorCode } from "../../types"
+import { CUSTOMER_TAGLINE } from "../../constants"
 
 /**
  * Boot-time QR failure. Every branch is intentionally explicit so a customer
@@ -41,7 +42,7 @@ export function QrErrorScreen({
         )}
         {!canRetry && (
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-2">
-            QuickTab · scan to order
+            {CUSTOMER_TAGLINE}
           </p>
         )}
       </section>

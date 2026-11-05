@@ -27,7 +27,7 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
 }))
 
 vi.mock("../../hooks/AdminUiProvider", () => ({
-  useAdminUi: () => ({ notify: mocks.notify, confirm: vi.fn() }),
+  useAdminUi: () => ({ notify: mocks.notify, notifyError: vi.fn(), confirm: vi.fn() }),
 }))
 
 function wrapper({ children }: { children: ReactNode }) {

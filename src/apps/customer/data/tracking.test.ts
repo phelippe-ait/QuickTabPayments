@@ -3,6 +3,7 @@ import {
   fetchOrderTracking,
   isTerminalStatus,
   mapTracking,
+  parseRedirectStatus,
   trackingUrl,
 } from "./tracking"
 
@@ -83,5 +84,15 @@ describe("tracking helpers", () => {
     expect(
       trackingUrl("QT-261025-0001", "token-1", "https://quicktab.example"),
     ).toBe("/order/QT-261025-0001?token=token-1")
+  })
+
+  it("parses Stripe redirect_status values", () => {
+    expect(parseRedirectStatus("succeeded")).toBe("succeeded")
+    expect(parseRedirectStatus("failed")).toBe("failed")
+    expect(parseRedirectStatus("requires_action")).toBe("requires_action")
+    expect(parseRedirectStatus("nonsense")).toBeNull()
+    expect(parseRedirectStatus(null)).toBeNull()
+    const params = new URLSearchParams("redirect_status=failed")
+    expect(parseRedirectStatus(params)).toBe("failed")
   })
 })

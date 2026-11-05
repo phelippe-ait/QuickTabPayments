@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
 import { useAuth } from "@shared/auth/AuthContext"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import { HeaderButton } from "../../components/CustomerUi"
 
 export function EditNameDialog({
@@ -18,6 +19,8 @@ export function EditNameDialog({
   const [lastName, setLastName] = useState(defaultLastName);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const panelRef = useDialogFocus<HTMLFormElement>(onClose);
+  useBodyScrollLock();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -40,8 +43,14 @@ export function EditNameDialog({
   };
 
   return (
-    <div className={`${styles["modal-shade"]}`}>
+    <div
+      className={`${styles["modal-shade"]}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <form
+        ref={panelRef}
         className={`${styles["product-modal"]}`}
         onSubmit={submit}
         role="dialog"

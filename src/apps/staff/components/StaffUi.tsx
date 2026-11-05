@@ -14,6 +14,8 @@ export function NavButton({
 }) {
   return (
     <button
+      type="button"
+      aria-current={active ? "page" : undefined}
       className={`${styles["nav-button"]} w-full ${
         active ? "bg-cream-2 text-berry-strong" : ""
       }`}
@@ -41,6 +43,8 @@ export function MobileNav({
 }) {
   return (
     <button
+      type="button"
+      aria-current={active ? "page" : undefined}
       className={`flex min-w-20 flex-col items-center gap-1 text-[10px] font-bold ${
         active ? "text-berry" : "text-muted"
       }`}

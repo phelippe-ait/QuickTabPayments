@@ -22,6 +22,9 @@ const order: PlacedOrder = {
   tableNumber: "T05",
   customerName: "Olivia",
   createdAt: "2026-10-25T02:00:00Z",
+  taxRate: 0.1,
+  paymentStatus: "succeeded",
+  receiptUrl: null,
   paymentMethod: "google_pay",
   items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
 }

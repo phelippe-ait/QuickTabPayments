@@ -18,11 +18,7 @@ export function ProductPhoto({
   const showImage = Boolean(item.imageUrl) && !failed
 
   return (
-    <div
-      className={`${styles["product-photo"]} ${large ? styles["photo-large"] : ""}`}
-      role="img"
-      aria-label={item.name}
-    >
+    <div className={`${styles["product-photo"]} ${large ? styles["photo-large"] : ""}`}>
       {showImage ? (
         <img
           src={item.imageUrl ?? ""}

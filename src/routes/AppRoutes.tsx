@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- route configuration file */
 import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, type RouteObject } from "react-router";
-import { cn } from "@shared/lib/cn";
 import { AdminIndexRedirect } from "../apps/admin/components/AdminIndexRedirect";
 import { RequireRole } from "../apps/admin/components/RequireRole";
 
@@ -48,7 +47,17 @@ const AdminOrderDetailPage = lazy(() =>
 
 function withSuspense(node: ReactNode) {
   return (
-    <Suspense fallback={<div className={cn("min-h-screen", "bg-sand")} />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-sand p-8" role="status" aria-label="Loading page">
+          <div className="mx-auto max-w-5xl space-y-4">
+            <div className="h-10 w-56 animate-pulse rounded-lg bg-line-soft" />
+            <div className="h-48 w-full animate-pulse rounded-card bg-line-soft" />
+            <div className="h-48 w-full animate-pulse rounded-card bg-line-soft" />
+          </div>
+        </div>
+      }
+    >
       {node}
     </Suspense>
   );

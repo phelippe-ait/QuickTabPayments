@@ -3,7 +3,10 @@ import { Link } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { formatMoney } from "@shared/lib/money"
+import { orderStatusLabels } from "@shared/orders/status"
+import { paymentSummaryLabel } from "@shared/orders/paymentLabels"
 import { HeaderButton } from "../../components/CustomerUi"
 import {
   getCustomerOrderHistory,
@@ -43,7 +46,12 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
         />
       </header>
       {loading ? (
-        <p className={styles["orders-message"]} role="status">Loading your orders…</p>
+        <section className="grid gap-3" role="status" aria-label="Loading your orders">
+          <span className="sr-only">Loading your orders…</span>
+          {[0, 1, 2].map((row) => (
+            <Skeleton key={row} className="h-40 rounded-[7px]" />
+          ))}
+        </section>
       ) : error ? (
         <div className={styles["empty-cart"]} role="alert">
           <h2>We couldn’t load your orders</h2>
@@ -67,17 +75,29 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
         <section className={styles["order-history-list"]} aria-label="Your past orders">
           {orders.map((order) => (
             <article className={`${styles["order-card"]} ${styles["history-order-card"]}`} key={order.id}>
-              <div className={styles["history-order-heading"]}>
-                <div className={styles["item-name"]}>
-                  <strong>Order {order.orderNumber}</strong>
-                  <small>
-                    {order.restaurantName ? `${order.restaurantName} · ` : ""}
-                    {order.tableNumber ? `Table ${order.tableNumber} · ` : ""}
-                    {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}
-                  </small>
+                <div className={styles["history-order-heading"]}>
+                  <div className={styles["item-name"]}>
+                    <strong>Order {order.orderNumber}</strong>
+                    <small>
+                      {order.restaurantName ? `${order.restaurantName} · ` : ""}
+                      {order.tableNumber ? `Table ${order.tableNumber} · ` : ""}
+                      {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}
+                    </small>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={styles["order-status-pill"]}>
+                      {orderStatusLabels[order.status]}
+                    </span>
+                    {order.paymentStatus && (
+                      <span className={styles["order-status-pill"]}>
+                        {paymentSummaryLabel(
+                          order.paymentStatus,
+                          order.refundedTotal,
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className={styles["order-status-pill"]}>{order.status}</span>
-              </div>
               <ul className={styles["history-order-items"]}>
                 {order.items.map((item, index) => (
                   <li key={`${item.name}-${index}`}>
@@ -91,14 +111,31 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
                 <span>Total</span>
                 <strong>{formatMoney(order.total, order.currency)}</strong>
               </div>
-              {order.trackingToken && (
-                <Link
-                  className={styles["history-track-link"]}
-                  to={trackingUrl(order.orderNumber, order.trackingToken)}
-                >
-                  Track order
-                </Link>
+              {order.refundedTotal > 0 && (
+                <p className="mt-2 text-[11px] text-muted">
+                  Refunded to date: {formatMoney(order.refundedTotal, order.currency)}
+                </p>
               )}
+              <div className="flex flex-wrap gap-4">
+                {order.trackingToken && (
+                  <Link
+                    className={styles["history-track-link"]}
+                    to={trackingUrl(order.orderNumber, order.trackingToken)}
+                  >
+                    Track order
+                  </Link>
+                )}
+                {order.receiptUrl && (
+                  <a
+                    className={styles["history-track-link"]}
+                    href={order.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View receipt
+                  </a>
+                )}
+              </div>
             </article>
           ))}
         </section>

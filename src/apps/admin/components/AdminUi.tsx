@@ -56,5 +56,5 @@ export function ConfirmDialog({ confirmation, onClose }: { confirmation: Confirm
   )
 }
 export function PageHeader({ eyebrow, title, description, action, onAction }: { eyebrow: string; title: string; description: string; action?: string; onAction?: () => void }) {
-  return <header className={`${styles["page-header"]}`}><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action && <button className={buttonVariants({ variant: "primary" })} onClick={onAction}><Icon name="plus" size={17} />{action}</button>}</header>
+  return <header className={`${styles["page-header"]}`}><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action && <button type="button" className={buttonVariants({ variant: "primary" })} onClick={onAction}><Icon name="plus" size={17} />{action}</button>}</header>
 }

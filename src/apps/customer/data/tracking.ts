@@ -1,5 +1,9 @@
 import { requireSupabase } from "@shared/data/client"
-import type { OrderStatus } from "@shared/lib/database.types"
+import type {
+  OrderStatus,
+  PaymentMethodType,
+  PaymentStatus,
+} from "@shared/lib/database.types"
 
 export type TrackingOrderItem = {
   name: string
@@ -20,6 +24,11 @@ export type TrackingOrder = {
   tableNumber: string | null
   restaurantName: string
   items: TrackingOrderItem[]
+  paymentStatus: PaymentStatus | null
+  paymentMethodType: PaymentMethodType | null
+  receiptUrl: string | null
+  amountPaid: number
+  refundedTotal: number
 }
 
 /** Guests cannot receive RLS-filtered Realtime rows, so they poll. */
@@ -66,6 +75,17 @@ export function mapTracking(raw: unknown): TrackingOrder | null {
       typeof row.table_number === "string" ? row.table_number : null,
     restaurantName:
       typeof row.restaurant_name === "string" ? row.restaurant_name : "",
+    paymentStatus:
+      typeof row.payment_status === "string"
+        ? (row.payment_status as PaymentStatus)
+        : null,
+    paymentMethodType:
+      typeof row.payment_method_type === "string"
+        ? (row.payment_method_type as PaymentMethodType)
+        : null,
+    receiptUrl: typeof row.receipt_url === "string" ? row.receipt_url : null,
+    amountPaid: num(row.amount_paid),
+    refundedTotal: num(row.refunded_total),
     items,
   }
 }
@@ -99,4 +119,23 @@ export function trackingUrl(
   const url = new URL(`/order/${encodeURIComponent(orderNumber)}`, origin)
   url.searchParams.set("token", trackingToken)
   return `${url.pathname}${url.search}`
+}
+
+export type RedirectStatus = "succeeded" | "failed" | "requires_action";
+
+/**
+ * Stripe appends `redirect_status` to the return URL after a redirect-based
+ * payment method (3-D Secure, wallets). The webhook remains the source of
+ * truth; this only decides which interim copy to show.
+ */
+export function parseRedirectStatus(
+  value: string | URLSearchParams | null | undefined,
+): RedirectStatus | null {
+  const raw =
+    typeof value === "string" || value == null
+      ? value
+      : value.get("redirect_status");
+  return raw === "succeeded" || raw === "failed" || raw === "requires_action"
+    ? raw
+    : null;
 }

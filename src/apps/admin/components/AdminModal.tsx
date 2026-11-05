@@ -2,6 +2,7 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import styles from "../App.module.css"
 import { Icon } from "@shared/ui/Icon"
+import { useBodyScrollLock } from "@shared/ui/useDialogFocus"
 
 /**
  * Accessible dialog primitive for the admin app.
@@ -53,6 +54,7 @@ export function AdminModal({
 }: AdminModalProps) {
   const panelRef = useRef<HTMLElement>(null)
   const onCloseRef = useRef(onClose)
+  useBodyScrollLock()
 
   useEffect(() => {
     onCloseRef.current = onClose
