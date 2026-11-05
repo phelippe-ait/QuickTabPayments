@@ -119,6 +119,14 @@ function PaymentForm({
     setSubmitting(true);
 
     try {
+      // Deferred-intent PaymentElement: validate/collect the payment method
+      // BEFORE any async work. Stripe requires elements.submit() first.
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        setError(mapStripeError(submitError).message);
+        return;
+      }
+
       const intent = await createPaymentIntent({
         restaurantSlug,
         tableToken,
