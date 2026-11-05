@@ -59,3 +59,6 @@ supabase/.temp/
 /supabase/auth_data.sql
 /supabase/public_data.sql
 /supabase/*.dump
+
+# Vercel CLI local link
+.vercel
