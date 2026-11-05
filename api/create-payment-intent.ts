@@ -4,6 +4,7 @@ import { adminClient, userClient } from "./_lib/supabaseAdmin";
 import { bearer, json } from "./_lib/http";
 
 type ItemInput = { menu_item_id: string; quantity: number };
+type LocationInput = { latitude: number; longitude: number };
 
 type Body = {
   restaurantSlug?: string;
@@ -11,6 +12,7 @@ type Body = {
   customerName?: string;
   notes?: string | null;
   items?: ItemInput[];
+  location?: LocationInput;
 };
 
 function parseBody(req: VercelRequest): Body {
@@ -23,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
 
   try {
-    const { restaurantSlug, tableToken, customerName, notes, items } = parseBody(req);
+    const { restaurantSlug, tableToken, customerName, notes, items, location } = parseBody(req);
     if (
       !restaurantSlug ||
       !tableToken ||
@@ -46,6 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         menu_item_id: item.menu_item_id,
         quantity: Math.trunc(Number(item.quantity)),
       })),
+      p_customer_latitude: location?.latitude ?? null,
+      p_customer_longitude: location?.longitude ?? null,
     });
 
     if (placeErr) return json(res, 400, { error: placeErr.message });

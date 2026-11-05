@@ -20,6 +20,7 @@ import { splitInclusiveTax } from "@shared/lib/money"
 import { fetchMenu } from "./data/menuApi"
 import { claimGuestOrder } from "./data/orders"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
+import { requestCustomerLocation } from "./data/geolocation"
 
 export default function App() {
   return (
@@ -196,6 +197,7 @@ function CustomerShell() {
             setScreen("cart")
           }}
           error={checkoutError}
+          onRequestLocation={requestCustomerLocation}
           onSetupError={async (setupError) => {
             if (
               setupError instanceof PaymentSetupError &&
@@ -213,6 +215,7 @@ function CustomerShell() {
             }
           }}
           onPlaceOrder={async ({ customerName, intent }) => {
+
             setCheckoutError("")
             try {
               const total = intent.amount
@@ -241,6 +244,7 @@ function CustomerShell() {
                   subtotal: item.unitPrice * item.quantity,
                 })),
               }
+
               if (source) saveLastOrder(source, placedOrder)
               cart.clear()
               setCreatedOrder(placedOrder)

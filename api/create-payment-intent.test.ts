@@ -106,6 +106,8 @@ describe("POST /api/create-payment-intent", () => {
       p_customer_name: "Jane",
       p_notes: "no sauce",
       p_items: [{ menu_item_id: "item-1", quantity: 2 }],
+      p_customer_latitude: null,
+      p_customer_longitude: null,
     });
     expect(mocks.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4200, currency: "aud" }),

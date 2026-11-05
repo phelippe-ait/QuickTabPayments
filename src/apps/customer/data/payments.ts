@@ -2,6 +2,7 @@ import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { supabase } from "@shared/lib/supabase";
 import type { CartItem } from "../types";
 import type { PlaceOrderErrorCode } from "./placeOrder";
+import type { CustomerLocation } from "./geolocation";
 
 const publishableKey = (
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? ""
@@ -24,6 +25,7 @@ export type CreatePaymentIntentInput = {
   customerName: string;
   notes?: string;
   items: CartItem[];
+  location?: CustomerLocation;
 };
 
 export type PaymentIntentResponse = {
@@ -46,6 +48,10 @@ const ERROR_CODES: PlaceOrderErrorCode[] = [
   "table_not_found",
   "menu_item_unavailable",
   "order_number_conflict",
+  "customer_location_required",
+  "customer_location_invalid",
+  "outside_ordering_radius",
+  "restaurant_location_not_configured",
 ];
 
 export class PaymentSetupError extends Error {
@@ -84,6 +90,7 @@ export async function createPaymentIntent(
           menu_item_id: item.menuItemId,
           quantity: Math.trunc(item.quantity),
         })),
+      location: input.location,
     }),
   });
 

@@ -14,6 +14,7 @@ import {
   type PaymentIntentResponse,
 } from "../../data/payments";
 import { mapStripeError } from "../../data/paymentErrors";
+import type { CustomerLocation } from "../../data/geolocation";
 import type { CartItem } from "../../types";
 
 export type StripeCheckoutProps = {
@@ -27,6 +28,7 @@ export type StripeCheckoutProps = {
   customerName: string;
   notes: string;
   canPay: boolean;
+  onRequestLocation?: () => Promise<CustomerLocation>;
   onPaid: (intent: PaymentIntentResponse) => Promise<void> | void;
   onSetupError?: (error: unknown) => void;
 };
@@ -103,6 +105,7 @@ function PaymentForm({
   customerName,
   notes,
   canPay,
+  onRequestLocation,
   onPaid,
   onSetupError,
   total,
@@ -119,6 +122,7 @@ function PaymentForm({
     setSubmitting(true);
 
     try {
+      const location = onRequestLocation ? await onRequestLocation() : undefined;
       // Deferred-intent PaymentElement: validate/collect the payment method
       // BEFORE any async work. Stripe requires elements.submit() first.
       const { error: submitError } = await elements.submit();
@@ -133,6 +137,7 @@ function PaymentForm({
         customerName,
         notes,
         items,
+        location,
       });
 
       const returnUrl = new URL(
@@ -179,6 +184,12 @@ function PaymentForm({
         Pay {formatMoney(total, currency)} securely with card, Apple Pay or
         Google Pay.
       </p>
+      {onRequestLocation && (
+        <p className="mb-3 rounded-lg bg-sand px-3 py-2 text-[11px] leading-relaxed text-ink-mid">
+          We’ll check that you’re within 500 m of the restaurant before creating
+          your order. Your location isn’t saved with the order.
+        </p>
+      )}
 
       <PaymentElement
         onReady={() => setReady(true)}

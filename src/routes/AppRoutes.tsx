@@ -5,6 +5,7 @@ import { AdminIndexRedirect } from "../apps/admin/components/AdminIndexRedirect"
 import { RequireRole } from "../apps/admin/components/RequireRole";
 
 const CustomerApp = lazy(() => import("../apps/customer/CustomerDashboard"));
+const ProspectHome = lazy(() => import("../apps/marketing/ProspectHome"));
 const OrderTrackingPage = lazy(() =>
   import("../apps/customer/features/orders/OrderTrackingScreen").then((module) => ({
     default: module.OrderTrackingScreen,
@@ -59,6 +60,33 @@ function withSuspense(node: ReactNode) {
     >
       {node}
     </Suspense>
+  );
+}
+
+function HomeRoute() {
+  const hasQrParams =
+    new URLSearchParams(window.location.search).has("r") ||
+    new URLSearchParams(window.location.search).has("t");
+  let hasStoredQr = false;
+  try {
+    const stored = window.sessionStorage.getItem("quicktab:qr-source");
+    if (stored) {
+      const source: unknown = JSON.parse(stored);
+      if (source && typeof source === "object") {
+        const record = source as Record<string, unknown>;
+        hasStoredQr =
+          typeof record.slug === "string" &&
+          typeof record.tableToken === "string";
+      }
+    }
+  } catch {
+    // Storage can be unavailable in private browsing; URL params still work.
+  }
+
+  return hasQrParams || hasStoredQr || import.meta.env.VITE_RESTAURANT_SLUG ? (
+    <CustomerApp />
+  ) : (
+    <ProspectHome />
   );
 }
 
@@ -130,7 +158,7 @@ export const adminRoutes: RouteObject[] = [
 const router = createBrowserRouter([
   {
     path: "/",
-    element: withSuspense(<CustomerApp />),
+    element: withSuspense(<HomeRoute />),
   },
   {
     path: "/staff",

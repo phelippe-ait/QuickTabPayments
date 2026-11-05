@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  fetchRestaurantLocation,
   fetchRestaurant,
   restaurantKeys,
+  saveRestaurantLocation,
   updateRestaurant,
 } from "@shared/data/restaurants"
 import { uploadRestaurantAsset, type RestaurantAssetKind } from "@shared/lib/storage"
@@ -30,9 +32,18 @@ export function useRestaurantSettings(
     enabled: Boolean(restaurantId),
   })
 
+  const locationQuery = useQuery({
+    queryKey: restaurantKeys.location(restaurantId),
+    queryFn: () => fetchRestaurantLocation(restaurantId),
+    enabled: Boolean(restaurantId),
+  })
+
   const invalidate = () => {
     void queryClient.invalidateQueries({
       queryKey: restaurantKeys.detail(restaurantId),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: restaurantKeys.location(restaurantId),
     })
     void queryClient.invalidateQueries({
       queryKey: ["restaurants", "membership"],
@@ -40,8 +51,16 @@ export function useRestaurantSettings(
   }
 
   const saveMutation = useMutation({
-    mutationFn: (patch: TablesUpdate<"restaurants">) =>
-      updateRestaurant(restaurantId, patch),
+    mutationFn: async (input: {
+      patch: TablesUpdate<"restaurants">
+      location?: { latitude: number; longitude: number; label: string } | null
+    }) => {
+      const restaurant = await updateRestaurant(restaurantId, input.patch)
+      if (input.location !== undefined) {
+        await saveRestaurantLocation(restaurantId, input.location)
+      }
+      return restaurant
+    },
     onSuccess: () => {
       invalidate()
       options.onSaved?.("Restaurant settings saved")
@@ -77,7 +96,13 @@ export function useRestaurantSettings(
     isPending: query.isPending,
     error: query.error,
     refetch: () => void query.refetch(),
-    save: (patch: TablesUpdate<"restaurants">) => saveMutation.mutate(patch),
+    save: (
+      patch: TablesUpdate<"restaurants">,
+      location?: { latitude: number; longitude: number; label: string } | null,
+    ) => saveMutation.mutate({ patch, location }),
+    location: locationQuery.data ?? null,
+    isLocationPending: locationQuery.isPending,
+    locationError: locationQuery.error,
     uploadBranding: (kind: RestaurantAssetKind, file: File) =>
       uploadMutation.mutate({ kind, file }),
     isSaving: saveMutation.isPending,

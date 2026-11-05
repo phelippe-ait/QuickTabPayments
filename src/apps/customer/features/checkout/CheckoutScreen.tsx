@@ -13,6 +13,7 @@ import {
   StripeCheckout,
 } from "./StripeCheckout";
 import { stripePublishableKey, type PaymentIntentResponse } from "../../data/payments";
+import type { CustomerLocation } from "../../data/geolocation";
 import type { CartItem } from "../../types";
 
 export type PlaceOrderInput = {
@@ -39,6 +40,7 @@ export function CheckoutScreen({
   onPlaceOrder,
   defaultName = "",
   error = "",
+  onRequestLocation,
   onSetupError,
 }: {
   items: CartItem[];
@@ -51,6 +53,7 @@ export function CheckoutScreen({
   canCheckout: boolean;
   onClose: () => void;
   onPlaceOrder: (input: PlaceOrderInput) => Promise<void>;
+  onRequestLocation?: () => Promise<CustomerLocation>;
   defaultName?: string;
   error?: string;
   onSetupError?: (error: unknown) => void;
@@ -152,7 +155,6 @@ export function CheckoutScreen({
             {error}
           </p>
         )}
-
         {hasStripe ? (
           <StripeCheckout
             items={items}
@@ -165,6 +167,7 @@ export function CheckoutScreen({
             customerName={customerName.trim()}
             notes={notes.trim()}
             canPay={canPay}
+            onRequestLocation={onRequestLocation}
             onSetupError={onSetupError}
             onPaid={async (intent) =>
               onPlaceOrder({
@@ -177,6 +180,7 @@ export function CheckoutScreen({
         ) : (
           <PaymentsNotConfigured />
         )}
+
 
         <div className={`${styles["form-actions"]}`}>
           <Button variant="secondary" onClick={onClose}>
