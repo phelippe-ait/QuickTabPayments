@@ -228,11 +228,15 @@ SUPABASE_ANON_KEY=<publishable / anon key>
 SUPABASE_SERVICE_ROLE_KEY=<service_role key>  # server only, bypasses RLS
 ```
 
-The Vite dev server does not run `/api` functions. For local payments run:
+The Vite dev server does not run `/api` functions. `npm run dev:all` starts
+both Vite and a small local API runner (`scripts/dev-api.ts`) that mounts the
+same handlers on `http://127.0.0.1:3001`. No Vercel login is needed for local
+development; `npm run dev:api:vercel` is available if you specifically want to
+test through `vercel dev`.
 
 ```bash
 npm run dev:all
-npm run dev:stripe   # or: stripe listen --forward-to localhost:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded
+npm run dev:stripe   # or: stripe listen --forward-to http://127.0.0.1:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded
 ```
 
 If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout shows an honest
