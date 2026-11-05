@@ -80,16 +80,21 @@ export function CatalogPage() {
           </div>
         </>
       ) : menu.isLoading ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading catalog…</div>
+        <div className="grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading catalog">
+          <span className="sr-only">Loading catalog…</span>
+          {[0, 1, 2, 3, 4, 5].map((row) => (
+            <div key={row} className="h-56 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : (
         <>
           <div className={`${styles["toolbar"]}`}>
             <label className={`${styles["search-box"]}`}><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search menu items" /></label>
             <div className={`${styles["section-tools"]}`}>
               <div className={`${styles["filter-pills"]}`}>
-                <button className={categoryId === ALL_ITEMS ? styles["active"] : ""} onClick={() => setCategoryId(ALL_ITEMS)}>All items</button>
+                <button type="button" aria-pressed={categoryId === ALL_ITEMS} className={categoryId === ALL_ITEMS ? styles["active"] : ""} onClick={() => setCategoryId(ALL_ITEMS)}>All items</button>
                 {menu.categories.map((category) => (
-                  <button key={category.id} className={categoryId === category.id ? styles["active"] : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>
+                  <button type="button" aria-pressed={categoryId === category.id} key={category.id} className={categoryId === category.id ? styles["active"] : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>
                 ))}
               </div>
               <button className={`${styles["manage-sections"]}`} onClick={() => setSectionsModalOpen(true)}><Icon name="edit" size={14} />Manage sections</button>

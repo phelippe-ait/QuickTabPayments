@@ -1,5 +1,5 @@
 import { requireSupabase } from "@shared/data/client"
-import type { OrderStatus } from "@shared/lib/database.types"
+import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
 
 export type CustomerOrderItem = {
   name: string
@@ -21,6 +21,8 @@ export type CustomerOrder = {
   trackingToken: string
   createdAt: string
   items: CustomerOrderItem[]
+  paymentStatus: PaymentStatus | null
+  receiptUrl: string | null
 }
 
 type HistoryRow = {
@@ -40,6 +42,12 @@ type HistoryRow = {
     unit_price_snapshot: number
     subtotal: number
   }>
+  payments: Array<{
+    status: PaymentStatus
+    payment_method_type: string | null
+    amount: number
+    receipt_url: string | null
+  }>
 }
 
 const historySelect = `
@@ -53,7 +61,8 @@ const historySelect = `
   created_at,
   tables(table_number),
   restaurants(name, currency),
-  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal)
+  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal),
+  payments(status, payment_method_type, amount, receipt_url)
 `
 
 /** Pure mapper so history rendering can be tested without Supabase. */
@@ -70,6 +79,8 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
     tableNumber: row.tables?.table_number ?? null,
     trackingToken: row.tracking_token,
     createdAt: row.created_at,
+    paymentStatus: row.payments?.[0]?.status ?? null,
+    receiptUrl: row.payments?.[0]?.receipt_url ?? null,
     items: (row.order_items ?? []).map((item) => ({
       name: item.item_name_snapshot,
       quantity: item.quantity,

@@ -113,7 +113,11 @@ export function UsersPage() {
           </div>
         </>
       ) : staffQuery.isLoading ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading the team…</div>
+        <div className="grid gap-4 py-8" role="status" aria-label="Loading the team">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="h-16 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : (
         <>
           <div className={`${styles["toolbar"]} user-toolbar`}>

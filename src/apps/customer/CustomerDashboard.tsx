@@ -14,7 +14,9 @@ import { OrderConfirmation } from "./features/orders/OrderConfirmation"
 import { OrdersScreen } from "./features/orders/OrdersScreen"
 import { AuthScreen } from "./features/auth/AuthScreen"
 import type { MenuItem, QrContext, Screen } from "./types"
-import { placeOrder, PlaceOrderError, type PlacedOrder } from "./data/placeOrder"
+import type { PlacedOrder } from "./data/placeOrder"
+import { PaymentSetupError } from "./data/payments"
+import { splitInclusiveTax } from "@shared/lib/money"
 import { fetchMenu } from "./data/menuApi"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
 
@@ -90,6 +92,12 @@ function CustomerShell() {
     setScreen(pending === "confirmation" ? "confirmation" : "menu")
   }, [user])
 
+  // Signing out while viewing order history would otherwise leave a blank
+  // shell; return to the menu instead.
+  useEffect(() => {
+    if (!user && screen === "orders") setScreen("menu")
+  }, [screen, user])
+
   const profileName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
     user?.email?.split("@")[0] ||
@@ -161,6 +169,9 @@ function CustomerShell() {
           items={cart.items}
           currency={currentContext.currency}
           taxRate={currentContext.taxRate}
+          restaurantName={currentContext.restaurantName}
+          restaurantSlug={currentContext.restaurantSlug}
+          tableToken={currentContext.tableToken}
           tableNumber={currentContext.tableNumber}
           canCheckout={cart.canCheckout}
           defaultName={profileName}
@@ -169,35 +180,56 @@ function CustomerShell() {
             setScreen("cart")
           }}
           error={checkoutError}
-          onPlaceOrder={async ({ customerName, notes, paymentMethod }) => {
+          onSetupError={async (setupError) => {
+            if (
+              setupError instanceof PaymentSetupError &&
+              setupError.code === "menu_item_unavailable"
+            ) {
+              // The menu changed mid-session: refresh it and drop sold-out lines.
+              const menu = await fetchMenu(currentContext.restaurantId).catch(
+                () => null,
+              )
+              if (menu)
+                cart.reconcile(menu.flatMap((category) => category.items))
+              void queryClient.invalidateQueries({
+                queryKey: ["customer-menu", currentContext.restaurantId],
+              })
+            }
+          }}
+          onPlaceOrder={async ({ customerName, intent }) => {
             setCheckoutError("")
             try {
-              const order = await placeOrder({
-                restaurantSlug: currentContext.restaurantSlug,
-                tableToken: currentContext.tableToken,
+              const total = intent.amount
+              const { subtotal, tax } = splitInclusiveTax(
+                total,
+                currentContext.taxRate,
+              )
+              const placedOrder: PlacedOrder = {
+                orderId: intent.orderId,
+                orderNumber: intent.orderNumber,
+                trackingToken: intent.trackingToken,
+                status: "pending",
+                subtotal,
+                tax,
+                total,
+                currency: intent.currency,
+                taxRate: currentContext.taxRate,
+                restaurantName: currentContext.restaurantName,
+                tableNumber: currentContext.tableNumber,
                 customerName,
-                notes,
-                items: cart.items,
-              })
-              const placedOrder: PlacedOrder = { ...order, paymentMethod }
+                createdAt: new Date().toISOString(),
+                items: cart.items.map((item) => ({
+                  name: item.name,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  subtotal: item.unitPrice * item.quantity,
+                })),
+              }
               if (source) saveLastOrder(source, placedOrder)
               cart.clear()
               setCreatedOrder(placedOrder)
               setScreen("confirmation")
             } catch (error) {
-              if (
-                error instanceof PlaceOrderError &&
-                error.code === "menu_item_unavailable"
-              ) {
-                // The menu changed mid-session: refresh it and drop sold-out lines.
-                const menu = await fetchMenu(currentContext.restaurantId).catch(
-                  () => null,
-                )
-                if (menu) cart.reconcile(menu.flatMap((category) => category.items))
-                void queryClient.invalidateQueries({
-                  queryKey: ["customer-menu", currentContext.restaurantId],
-                })
-              }
               setCheckoutError(
                 error instanceof Error
                   ? error.message

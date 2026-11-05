@@ -3,8 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router"
 import { useAuth } from "@shared/auth/AuthContext"
 import { supabase } from "@shared/lib/supabase"
 import { cn } from "@shared/lib/cn"
-import { formatMoney } from "@shared/lib/money"
+import { formatMoney, inclusiveTaxLabel } from "@shared/lib/money"
 import { orderStatusLabels, orderStatusTones } from "@shared/orders/status"
+import { CUSTOMER_TAGLINE } from "../../constants"
 import type { OrderStatus } from "@shared/lib/database.types"
 import { Badge, type BadgeProps } from "@shared/ui/shadcn/badge"
 import { buttonVariants } from "@shared/ui/shadcn/button"
@@ -20,12 +21,13 @@ import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import {
   fetchOrderTracking,
   isTerminalStatus,
+  parseRedirectStatus,
   TRACKING_POLL_INTERVAL_MS,
   type TrackingOrder,
 } from "../../data/tracking"
 
 const STEPS: Array<{ status: OrderStatus; label: string; description: string }> = [
-  { status: "pending", label: "Order placed", description: "We received your order." },
+  { status: "pending", label: "Payment confirming", description: "Waiting for your bank to confirm the payment." },
   { status: "confirmed", label: "Confirmed", description: "Your order was sent to the kitchen." },
   { status: "preparing", label: "Preparing", description: "The kitchen is making your order." },
   { status: "ready", label: "Ready", description: "Ready to collect from the counter." },
@@ -91,23 +93,42 @@ function useTracking(token: string) {
   }, [token])
 
   // Guests are RLS-filtered out of Realtime, so polling is the shared
-  // mechanism. It stops as soon as the order reaches a terminal status.
+  // mechanism. It pauses in background tabs and stops at a terminal status.
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
 
     terminalRef.current = false
-    const tick = async () => {
-      await refresh()
+
+    const schedule = () => {
       if (!cancelled && !terminalRef.current) {
-        timer = window.setTimeout(tick, TRACKING_POLL_INTERVAL_MS)
+        timer = window.setTimeout(() => {
+          void tick()
+        }, TRACKING_POLL_INTERVAL_MS)
       }
     }
+
+    const tick = async () => {
+      if (!cancelled && document.visibilityState !== "hidden") {
+        await refresh()
+      }
+      schedule()
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (timer) window.clearTimeout(timer)
+        void tick()
+      }
+    }
+
     void tick()
+    document.addEventListener("visibilitychange", onVisibilityChange)
 
     return () => {
       cancelled = true
       if (timer) window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [refresh])
 
@@ -118,6 +139,7 @@ export function OrderTrackingScreen() {
   const { orderNumber = "" } = useParams()
   const [searchParams] = useSearchParams()
   const token = searchParams.get("token") ?? ""
+  const redirectStatus = parseRedirectStatus(searchParams)
   const { user } = useAuth()
   const tracking = useTracking(token)
   const { order, refresh } = tracking
@@ -157,6 +179,24 @@ export function OrderTrackingScreen() {
         <h1 className="sr-only">
           Order tracking for {orderNumber || "this order"}
         </h1>
+        {redirectStatus === "failed" && (
+          <p
+            role="alert"
+            className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-[12px] text-danger"
+          >
+            Your payment didn&apos;t complete. The order will not be prepared —
+            please try again or ask a team member for help.
+          </p>
+        )}
+        {redirectStatus === "requires_action" && (
+          <p
+            role="status"
+            className="rounded-lg border border-line bg-paper px-4 py-3 text-[12px] text-ink-mid"
+          >
+            Your bank is completing an extra verification step. This page will
+            update automatically.
+          </p>
+        )}
         <header className="flex items-center justify-between">
           <Link
             to="/"
@@ -238,9 +278,14 @@ export function OrderTrackingScreen() {
                 <p className="mt-1 text-[12px] text-ink-mid" aria-live="polite">
                   {order.status === "cancelled"
                     ? "This order was cancelled. Please speak to a team member if you need help."
-                    : order.status === "completed"
-                      ? "This order is complete. Thanks for visiting!"
-                      : "This page updates automatically — you can leave it open."}
+                    : order.status === "pending"
+                      ? "Payment confirming — this usually takes a few seconds."
+                      : order.status === "completed"
+                        ? "This order is complete. Thanks for visiting!"
+                        : "This page updates automatically — you can leave it open."}
+                  {tracking.refreshing && (
+                    <span className="ml-2 text-muted">Updating…</span>
+                  )}
                 </p>
                 {order.tableNumber && (
                   <p className="text-[12px] text-ink-mid">
@@ -329,7 +374,13 @@ export function OrderTrackingScreen() {
                     <dd>{formatMoney(order.subtotal, order.currency)}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt>GST (included)</dt>
+                    <dt>
+                      {inclusiveTaxLabel(
+                        order.total > order.tax
+                          ? order.tax / (order.total - order.tax)
+                          : 0,
+                      )}
+                    </dt>
                     <dd>{formatMoney(order.tax, order.currency)}</dd>
                   </div>
                   <div className="flex justify-between text-[14px] font-bold text-ink">
@@ -343,7 +394,7 @@ export function OrderTrackingScreen() {
         )}
 
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-          QuickTab · scan, order, track
+          {CUSTOMER_TAGLINE}
         </p>
       </div>
     </main>

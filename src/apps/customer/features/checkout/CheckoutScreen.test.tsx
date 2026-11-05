@@ -2,14 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { CheckoutScreen } from "./CheckoutScreen"
 
-const mocks = vi.hoisted(() => ({
-  simulatePayment: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock("../../data/simulatedPayment", () => ({
-  simulatePayment: mocks.simulatePayment,
-}))
-
 const items = [
   {
     menuItemId: "item-1",
@@ -19,6 +11,46 @@ const items = [
   },
 ]
 
+const intent = {
+  clientSecret: "pi_1_secret",
+  orderId: "order-1",
+  orderNumber: "QT-1",
+  trackingToken: "tok",
+  amount: 4.7,
+  currency: "AUD",
+  status: "pending" as const,
+}
+
+const state = vi.hoisted(() => ({ key: "" as string }))
+
+vi.mock("./StripeCheckout", () => ({
+  PaymentsNotConfigured: () => (
+    <section>Payments are not configured</section>
+  ),
+  StripeCheckout: ({
+    onPaid,
+  }: {
+    onPaid: (value: typeof intent) => Promise<void> | void;
+  }) => (
+    <button type="button" onClick={() => void onPaid(intent)}>
+      Pay 4.70
+    </button>
+  ),
+}))
+
+vi.mock("../../data/payments", () => ({
+  PaymentSetupError: class PaymentSetupError extends Error {
+    code: string;
+    constructor(code: string, message?: string) {
+      super(message)
+      this.code = code
+    }
+  },
+  get stripePublishableKey() {
+    return state.key
+  },
+}))
+
 function setup(overrides: Partial<Parameters<typeof CheckoutScreen>[0]> = {}) {
   const onPlaceOrder =
     overrides.onPlaceOrder ?? vi.fn().mockResolvedValue(undefined)
@@ -27,6 +59,9 @@ function setup(overrides: Partial<Parameters<typeof CheckoutScreen>[0]> = {}) {
       items={items}
       currency="AUD"
       taxRate={0.1}
+      restaurantName="QuickTab Demo Cafe"
+      restaurantSlug="cafe"
+      tableToken="table-token"
       tableNumber="T05"
       canCheckout
       onClose={() => {}}
@@ -48,7 +83,7 @@ function enterDetails() {
 
 describe("CheckoutScreen", () => {
   beforeEach(() => {
-    mocks.simulatePayment.mockClear()
+    state.key = "pk_test_123"
   })
 
   it("shows GST-inclusive subtotal, tax and total to the cent", () => {
@@ -56,93 +91,45 @@ describe("CheckoutScreen", () => {
 
     expect(screen.getByText("Subtotal")).toBeInTheDocument()
     expect(screen.getByText(/4\.27/)).toBeInTheDocument()
-    expect(screen.getByText(/GST \(included/)).toBeInTheDocument()
+    expect(screen.getByText("GST (included, 10%)")).toBeInTheDocument()
     expect(screen.getByText(/0\.43/)).toBeInTheDocument()
     expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
   })
 
-  it("offers the four simulated payment methods", () => {
+  it("renders the Stripe payment form when a publishable key exists", () => {
     setup()
-
     expect(
-      screen.getByRole("button", { name: "Credit / Debit Card" }),
+      screen.getByRole("button", { name: "Pay 4.70" }),
     ).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Apple Pay" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Google Pay" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Link" })).toBeInTheDocument()
-    expect(screen.getByText(/Test mode — payment is simulated/i)).toBeInTheDocument()
+    expect(screen.queryByText("Payments are not configured")).not.toBeInTheDocument()
   })
 
-  it("does not require card number fields in the simulation", () => {
+  it("shows an honest notice when payments are not configured", () => {
+    state.key = ""
+    setup()
+    expect(screen.getByText("Payments are not configured")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Pay 4.70" })).not.toBeInTheDocument()
+  })
+
+  it("places the order with the customer name and payment intent", async () => {
+    const { onPlaceOrder } = setup()
+    enterDetails()
+
+    fireEvent.click(screen.getByRole("button", { name: "Pay 4.70" }))
+
+    await waitFor(() =>
+      expect(onPlaceOrder).toHaveBeenCalledWith({
+        customerName: "Olivia",
+        notes: "extra hot",
+        intent,
+      }),
+    )
+  })
+
+  it("does not require card number fields on the checkout screen", () => {
     setup()
     expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/cvv/i)).not.toBeInTheDocument()
-  })
-
-  it("disables payment methods until a name is entered", () => {
-    setup()
-    expect(
-      screen.getByRole("button", { name: "Credit / Debit Card" }),
-    ).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText("Name for the order"), {
-      target: { value: "Olivia" },
-    })
-    expect(
-      screen.getByRole("button", { name: "Credit / Debit Card" }),
-    ).toBeEnabled()
-  })
-
-  it("disables payment methods without a QR context", () => {
-    setup({ canCheckout: false })
-    fireEvent.change(screen.getByLabelText("Name for the order"), {
-      target: { value: "Olivia" },
-    })
-    expect(
-      screen.getByRole("button", { name: "Credit / Debit Card" }),
-    ).toBeDisabled()
-  })
-
-  it.each([
-    ["Credit / Debit Card", "card"],
-    ["Apple Pay", "apple_pay"],
-    ["Google Pay", "google_pay"],
-    ["Link", "link"],
-  ] as const)(
-    "simulates %s and places the order",
-    async (label, method) => {
-      const { onPlaceOrder } = setup()
-      enterDetails()
-
-      fireEvent.click(screen.getByRole("button", { name: label }))
-
-      expect(mocks.simulatePayment).toHaveBeenCalledWith(method)
-      await waitFor(() =>
-        expect(onPlaceOrder).toHaveBeenCalledWith({
-          customerName: "Olivia",
-          notes: "extra hot",
-          paymentMethod: method,
-        }),
-      )
-    },
-  )
-
-  it("shows progress and disables every method while processing", async () => {
-    const { onPlaceOrder } = setup({
-      onPlaceOrder: vi.fn().mockReturnValue(new Promise(() => {})),
-    })
-    enterDetails()
-
-    fireEvent.click(screen.getByRole("button", { name: "Apple Pay" }))
-
-    expect(
-      await screen.findByText("Processing Apple Pay…"),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: "Credit / Debit Card" }),
-    ).toBeDisabled()
-    expect(screen.getByRole("button", { name: "Link" })).toBeDisabled()
-    await waitFor(() => expect(onPlaceOrder).toHaveBeenCalledTimes(1))
   })
 
   it("renders a checkout error", () => {

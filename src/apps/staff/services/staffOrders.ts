@@ -1,5 +1,7 @@
-
 import { supabase } from "../../../shared/lib/supabase"
+import type { PaymentStatus } from "@shared/lib/database.types"
+import { paymentStatusLabel } from "@shared/orders/paymentLabels"
+import type { KitchenStatus, Order } from "../types"
 
 export type StaffOrderRow = {
   id: string
@@ -9,17 +11,26 @@ export type StaffOrderRow = {
   created_at: string
   table_id: string | null
   restaurant_id: string
+  customer_name_snapshot: string | null
+  tables: {
+    table_number: string
+  } | null
   order_items: {
     item_name_snapshot: string
     quantity: number
     unit_price_snapshot: number
     notes: string | null
   }[]
-  tables: {
-  table_number: string
-} | null
+  payments: {
+    status: PaymentStatus
+    payment_method_type: string | null
+  }[]
 }
 
+/**
+ * Orders for the live kitchen board. `pending` orders are unpaid and must not
+ * reach the kitchen; the Stripe webhook confirms them first.
+ */
 export async function fetchStaffOrders(restaurantId: string) {
   if (!supabase) {
     throw new Error("Supabase is not configured")
@@ -34,29 +45,32 @@ export async function fetchStaffOrders(restaurantId: string) {
       total,
       created_at,
       table_id,
-restaurant_id,
-tables (
-  table_number
-),
-order_items (
+      restaurant_id,
+      customer_name_snapshot,
+      tables (
+        table_number
+      ),
+      order_items (
         item_name_snapshot,
         quantity,
         unit_price_snapshot,
         notes
+      ),
+      payments (
+        status,
+        payment_method_type
       )
     `)
     .eq("restaurant_id", restaurantId)
+    .neq("status", "pending")
     .order("created_at", { ascending: false })
 
   if (error) {
     throw new Error(error.message)
   }
 
-  return (data ?? []) as StaffOrderRow[]
+  return (data ?? []) as unknown as StaffOrderRow[]
 }
-
-
-import type { KitchenStatus, Order } from "../types"
 
 function mapKitchenStatus(status: string): KitchenStatus {
   switch (status) {
@@ -75,13 +89,13 @@ function mapKitchenStatus(status: string): KitchenStatus {
 
 export function mapStaffOrder(row: StaffOrderRow): Order {
   const kitchenStatus = mapKitchenStatus(row.status)
+  const latestPayment = row.payments?.[0]
 
   return {
     id: row.order_number,
-    table: row.tables
-  ? `Table ${row.tables.table_number}`
-  : "No table",
-    guest: "Customer",
+    databaseId: row.id,
+    table: row.tables ? `Table ${row.tables.table_number}` : "No table",
+    guest: row.customer_name_snapshot || "Guest",
     time: new Date(row.created_at).toLocaleString("en-AU", {
       timeZone: "Australia/Sydney",
       day: "2-digit",
@@ -97,51 +111,18 @@ export function mapStaffOrder(row: StaffOrderRow): Order {
           ? "Cancelled"
           : "In progress",
     kitchenStatus,
-    server: "QuickTab",
+    server: "—",
     guests: 1,
-    payment: "Not confirmed",
-    items: row.order_items.map((item) => ({
+    payment: latestPayment
+      ? paymentStatusLabel(latestPayment.status)
+      : "—",
+    items: (row.order_items ?? []).map((item) => ({
       name: item.item_name_snapshot,
       qty: item.quantity,
       price: item.unit_price_snapshot,
     })),
   }
 }
-
-
-export async function fetchMyStaffRestaurantId(): Promise<string | null> {
-  if (!supabase) {
-    throw new Error("Supabase is not configured")
-  }
-
-  const { data: userData, error: authError } =
-    await supabase.auth.getUser()
-
-  if (authError) {
-    throw new Error(authError.message)
-  }
-
-  if (!userData.user) {
-    return null
-  }
-
-  const { data, error } = await supabase
-    .from("restaurant_staff")
-    .select("restaurant_id")
-    .eq("user_id", userData.user.id)
-    .eq("is_active", true)
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const staffRestaurant = data as { restaurant_id: string } | null
-
-return staffRestaurant?.restaurant_id ?? null
-}
-
 
 export async function updateStaffOrderStatus(
   restaurantId: string,
@@ -153,8 +134,8 @@ export async function updateStaffOrderStatus(
   }
 
   const { data, error } = await supabase
-  .from("orders")
-  .update({ status } as never)
+    .from("orders")
+    .update({ status } as never)
     .eq("restaurant_id", restaurantId)
     .eq("order_number", orderNumber)
     .select("id")

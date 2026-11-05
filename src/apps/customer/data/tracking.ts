@@ -100,3 +100,22 @@ export function trackingUrl(
   url.searchParams.set("token", trackingToken)
   return `${url.pathname}${url.search}`
 }
+
+export type RedirectStatus = "succeeded" | "failed" | "requires_action";
+
+/**
+ * Stripe appends `redirect_status` to the return URL after a redirect-based
+ * payment method (3-D Secure, wallets). The webhook remains the source of
+ * truth; this only decides which interim copy to show.
+ */
+export function parseRedirectStatus(
+  value: string | URLSearchParams | null | undefined,
+): RedirectStatus | null {
+  const raw =
+    typeof value === "string" || value == null
+      ? value
+      : value.get("redirect_status");
+  return raw === "succeeded" || raw === "failed" || raw === "requires_action"
+    ? raw
+    : null;
+}

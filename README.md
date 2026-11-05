@@ -214,6 +214,32 @@ VITE_RESTAURANT_SLUG=quicktab-demo-cafe
 Restart `npm run dev` after changing `.env.local`; Vite only reads environment
 variables at startup.
 
+### Stripe payments (Phase 6)
+
+The customer checkout uses Stripe Elements and the `/api` serverless functions.
+Add to `.env.local` (and to Vercel → Environment Variables for deploys):
+
+```env
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...   # bundled, safe in the browser
+STRIPE_SECRET_KEY=sk_test_...             # server only
+STRIPE_WEBHOOK_SECRET=whsec_...           # from `stripe listen`
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable / anon key>
+SUPABASE_SERVICE_ROLE_KEY=<service_role key>  # server only, bypasses RLS
+```
+
+The Vite dev server does not run `/api` functions. For local payments run:
+
+```bash
+npm run dev:all
+stripe listen --forward-to localhost:3001/api/webhooks/stripe
+```
+
+If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout shows an honest
+"Payments are not configured" notice instead of a fake payment form. See
+`docs/PAYMENTS_API_CONTRACT.md` for request/response shapes and the order ↔
+payment status mapping.
+
 ## Authentication setup
 
 The hosted demo project is already set up for email/password sign-in, and the
@@ -542,7 +568,8 @@ npm run test:watch  # Re-run on change while developing
 ```
 
 The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
-mappers, and shared helpers. No end-to-end suite is configured in this phase.
+mappers, and shared helpers. Playwright covers a customer smoke test and a
+gated payment lifecycle spec (`npm run test:e2e`).
 
 ## Build and Deployment
 
@@ -555,15 +582,20 @@ npm run build
 The generated production files are placed in the `dist/` directory.
 
 The project is intended to be deployed using **Vercel**. When deploying, set
-`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the project's environment
-variables, and in Supabase **Authentication → URL Configuration** set the Site
-URL to the deployed origin and add both `https://<domain>/**` and
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and
+`VITE_STRIPE_PUBLISHABLE_KEY` (build-time) in the project's environment
+variables, plus the server-only `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. In
+Supabase **Authentication → URL Configuration** set the Site URL to the
+deployed origin and add both `https://<domain>/**` and
 `http://localhost:5173/**` to the Redirect URLs. The `vercel.json` SPA rewrite
-keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh.
+keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh while
+letting `/api/*` reach the serverless functions.
 
-Known risk (until Phase 7): the `/staff` route has no auth gate. It still needs
-a signed-in staff account to load restaurant data, but the route itself is not
-protected.
+The `/staff` route is auth-gated: signed-out visitors get a staff sign-in
+screen, and signed-in users without an active membership see a no-access state.
+Reservations are hidden behind `RESERVATIONS_ENABLED` until they have a backing
+table.
 
 ## Troubleshooting
 

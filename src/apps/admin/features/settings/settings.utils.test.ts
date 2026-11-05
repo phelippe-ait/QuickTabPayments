@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { percentToTaxRate, taxRateToPercent } from "./settings.utils";
+import { isValidTimezone, percentToTaxRate, taxRateToPercent } from "./settings.utils";
 
 describe("tax rate mapping", () => {
   it("formats a stored fraction as a percent", () => {
@@ -17,5 +17,14 @@ describe("tax rate mapping", () => {
   it("returns NaN for invalid input", () => {
     expect(Number.isNaN(percentToTaxRate(""))).toBe(true);
     expect(Number.isNaN(percentToTaxRate("abc"))).toBe(true);
+  });
+});
+
+describe("isValidTimezone", () => {
+  it("accepts IANA zones and rejects free text", () => {
+    expect(isValidTimezone("Australia/Sydney")).toBe(true);
+    expect(isValidTimezone("UTC")).toBe(true);
+    expect(isValidTimezone("Mars/Olympus")).toBe(false);
+    expect(isValidTimezone("")).toBe(false);
   });
 });

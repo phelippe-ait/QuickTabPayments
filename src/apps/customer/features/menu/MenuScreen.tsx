@@ -6,6 +6,7 @@ import { Button } from "@shared/ui/Button"
 import { useAuth } from "@shared/auth/AuthContext"
 import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
+import { useBodyScrollLock } from "@shared/ui/useDialogFocus"
 import { EditNameDialog } from "../profile/EditNameDialog"
 import { ProductPhoto } from "./ProductPhoto"
 import { fetchMenu } from "../../data/menuApi"
@@ -35,6 +36,7 @@ export function MenuScreen({
   const [drawer, setDrawer] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [activeCategory, setActiveCategory] = useState("");
+  useBodyScrollLock(drawer);
 
   const menuQuery = useQuery({
     queryKey: ["customer-menu", qr.restaurantId],
@@ -112,7 +114,12 @@ export function MenuScreen({
           onClick={() => setDrawer(false)}
         />
       )}
-      <aside className={`${styles["drawer"]} ${drawer ? styles["open"] : ""}`}>
+      <aside
+        className={`${styles["drawer"]} ${drawer ? styles["open"] : ""}`}
+        role="dialog"
+        aria-modal={drawer ? true : undefined}
+        aria-label="Menu and account"
+      >
         <div className={`${styles["drawer-heading"]}`}>
           <div>
             <span className={`${styles["eyebrow"]}`}>SCAN &amp; ORDER</span>
@@ -197,11 +204,6 @@ export function MenuScreen({
             </Button>
           </div>
         )}
-        <div className={`${styles["drawer-links"]}`}>
-          <span>Our menu</span>
-          <span>Find a café</span>
-          <span>Help &amp; support</span>
-        </div>
       </aside>
 
       <main className={`${styles["menu-screen"]}`}>
@@ -211,8 +213,10 @@ export function MenuScreen({
             icon="menu"
             label="Open menu"
             onClick={() => setDrawer(true)}
+            expanded={drawer}
           />
           <span className={`${styles["menu-brand"]}`}>{qr.restaurantName}</span>
+          <h1 className="sr-only">{qr.restaurantName} menu</h1>
         </header>
 
         <section
@@ -312,7 +316,7 @@ export function MenuScreen({
                   data-category={category.id}
                   key={category.id}
                 >
-                  <h1>{category.name}</h1>
+                  <h2>{category.name}</h2>
                   <div className={`${styles["product-list"]}`}>
                     {items.map((item) => (
                       <button
@@ -341,11 +345,11 @@ export function MenuScreen({
         )}
 
         <button className={`${styles["cart-dock"]}`} onClick={onOpenCart}>
-          <span>
+          <span aria-live="polite">
             <strong>Cart</strong>
             <small>
               {cartCount
-                ? `${cartCount} item(s) in your cart - Total: ${formatMoney(total, qr.currency)}`
+                ? `${cartCount} ${cartCount === 1 ? "item" : "items"} in your cart – Total: ${formatMoney(total, qr.currency)}`
                 : "Your cart is empty."}
             </small>
           </span>

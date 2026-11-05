@@ -4,6 +4,8 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
+import { orderStatusLabels } from "@shared/orders/status"
+import { paymentStatusLabels } from "@shared/orders/paymentLabels"
 import { HeaderButton } from "../../components/CustomerUi"
 import {
   getCustomerOrderHistory,
@@ -67,17 +69,26 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
         <section className={styles["order-history-list"]} aria-label="Your past orders">
           {orders.map((order) => (
             <article className={`${styles["order-card"]} ${styles["history-order-card"]}`} key={order.id}>
-              <div className={styles["history-order-heading"]}>
-                <div className={styles["item-name"]}>
-                  <strong>Order {order.orderNumber}</strong>
-                  <small>
-                    {order.restaurantName ? `${order.restaurantName} · ` : ""}
-                    {order.tableNumber ? `Table ${order.tableNumber} · ` : ""}
-                    {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}
-                  </small>
+                <div className={styles["history-order-heading"]}>
+                  <div className={styles["item-name"]}>
+                    <strong>Order {order.orderNumber}</strong>
+                    <small>
+                      {order.restaurantName ? `${order.restaurantName} · ` : ""}
+                      {order.tableNumber ? `Table ${order.tableNumber} · ` : ""}
+                      {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.createdAt))}
+                    </small>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={styles["order-status-pill"]}>
+                      {orderStatusLabels[order.status]}
+                    </span>
+                    {order.paymentStatus && (
+                      <span className={styles["order-status-pill"]}>
+                        {paymentStatusLabels[order.paymentStatus]}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className={styles["order-status-pill"]}>{order.status}</span>
-              </div>
               <ul className={styles["history-order-items"]}>
                 {order.items.map((item, index) => (
                   <li key={`${item.name}-${index}`}>

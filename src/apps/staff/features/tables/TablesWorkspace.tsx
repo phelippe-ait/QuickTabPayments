@@ -2,6 +2,9 @@ import { useState } from "react"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
+import { formatMoney } from "@shared/lib/money"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { Table, TableStatus } from "../../types"
 import { Stat } from "../../components/StaffUi"
 
@@ -9,10 +12,12 @@ export function TableCard({
   table,
   selected,
   onSelect,
+  currency,
 }: {
   table: Table
   selected: boolean
   onSelect: (table: Table) => void
+  currency: string
 }) {
   const occupied = table.status === "occupied"
   return (
@@ -48,7 +53,7 @@ export function TableCard({
               </span>
             </div>
           </div>
-          <span className="font-serif text-xl">${table.total?.toFixed(2)}</span>
+          <span className="font-serif text-xl">{formatMoney(table.total ?? 0, currency)}</span>
         </div>
       ) : (
         <div className="mt-8 flex items-center justify-between">
@@ -78,6 +83,8 @@ export function TableEditor({
   const [guest, setGuest] = useState(table.guest ?? "")
   const [occupants, setOccupants] = useState(table.occupants)
   const occupied = status === "occupied"
+  const panelRef = useDialogFocus<HTMLElement>(onClose)
+  useBodyScrollLock()
 
   function saveChanges() {
     onSave({
@@ -94,11 +101,17 @@ export function TableEditor({
   return (
     <>
       <button
-        aria-label="Close order details"
+        aria-label="Close table editor"
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="table-editor-title"
+        className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}
+      >
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>Edit table</p>
           <button
@@ -111,11 +124,11 @@ export function TableEditor({
         </div>
         <div className="mt-8 flex items-end justify-between border-b border-line pb-7">
           <div>
-            <h2 className="font-serif text-4xl">
+            <h2 className="font-serif text-4xl" id="table-editor-title">
               {table.tableNumber ?? table.id.toString().padStart(2, "0")}
             </h2>
             <p className="mt-2 text-sm text-muted-2">
-              Capacity · {table.seats} guests
+              Capacity · {table.seats ?? "not set"} guests
             </p>
           </div>
           <StatusPill tone={status === "occupied" ? "primary" : "success"} withDot={false}>
@@ -128,6 +141,8 @@ export function TableEditor({
           <div className="grid grid-cols-2 gap-3">
             {(["available", "occupied"] as const).map((option) => (
               <button
+                type="button"
+                aria-pressed={status === option}
                 className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold capitalize transition ${
                   status === option
                     ? option === "occupied"
@@ -165,7 +180,7 @@ export function TableEditor({
             <div className="flex items-center justify-between">
               <span className={`${styles["detail-label"]}`}>Number of occupants</span>
               <span className="text-xs text-muted">
-                Maximum {table.seats}
+                Maximum {table.seats ?? "—"}
               </span>
             </div>
             <div className="mt-2.5 flex items-center justify-between rounded-xl border border-line bg-white p-2">
@@ -221,15 +236,30 @@ export function TableEditor({
   )
 }
 
-export function TablesWorkspace({ tableList, filteredTables, occupied, filter, selectedTable, onFilterChange, onSelectTable, userName }: {
+export function TablesWorkspace({
+  tableList,
+  filteredTables,
+  occupied,
+  filter,
+  selectedTable,
+  onFilterChange,
+  onSelectTable,
+  userName,
+  currency,
+  isLoading = false,
+  error = null,
+}: {
   tableList: Table[]
-    userName: string
+  userName: string
   filteredTables: Table[]
   occupied: number
   filter: "all" | TableStatus
   selectedTable: Table | null
   onFilterChange: (filter: "all" | TableStatus) => void
   onSelectTable: (table: Table) => void
+  currency: string
+  isLoading?: boolean
+  error?: string | null
 }) {
 
     const firstName = userName.trim().split(/\s+/)[0] || "there"
@@ -273,6 +303,8 @@ export function TablesWorkspace({ tableList, filteredTables, occupied, filter, s
                 <div className="flex rounded-full border border-line bg-line-soft p-1">
                   {(["all", "occupied", "available"] as const).map((item) => (
                     <button
+                      type="button"
+                      aria-pressed={filter === item}
                       className={`rounded-full px-4 py-2 text-xs font-bold capitalize transition ${
                         filter === item
                           ? "bg-white text-ink shadow-sm"
@@ -292,16 +324,44 @@ export function TablesWorkspace({ tableList, filteredTables, occupied, filter, s
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredTables.map((table) => (
-                  <TableCard
-                    key={table.id}
-                    selected={selectedTable?.id === table.id}
-                    table={table}
-                    onSelect={onSelectTable}
-                  />
-                ))}
-              </div>
+              {error && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+                >
+                  Unable to load tables: {error}
+                </div>
+              )}
+
+              {isLoading ? (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading tables">
+                  {[0, 1, 2, 3].map((row) => (
+                    <Skeleton key={row} className="h-[190px] rounded-[22px]" />
+                  ))}
+                </div>
+              ) : filteredTables.length === 0 ? (
+                <div className="rounded-[22px] border border-dashed border-line bg-cream-3 px-6 py-20 text-center">
+                  <h2 className="font-serif text-2xl">No tables to show</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {tableList.length === 0
+                      ? "Add tables in the admin workspace to start taking orders."
+                      : "No tables match this filter."}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredTables.map((table) => (
+                    <TableCard
+                      key={table.id}
+                      currency={currency}
+                      selected={selectedTable?.id === table.id}
+                      table={table}
+                      onSelect={onSelectTable}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="h-16 lg:hidden" />
             </>
   )
 }

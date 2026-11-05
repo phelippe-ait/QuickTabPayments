@@ -10,7 +10,7 @@ import {
   validateImageFile,
   type RestaurantAssetKind,
 } from "@shared/lib/storage";
-import { percentToTaxRate, taxRateToPercent } from "./settings.utils";
+import { isValidTimezone, percentToTaxRate, taxRateToPercent } from "./settings.utils";
 
 const currencies = [
   "AUD",
@@ -65,6 +65,7 @@ export function SettingsPage() {
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [brandingError, setBrandingError] = useState("");
   const [taxError, setTaxError] = useState("");
+  const [timezoneError, setTimezoneError] = useState("");
 
   useEffect(() => {
     if (!source) return;
@@ -110,8 +111,10 @@ export function SettingsPage() {
           title="Settings"
           description="Manage your restaurant profile, branding, and service details."
         />
-        <div className="py-16 text-center text-sm text-muted-2" role="status">
-          Loading restaurant settings…
+        <div className="grid gap-4 py-8" role="status" aria-label="Loading restaurant settings">
+          <div className="h-10 w-56 animate-pulse rounded-lg bg-line-soft" />
+          <div className="h-64 animate-pulse rounded-card bg-line-soft" />
+          <div className="h-64 animate-pulse rounded-card bg-line-soft" />
         </div>
       </>
     );
@@ -137,10 +140,17 @@ export function SettingsPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTaxError("");
+    setTimezoneError("");
 
     const taxRate = percentToTaxRate(form.taxPercent);
     if (Number.isNaN(taxRate) || taxRate < 0 || taxRate > 1) {
       setTaxError("Enter a tax rate between 0 and 100.");
+      return;
+    }
+
+    const timezone = form.timezone.trim() || "Australia/Sydney";
+    if (!isValidTimezone(timezone)) {
+      setTimezoneError("Enter a valid IANA timezone, e.g. Australia/Sydney.");
       return;
     }
 
@@ -153,7 +163,7 @@ export function SettingsPage() {
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       currency: form.currency.trim() || "AUD",
-      timezone: form.timezone.trim() || "Australia/Sydney",
+      timezone: timezone,
       tax_rate: taxRate,
       ...(isOwner && form.slug.trim() !== source.slug
         ? { slug: form.slug.trim() }
@@ -265,9 +275,16 @@ export function SettingsPage() {
               <input
                 required
                 value={form.timezone}
+                aria-invalid={Boolean(timezoneError)}
+                aria-describedby={timezoneError ? "settings-timezone-error" : undefined}
                 onChange={(event) => update({ timezone: event.target.value })}
                 placeholder="Australia/Sydney"
               />
+              {timezoneError && (
+                <small className={`${styles["field-error"]}`} id="settings-timezone-error" role="alert">
+                  {timezoneError}
+                </small>
+              )}
             </label>
             <label>
               Tax rate (%)

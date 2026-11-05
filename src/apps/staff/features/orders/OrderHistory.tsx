@@ -1,7 +1,17 @@
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
+import { formatMoney } from "@shared/lib/money"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { Order } from "../../types"
+
+function statusTone(order: Order): "success" | "danger" | "primary" {
+  return order.status === "Completed"
+    ? "success"
+    : order.status === "Cancelled"
+      ? "danger"
+      : "primary"
+}
 
 export function OrderHistory({
   filteredOrders,
@@ -11,6 +21,7 @@ export function OrderHistory({
   onSelect,
   isLoading,
   error,
+  currency,
 }: {
   filteredOrders: Order[]
   totalOrders: number
@@ -19,6 +30,7 @@ export function OrderHistory({
   onSelect: (order: Order) => void
   isLoading: boolean
   error: string | null
+  currency: string
 }) {
   return (
     <>
@@ -74,7 +86,7 @@ export function OrderHistory({
               {order.time}
             </span>
             <span className="row-span-2 row-start-1 text-right font-serif text-lg md:row-auto md:text-left">
-              ${order.total.toFixed(2)}
+              {formatMoney(order.total, currency)}
             </span>
             <span className="hidden text-placeholder transition group-hover:translate-x-1 group-hover:text-berry md:block">
               <Icon name="chevron" size={18} />
@@ -98,13 +110,17 @@ export function OrderHistory({
 export function HistoryOrderDrawer({
   order,
   onClose,
+  currency = "AUD",
 }: {
   order: Order
   onClose: () => void
+  currency?: string
 }) {
   const subtotal = order.subtotal ?? order.total / 1.09
   const tax = order.tax ?? order.total - subtotal
   const completed = order.status === "Completed"
+  const panelRef = useDialogFocus<HTMLElement>(onClose)
+  useBodyScrollLock()
 
   return (
     <>
@@ -114,7 +130,10 @@ export function HistoryOrderDrawer({
         onClick={onClose}
       />
       <aside
-        aria-label={`Details for order ${order.id}`}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-order-title"
         className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[460px] sm:p-8`}
       >
         <div className="flex items-center justify-between">
@@ -130,12 +149,12 @@ export function HistoryOrderDrawer({
 
         <div className="mt-8 flex items-start justify-between border-b border-line pb-7">
           <div>
-            <h2 className="font-serif text-4xl">{order.id}</h2>
+            <h2 className="font-serif text-4xl" id="history-order-title">{order.id}</h2>
             <p className="mt-2 text-sm text-muted-2">
               {order.table} · {order.guest}
             </p>
           </div>
-          <StatusPill tone={completed ? "success" : "primary"}>
+          <StatusPill tone={statusTone(order)}>
             {order.status}
           </StatusPill>
         </div>
@@ -143,9 +162,7 @@ export function HistoryOrderDrawer({
         <div className="mt-7 grid grid-cols-3 gap-4">
           <div>
             <p className={`${styles["detail-label"]}`}>Time</p>
-            <p className="mt-1.5 text-xs font-bold">
-              {order.time.replace("Today, ", "")}
-            </p>
+            <p className="mt-1.5 text-xs font-bold">{order.time}</p>
           </div>
           <div>
             <p className={`${styles["detail-label"]}`}>Server</p>
@@ -176,7 +193,7 @@ export function HistoryOrderDrawer({
                   </span>
                   <span className="text-sm font-bold">{item.name}</span>
                 </div>
-                <span className="text-sm">${item.price.toFixed(2)}</span>
+                <span className="text-sm">{formatMoney(item.price, currency)}</span>
               </div>
             ))}
           </div>
@@ -185,15 +202,15 @@ export function HistoryOrderDrawer({
         <div className="mt-8 space-y-3 border-t border-line pt-6 text-sm">
           <div className="flex justify-between text-muted-2">
             <span>Subtotal</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>{formatMoney(subtotal, currency)}</span>
           </div>
           <div className="flex justify-between text-muted-2">
             <span>Tax</span>
-            <span>${tax.toFixed(2)}</span>
+            <span>{formatMoney(tax, currency)}</span>
           </div>
           <div className="flex justify-between pt-2 font-serif text-2xl">
             <span>Total</span>
-            <span>${order.total.toFixed(2)}</span>
+            <span>{formatMoney(order.total, currency)}</span>
           </div>
         </div>
 

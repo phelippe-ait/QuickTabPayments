@@ -1,5 +1,5 @@
 import { requireSupabase } from "@shared/data/client"
-import type { OrderStatus } from "@shared/lib/database.types"
+import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
 import type { CartItem, SimulatedPaymentMethod } from "../types"
 
 export type PlacedOrderItem = {
@@ -18,6 +18,8 @@ export type PlacedOrder = {
   tax: number
   total: number
   currency: string
+  /** Restaurant GST rate, used for consistent labels after a reload. */
+  taxRate?: number
   restaurantName: string
   tableNumber: string
   customerName: string
@@ -25,6 +27,9 @@ export type PlacedOrder = {
   items: PlacedOrderItem[]
   /** Client-only simulation metadata; not written to the database. */
   paymentMethod?: SimulatedPaymentMethod
+  /** Real payment status from `payments`, when known. */
+  paymentStatus?: PaymentStatus
+  receiptUrl?: string | null
 }
 
 export type PlaceOrderErrorCode =
@@ -115,7 +120,7 @@ export function mapPlacedOrder(raw: unknown): PlacedOrder | null {
     orderId: row.order_id,
     orderNumber: row.order_number,
     trackingToken: row.tracking_token,
-    status: (row.status as OrderStatus) ?? "confirmed",
+    status: (row.status as OrderStatus) ?? "pending",
     subtotal: num(row.subtotal),
     tax: num(row.tax),
     total: num(row.total),

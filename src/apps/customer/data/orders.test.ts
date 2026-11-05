@@ -23,6 +23,14 @@ describe("mapCustomerOrders", () => {
             subtotal: 4.7,
           },
         ],
+        payments: [
+          {
+            status: "succeeded",
+            payment_method_type: "card",
+            amount: 4.7,
+            receipt_url: "https://receipt",
+          },
+        ],
       },
     ])
 
@@ -32,6 +40,8 @@ describe("mapCustomerOrders", () => {
       tableNumber: "T05",
       restaurantName: "QuickTab Demo Cafe",
       trackingToken: "token-1",
+      paymentStatus: "succeeded",
+      receiptUrl: "https://receipt",
       items: [
         { name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 },
       ],
@@ -52,11 +62,13 @@ describe("mapCustomerOrders", () => {
         tables: null,
         restaurants: null,
         order_items: [],
+        payments: [],
       },
     ])
 
     expect(orders[0].tableNumber).toBeNull()
     expect(orders[0].currency).toBe("AUD")
     expect(orders[0].items).toEqual([])
+    expect(orders[0].paymentStatus).toBeNull()
   })
 })

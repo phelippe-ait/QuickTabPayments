@@ -50,6 +50,30 @@ describe("OrderTrackingScreen", () => {
     expect(mocks.fetchOrderTracking).toHaveBeenCalledWith("token-1")
   })
 
+  it("renders the pending payment-confirmation state", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      status: "pending" as const,
+    })
+    renderTracking()
+
+    expect(
+      await screen.findByText(/Payment confirming — this usually takes/i),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("Payment confirming").length).toBeGreaterThan(0)
+  })
+
+  it("shows an explicit banner when Stripe redirected back with failure", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue(trackedOrder)
+    renderTracking(
+      "/order/QT-261025-0001?token=token-1&redirect_status=failed",
+    )
+
+    expect(
+      await screen.findByText(/Your payment didn’t complete|Your payment didn't complete/i),
+    ).toBeInTheDocument()
+  })
+
   it("shows a safe not-found screen for a bad token", async () => {
     mocks.fetchOrderTracking.mockResolvedValue(null)
     renderTracking("/order/QT-1?token=wrong")

@@ -133,7 +133,7 @@ describe("OrderDetailPage", () => {
     expect(screen.getByText("Flat White")).toBeInTheDocument()
     expect(screen.getByText(/oat milk/i)).toBeInTheDocument()
     expect(screen.getByText("Card")).toBeInTheDocument()
-    expect(screen.getByText("succeeded")).toBeInTheDocument()
+    expect(screen.getByText("Paid")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /mark confirmed/i })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /mark completed/i })).toBeNull()
     expect(screen.getByText(/^Running /)).toBeInTheDocument()
@@ -188,9 +188,9 @@ describe("OrderDetailPage", () => {
     await waitFor(() =>
       expect(mocks.createRefund).toHaveBeenCalledWith(
         expect.objectContaining({
-          order_id: "order-1",
-          payment_id: "payment-1",
-          order_item_id: "line-1",
+          orderId: "order-1",
+          paymentId: "payment-1",
+          orderItemId: "line-1",
           quantity: 1,
           amount: 4.7,
         }),

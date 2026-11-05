@@ -3,6 +3,7 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
 import { Stat } from "../../components/StaffUi"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { KitchenStatus, Order } from "../../types"
 
 export function KitchenWorkspace({
@@ -35,6 +36,10 @@ export function KitchenWorkspace({
 
   return (
     <>
+      <p className="sr-only" role="status" aria-live="polite">
+        {orders.length} active orders on the board, {preparing} preparing and{" "}
+        {ready} ready.
+      </p>
       <section className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <p className={`${styles["eyebrow"]}`}>Kitchen display</p>
@@ -65,7 +70,7 @@ export function KitchenWorkspace({
     Orders are currently unavailable.
   </div>
 ) : orders.length > 0 ? (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2">
           {orders.map((order) => (
             <article
               className="overflow-hidden rounded-[22px] border border-line bg-paper"
@@ -79,7 +84,7 @@ export function KitchenWorkspace({
                   </div>
                   <p className="mt-1.5 text-sm font-bold">{order.table}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {order.time.replace("Today, ", "")} · {order.server}
+                    {order.time} · {order.server}
                   </p>
                 </div>
                 <span className="rounded-full bg-cream-2 px-3 py-1.5 text-xs font-bold text-muted-2">
@@ -179,7 +184,7 @@ export function KitchenWorkspace({
                     <KitchenStatusPill status={order.kitchenStatus} />
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-2">
-                    {order.table} · {order.time.replace("Today, ", "")} ·{" "}
+                    {order.table} · {order.time} ·{" "}
                     {order.items.reduce((sum, item) => sum + item.qty, 0)} items
                   </p>
                 </div>
@@ -214,6 +219,8 @@ function KitchenStatusConfirmation({
   onConfirm: () => void
 }) {
   const cancelled = status === "Cancelled"
+  const panelRef = useDialogFocus<HTMLDivElement>(onCancel)
+  useBodyScrollLock()
   const actionLabel =
   status === "Preparing"
     ? "start preparing"
@@ -235,7 +242,7 @@ function KitchenStatusConfirmation({
         className="absolute inset-0 cursor-default"
         onClick={onCancel}
       />
-      <div className="relative w-full max-w-sm rounded-[22px] border border-line bg-paper p-6 shadow-2xl">
+      <div className="relative w-full max-w-sm rounded-[22px] border border-line bg-paper p-6 shadow-2xl" ref={panelRef}>
         <div
           className={`grid h-11 w-11 place-items-center rounded-full ${
             cancelled

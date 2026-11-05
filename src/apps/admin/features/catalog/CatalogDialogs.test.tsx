@@ -3,6 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import { ItemModal, SectionsModal } from "./CatalogDialogs"
 
+vi.mock("../../hooks/AdminUiProvider", () => ({
+  useAdminUi: () => ({
+    notify: vi.fn(),
+    confirm: (confirmation: { onConfirm: () => void }) =>
+      confirmation.onConfirm(),
+  }),
+}))
+
 const categories: CategoryVM[] = [
   { id: "cat-a", name: "Hot Beverages", displayOrder: 0 },
   { id: "cat-b", name: "Breakfast", displayOrder: 1 },

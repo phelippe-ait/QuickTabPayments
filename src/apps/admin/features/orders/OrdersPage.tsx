@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
@@ -49,6 +49,7 @@ export function OrdersPage() {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string[]>([])
   const [now, setNow] = useState(() => Date.now())
+  const selectAllRef = useRef<HTMLInputElement>(null)
 
   const filters = useMemo(
     () => ({
@@ -119,6 +120,14 @@ export function OrdersPage() {
   const visibleIds = orders.map((order) => order.id)
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id))
+  const someVisibleSelected = visibleIds.some((id) => selected.includes(id))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate =
+        someVisibleSelected && !allVisibleSelected
+    }
+  }, [allVisibleSelected, someVisibleSelected])
 
   return (
     <>
@@ -127,17 +136,17 @@ export function OrdersPage() {
       <div className={`${styles["stats"]}`}>
         <div>
           <span>Today’s orders</span>
-          <strong>{statsQuery.stats.today.orders}</strong>
-          <small>{deltaLabel(statsQuery.stats.today.orders, statsQuery.stats.yesterday.orders)}</small>
+          <strong>{statsQuery.isLoading ? "—" : statsQuery.stats.today.orders}</strong>
+          <small>{statsQuery.isLoading ? "Loading…" : deltaLabel(statsQuery.stats.today.orders, statsQuery.stats.yesterday.orders)}</small>
         </div>
         <div>
           <span>Today’s revenue</span>
-          <strong>{formatMoney(statsQuery.stats.today.revenue, display.currency)}</strong>
-          <small>{deltaLabel(statsQuery.stats.today.revenue, statsQuery.stats.yesterday.revenue)}</small>
+          <strong>{statsQuery.isLoading ? "—" : formatMoney(statsQuery.stats.today.revenue, display.currency)}</strong>
+          <small>{statsQuery.isLoading ? "Loading…" : deltaLabel(statsQuery.stats.today.revenue, statsQuery.stats.yesterday.revenue)}</small>
         </div>
         <div>
           <span>Average order</span>
-          <strong>{formatMoney(statsQuery.stats.today.average, display.currency)}</strong>
+          <strong>{statsQuery.isLoading ? "—" : formatMoney(statsQuery.stats.today.average, display.currency)}</strong>
           <small>Today’s completed and active orders</small>
         </div>
       </div>
@@ -151,9 +160,9 @@ export function OrdersPage() {
           <div className={`${styles["filter-group"]}`}>
             <span className={`${styles["filter-group-label"]}`}>Order status</span>
             <div className={`${styles["filter-pills"]}`}>
-              <button className={status === "all" ? styles["active"] : ""} onClick={() => setStatus("all")}>All orders</button>
+              <button type="button" aria-pressed={status === "all"} className={status === "all" ? styles["active"] : ""} onClick={() => setStatus("all")}>All orders</button>
               {ORDER_STATUSES.map((entry) => (
-                <button key={entry} className={status === entry ? styles["active"] : ""} onClick={() => setStatus(entry)}>
+                <button type="button" aria-pressed={status === entry} key={entry} className={status === entry ? styles["active"] : ""} onClick={() => setStatus(entry)}>
                   {orderStatusLabels[entry]}
                 </button>
               ))}
@@ -206,7 +215,11 @@ export function OrdersPage() {
           </div>
         </>
       ) : ordersQuery.isLoading && orders.length === 0 ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading orders…</div>
+        <div className="grid gap-4 py-8" role="status" aria-label="Loading orders">
+          {[0, 1, 2, 3].map((row) => (
+            <div key={row} className="h-16 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : orders.length === 0 ? (
         <EmptyState title="No orders found" description="Try changing your search, status, or date filters." />
       ) : (
@@ -214,6 +227,7 @@ export function OrdersPage() {
           <div className={`${styles["table-heading"]}`}>
             <label className={`${styles["inline-select"]}`} aria-label="Select all visible orders">
               <input
+                ref={selectAllRef}
                 type="checkbox"
                 checked={allVisibleSelected}
                 onChange={() =>
@@ -271,8 +285,8 @@ export function OrdersPage() {
           Page {page} of {totalPages} · {ordersQuery.count} {ordersQuery.count === 1 ? "order" : "orders"}
         </span>
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" disabled={page <= 1 || ordersQuery.isFetching} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
-          <Button size="sm" variant="secondary" disabled={page >= totalPages || ordersQuery.isFetching} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</Button>
+          <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
+          <Button size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</Button>
         </div>
       </div>
     </>

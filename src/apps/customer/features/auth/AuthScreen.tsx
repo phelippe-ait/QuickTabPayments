@@ -71,7 +71,7 @@ export function AuthScreen({
   };
 
   return (
-    <main className={`${styles["page-screen"]} auth-screen`}>
+    <main className={`${styles["page-screen"]}`}>
       <header className={`${styles["page-header"]} ${styles["auth-header"]}`}>
         <HeaderButton
           icon="back"

@@ -14,13 +14,14 @@ import {
 } from "@shared/ui/shadcn/card"
 import { Separator } from "@shared/ui/shadcn/separator"
 import { buttonVariants } from "@shared/ui/shadcn/button"
-import { formatMoney } from "@shared/lib/money"
+import { formatMoney, inclusiveTaxLabel } from "@shared/lib/money"
 import { orderStatusLabels, orderStatusTones } from "@shared/orders/status"
+import { paymentStatusLabels } from "@shared/orders/paymentLabels"
+import { Icon } from "@shared/ui/Icon"
 import type { OrderStatus } from "@shared/lib/database.types"
 import { HeaderButton } from "../../components/CustomerUi"
 import { trackingUrl } from "../../data/tracking"
 import type { PlacedOrder } from "../../data/placeOrder"
-import { simulatedPaymentLabels } from "../../types"
 
 function statusBadgeVariant(status: OrderStatus): BadgeProps["variant"] {
   const tone = orderStatusTones[status]
@@ -51,7 +52,7 @@ export function OrderConfirmation({
             onClick={onClose}
           />
         </header>
-        <section className={`${styles["empty-cart"]}`} role="alert">
+        <section className={`${styles["confirmation-error"]}`} role="alert">
           <h2>We couldn&apos;t find that order</h2>
           <p>Please ask a team member for help or place your order again.</p>
           <Button variant="outline" className="w-auto px-6" onClick={onClose}>
@@ -63,9 +64,8 @@ export function OrderConfirmation({
   }
 
   const trackHref = trackingUrl(order.orderNumber, order.trackingToken)
-  const paymentLabel = order.paymentMethod
-    ? simulatedPaymentLabels[order.paymentMethod]
-    : null
+  const paymentStatus = order.paymentStatus ?? "pending"
+  const paymentLabel = paymentStatusLabels[paymentStatus]
 
   return (
     <main className={`${styles["page-screen"]} ${styles["confirmation"]}`}>
@@ -82,8 +82,8 @@ export function OrderConfirmation({
       <div className="mx-auto mt-5 w-full max-w-lg">
         <Card>
           <CardHeader className="text-center">
-            <span className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-sage-soft text-xl text-sage-strong">
-              ✓
+            <span className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-sage-soft text-sage-strong">
+              <Icon name="check" size={20} />
             </span>
             <CardTitle>
               Thanks{order.customerName ? `, ${order.customerName}` : ""}!
@@ -129,7 +129,7 @@ export function OrderConfirmation({
                 <dd>{formatMoney(order.subtotal, order.currency)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt>GST (included)</dt>
+                <dt>{inclusiveTaxLabel(order.taxRate ?? 0)}</dt>
                 <dd>{formatMoney(order.tax, order.currency)}</dd>
               </div>
               <div className="flex justify-between text-[14px] font-bold text-ink">
@@ -138,14 +138,30 @@ export function OrderConfirmation({
               </div>
             </dl>
 
-            {paymentLabel && (
-              <div className="mt-3 rounded-lg bg-sage-soft p-3 text-center text-[12px] text-sage-strong">
-                <strong>Paid with {paymentLabel}</strong>
-                <span className="mt-0.5 block text-[10px] font-normal">
-                  Test mode — no money moved.
-                </span>
-              </div>
-            )}
+            <div className="mt-3 rounded-lg bg-sage-soft p-3 text-center text-[12px] text-sage-strong">
+              <strong>
+                {paymentStatus === "succeeded"
+                  ? "Payment received"
+                  : paymentStatus === "failed"
+                    ? "Payment failed"
+                    : paymentStatus === "refunded"
+                      ? "Payment refunded"
+                      : "Payment confirming"}
+              </strong>
+              <span className="mt-0.5 block text-[10px] font-normal">
+                {paymentLabel}
+              </span>
+              {order.receiptUrl && (
+                <a
+                  className="mt-1 inline-block text-[11px] font-bold underline"
+                  href={order.receiptUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View receipt
+                </a>
+              )}
+            </div>
 
             <div className="mt-5 flex flex-col gap-2">
               <Link

@@ -2,6 +2,7 @@ import { useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import { HeaderButton } from "../../components/CustomerUi"
 import { ProductPhoto } from "./ProductPhoto"
 import type { MenuItem } from "../../types"
@@ -18,9 +19,18 @@ export function ProductModal({
   onAdd: (quantity: number) => void;
 }) {
   const [quantity, setQuantity] = useState(1);
+  const panelRef = useDialogFocus<HTMLElement>(onClose);
+  useBodyScrollLock();
+
   return (
-    <div className={`${styles["modal-shade"]}`}>
+    <div
+      className={`${styles["modal-shade"]}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
+        ref={panelRef}
         className={`${styles["product-modal"]}`}
         role="dialog"
         aria-modal="true"
@@ -47,13 +57,15 @@ export function ProductModal({
         <div className={`${styles["modal-footer"]}`}>
           <div className={`${styles["quantity"]}`}>
             <button
+              type="button"
               aria-label="Decrease quantity"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
             >
               −
             </button>
-            <span>{quantity}</span>
+            <span aria-live="polite">{quantity}</span>
             <button
+              type="button"
               aria-label="Increase quantity"
               onClick={() => setQuantity(quantity + 1)}
             >

@@ -9,7 +9,7 @@ import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useTables } from "../../hooks/useTables"
-import { buildTableQrUrl } from "./tableQr.utils"
+import { buildTableQrUrl, escapeHtml } from "./tableQr.utils"
 import { formatElapsed } from "./table.utils"
 import { TableModal } from "./TableDialog"
 import type { TableVM } from "../../viewModels"
@@ -76,9 +76,10 @@ export function TablesPage() {
   const downloadQrSheet = async () => {
     const cards = await Promise.all(tables.tables.map(async (table) => {
       const source = await QRCode.toDataURL(buildTableQrUrl({ slug, qrToken: table.qrToken }), { width: 360, margin: 2 })
-      return `<article><img src="${source}" alt=""><h2>Table ${table.number}</h2><p>${table.locationLabel ?? ""}</p></article>`
+      return `<article><img src="${source}" alt=""><h2>Table ${escapeHtml(table.number)}</h2><p>${escapeHtml(table.locationLabel ?? "")}</p></article>`
     }))
-    const sheet = `<!doctype html><html><head><meta charset="utf-8"><title>${restaurantName} table QR codes</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#37333a}header{text-align:center;margin-bottom:28px}main{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}article{break-inside:avoid;text-align:center;border:1px solid #ddd;border-radius:16px;padding:24px}img{width:220px;height:220px}h2{margin:12px 0 4px}p{margin:0;color:#777}@media print{body{margin:12mm}article{border-color:#bbb}}</style></head><body><header><h1>${restaurantName}</h1><p>Scan to order</p></header><main>${cards.join("")}</main></body></html>`
+    const safeName = escapeHtml(restaurantName)
+    const sheet = `<!doctype html><html><head><meta charset="utf-8"><title>${safeName} table QR codes</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#37333a}header{text-align:center;margin-bottom:28px}main{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}article{break-inside:avoid;text-align:center;border:1px solid #ddd;border-radius:16px;padding:24px}img{width:220px;height:220px}h2{margin:12px 0 4px}p{margin:0;color:#777}@media print{body{margin:12mm}article{border-color:#bbb}}</style></head><body><header><h1>${safeName}</h1><p>Scan to order</p></header><main>${cards.join("")}</main></body></html>`
     const downloadUrl = URL.createObjectURL(new Blob([sheet], { type: "text/html;charset=utf-8" }))
     const link = document.createElement("a")
     link.href = downloadUrl
@@ -100,7 +101,12 @@ export function TablesPage() {
           </div>
         </>
       ) : tables.isLoading ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading tables…</div>
+        <div className="grid gap-4 py-8 sm:grid-cols-2 xl:grid-cols-3" role="status" aria-label="Loading tables">
+          <span className="sr-only">Loading tables…</span>
+          {[0, 1, 2, 3, 4, 5].map((row) => (
+            <div key={row} className="h-48 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : (
         <>
           <div className={`${styles["table-overview"]}`}>
@@ -110,7 +116,7 @@ export function TablesPage() {
           </div>
           <div className={`${styles["toolbar"]} table-toolbar`}>
             <div className={`${styles["filter-pills"]}`}>
-              {locations.map((item) => <button key={item} className={location === item ? styles["active"] : ""} onClick={() => setLocation(item)}>{item}</button>)}
+              {locations.map((item) => <button type="button" aria-pressed={location === item} key={item} className={location === item ? styles["active"] : ""} onClick={() => setLocation(item)}>{item}</button>)}
             </div>
             <div className={`${styles["table-toolbar-actions"]}`}>
               <span>{visible.length} {visible.length === 1 ? "table" : "tables"}</span>
@@ -229,7 +235,14 @@ function TableQrCode({ tableNumber, slug, qrToken, onNotify }: { tableNumber: st
           <img src={source} alt={`Large QR code for table ${tableNumber}`} />
           <code>{url}</code>
           <div className={`${styles["modal-actions"]}`}>
-            <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => { await navigator.clipboard.writeText(url); onNotify("Table link copied") }}>Copy link</button>
+            <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(url)
+                onNotify("Table link copied")
+              } catch {
+                onNotify("Could not copy automatically — select the link and copy it manually")
+              }
+            }}>Copy link</button>
             <button type="button" className={buttonVariants({ variant: "primary" })} onClick={downloadQrCode}><Icon name="download" size={15} />Download PNG</button>
           </div>
         </AdminModal>

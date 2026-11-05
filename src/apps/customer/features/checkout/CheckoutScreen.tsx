@@ -1,76 +1,74 @@
 import { type FormEvent, useMemo, useState } from "react";
 import styles from "../../App.module.css";
 import { Button } from "@shared/ui/Button";
-import { Icon } from "@shared/ui/Icon";
-import { formatMoney, roundMoney, splitInclusiveTax } from "@shared/lib/money";
-import { HeaderButton } from "../../components/CustomerUi";
-import { simulatePayment } from "../../data/simulatedPayment";
 import {
-  simulatedPaymentLabels,
-  type CartItem,
-  type SimulatedPaymentMethod,
-} from "../../types";
+  formatMoney,
+  inclusiveTaxLabel,
+  roundMoney,
+  splitInclusiveTax,
+} from "@shared/lib/money";
+import { HeaderButton } from "../../components/CustomerUi";
+import {
+  PaymentsNotConfigured,
+  StripeCheckout,
+} from "./StripeCheckout";
+import { stripePublishableKey, type PaymentIntentResponse } from "../../data/payments";
+import type { CartItem } from "../../types";
 
 export type PlaceOrderInput = {
   customerName: string;
   notes: string;
-  paymentMethod: SimulatedPaymentMethod;
+  intent: PaymentIntentResponse;
 };
 
 /**
- * Checkout with simulated payment methods. Selecting a method runs a short
- * fake authorization and then places the order through the existing RPC.
- * Phase 6 replaces `simulatePayment` with Stripe; no payment data is stored.
+ * Checkout: customer details, order summary, and the Stripe PaymentElement.
+ * The pending order is created by `/api/create-payment-intent` when Pay is
+ * pressed; the webhook is the source of truth for confirmation.
  */
 export function CheckoutScreen({
   items,
   currency,
   taxRate,
+  restaurantName,
+  restaurantSlug,
+  tableToken,
   tableNumber,
   canCheckout,
   onClose,
   onPlaceOrder,
   defaultName = "",
   error = "",
+  onSetupError,
 }: {
   items: CartItem[];
   currency: string;
   taxRate: number;
+  restaurantName: string;
+  restaurantSlug: string;
+  tableToken: string;
   tableNumber: string;
   canCheckout: boolean;
   onClose: () => void;
   onPlaceOrder: (input: PlaceOrderInput) => Promise<void>;
   defaultName?: string;
   error?: string;
+  onSetupError?: (error: unknown) => void;
 }) {
   const [customerName, setCustomerName] = useState(defaultName);
   const [notes, setNotes] = useState("");
-  const [processingMethod, setProcessingMethod] =
-    useState<SimulatedPaymentMethod | null>(null);
   const hasCustomerName = customerName.trim().length > 0;
 
   const total = useMemo(
-    () => roundMoney(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)),
+    () =>
+      roundMoney(
+        items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+      ),
     [items],
   );
   const { subtotal, tax } = splitInclusiveTax(total, taxRate);
-  const taxPercent = Math.round(taxRate * 100);
-  const canPay = hasCustomerName && canCheckout && !processingMethod;
-
-  const pay = async (method: SimulatedPaymentMethod) => {
-    if (!canPay) return;
-    setProcessingMethod(method);
-    try {
-      await simulatePayment(method);
-      await onPlaceOrder({
-        customerName: customerName.trim(),
-        notes: notes.trim(),
-        paymentMethod: method,
-      });
-    } finally {
-      setProcessingMethod(null);
-    }
-  };
+  const canPay = hasCustomerName && canCheckout;
+  const hasStripe = Boolean(stripePublishableKey);
 
   const preventSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -139,7 +137,7 @@ export function CheckoutScreen({
               <dd>{formatMoney(subtotal, currency)}</dd>
             </div>
             <div className="flex justify-between text-ink-soft">
-              <dt>GST (included{taxPercent ? `, ${taxPercent}%` : ""})</dt>
+              <dt>{inclusiveTaxLabel(taxRate)}</dt>
               <dd>{formatMoney(tax, currency)}</dd>
             </div>
             <div className="flex justify-between text-[14px] font-bold text-ink">
@@ -155,72 +153,33 @@ export function CheckoutScreen({
           </p>
         )}
 
-        <section
-          className={`${styles["express-checkout"]}`}
-          aria-labelledby="payment-method-title"
-        >
-          <h2 id="payment-method-title">Choose how you&apos;d like to pay</h2>
-          <p className={styles["payment-test-note"]}>
-            <Icon name="card" size={15} />
-            <span>
-              Test mode — payment is simulated. No money moves and no card
-              details are required.
-            </span>
-          </p>
-          <div className={`${styles["express-options"]}`}>
-            <button
-              type="button"
-              className={`${styles["express-button"]}`}
-              onClick={() => void pay("card")}
-              disabled={!canPay}
-            >
-              <Icon name="card" size={17} />
-              Credit / Debit Card
-            </button>
-            <button
-              type="button"
-              className={`${styles["express-button"]} ${styles["apple-pay"]}`}
-              onClick={() => void pay("apple_pay")}
-              disabled={!canPay}
-            >
-              <Icon name="apple" size={17} />
-              Apple Pay
-            </button>
-            <button
-              type="button"
-              className={`${styles["express-button"]} google-pay`}
-              onClick={() => void pay("google_pay")}
-              disabled={!canPay}
-            >
-              <Icon name="google" size={18} />
-              Google Pay
-            </button>
-            <button
-              type="button"
-              className={`${styles["express-button"]} ${styles["link-pay"]}`}
-              onClick={() => void pay("link")}
-              disabled={!canPay}
-            >
-              Link
-            </button>
-          </div>
-          <p
-            className={styles["payment-hint"]}
-            role="status"
-            aria-live="polite"
-          >
-            {processingMethod
-              ? `Processing ${simulatedPaymentLabels[processingMethod]}…`
-              : "Selecting a payment method will place your order."}
-          </p>
-        </section>
+        {hasStripe ? (
+          <StripeCheckout
+            items={items}
+            currency={currency}
+            taxRate={taxRate}
+            restaurantName={restaurantName}
+            tableNumber={tableNumber}
+            restaurantSlug={restaurantSlug}
+            tableToken={tableToken}
+            customerName={customerName.trim()}
+            notes={notes.trim()}
+            canPay={canPay}
+            onSetupError={onSetupError}
+            onPaid={async (intent) =>
+              onPlaceOrder({
+                customerName: customerName.trim(),
+                notes: notes.trim(),
+                intent,
+              })
+            }
+          />
+        ) : (
+          <PaymentsNotConfigured />
+        )}
 
         <div className={`${styles["form-actions"]}`}>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={Boolean(processingMethod)}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Back to cart
           </Button>
         </div>

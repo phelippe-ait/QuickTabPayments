@@ -5,7 +5,6 @@ import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
 import { Button, buttonVariants } from "@shared/ui/Button"
 import { EmptyState, PageHeader } from "../../components/AdminUi"
-import { useAuth } from "@shared/auth/AuthContext"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
 import {
@@ -15,6 +14,12 @@ import {
   orderStatusTones,
   nextStatuses,
 } from "@shared/orders/status"
+import {
+  paymentStatusLabels,
+  paymentStatusTones,
+  refundStatusLabels,
+  refundStatusTones,
+} from "@shared/orders/paymentLabels"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useOrder, useOrderMutations } from "../../hooks/useOrders"
 import { useCreateRefund, useRefunds } from "../../hooks/useRefunds"
@@ -43,12 +48,18 @@ function formatTimestamp(iso: string | null, timezone: string): string {
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { restaurant, role } = useRestaurant()
-  const { user } = useAuth()
   const { notify, confirm } = useAdminUi()
   const display = {
     currency: restaurant?.currency ?? "AUD",
     timezone: restaurant?.timezone ?? "UTC",
   }
+  const currencySymbol =
+    new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: display.currency,
+    })
+      .formatToParts(0)
+      .find((part) => part.type === "currency")?.value ?? "$"
   const { order, isLoading, error, refetch } = useOrder(restaurant?.id ?? "", id, display)
   const refundsQuery = useRefunds(order?.id ?? "")
   const refundMutation = useCreateRefund(order?.id ?? "", {
@@ -84,8 +95,13 @@ export function OrderDetailPage() {
 
   if (isLoading || !order) {
     return (
-      <div className="py-16 text-center text-sm text-muted-2" role="status">
-        Loading order…
+      <div className="grid gap-5" role="status" aria-label="Loading order">
+        <div className="h-10 w-52 animate-pulse rounded-lg bg-line-soft" />
+        <div className="h-40 w-full animate-pulse rounded-card bg-line-soft" />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="h-56 animate-pulse rounded-card bg-line-soft" />
+          <div className="h-56 animate-pulse rounded-card bg-line-soft" />
+        </div>
       </div>
     )
   }
@@ -129,26 +145,22 @@ export function OrderDetailPage() {
         const quantity = refundQuantities[line.id] ?? 0
         if (quantity <= 0) continue
         const ok = await refundMutation.createRefund({
-          order_id: order.id,
-          payment_id: payment.id,
-          order_item_id: line.id,
+          orderId: order.id,
+          paymentId: payment.id,
+          orderItemId: line.id,
           quantity,
           amount: roundMoney(line.unitPrice * quantity),
           reason: "Line refund",
-          status: "succeeded",
-          created_by: user?.id ?? null,
         })
         if (!ok) return
       }
     } else {
       const amount = roundMoney(refundMode === "full" ? refundable : refundAmount)
       const ok = await refundMutation.createRefund({
-        order_id: order.id,
-        payment_id: payment.id,
+        orderId: order.id,
+        paymentId: payment.id,
         amount,
         reason: refundMode === "full" ? "Full refund" : "Custom refund",
-        status: "succeeded",
-        created_by: user?.id ?? null,
       })
       if (!ok) return
     }
@@ -166,8 +178,8 @@ export function OrderDetailPage() {
 
     confirm({
       title: `Record a ${refundMode === "full" ? "full" : refundMode} refund?`,
-      description: `${warning}${formatMoney(refundAmount, order.currency)} will be recorded against ${succeededPayments[0]?.method ?? "the payment"}. Stripe is not called yet — the refund is recorded in QuickTab only.`,
-      actionLabel: "Record refund",
+      description: `${warning}${formatMoney(refundAmount, order.currency)} will be refunded through Stripe against ${succeededPayments[0]?.method ?? "the payment"}.`,
+      actionLabel: "Refund through Stripe",
       onConfirm: () => {
         void submitRefund()
       },
@@ -316,13 +328,18 @@ export function OrderDetailPage() {
                   <div key={payment.id} className="rounded-[9px] border border-line bg-white p-3">
                     <div className="flex items-center justify-between gap-2">
                       <strong className="text-[12px] text-ink-soft">{payment.method}</strong>
-                      <StatusPill tone={payment.status === "succeeded" ? "success" : payment.status === "failed" ? "danger" : payment.status === "refunded" ? "warning" : "neutral"} withDot={false}>
-                        {payment.status}
+                      <StatusPill tone={paymentStatusTones[payment.status]} withDot={false}>
+                        {paymentStatusLabels[payment.status]}
                       </StatusPill>
                     </div>
                     <p className="mt-2 text-xs text-muted">
                       {formatMoney(payment.amount, payment.currency)} · paid {formatTimestamp(payment.paidAt, display.timezone)}
                     </p>
+                    {payment.stripePaymentIntentId && (
+                      <p className="mt-1 break-all font-mono text-[10px] text-muted">
+                        {payment.stripePaymentIntentId}
+                      </p>
+                    )}
                     {payment.failureReason && <p className="mt-1 text-[11px] text-danger">{payment.failureReason}</p>}
                     {payment.receiptUrl && (
                       <a className="mt-2 inline-block text-[11px] font-bold text-berry underline" href={payment.receiptUrl} target="_blank" rel="noreferrer">
@@ -342,7 +359,7 @@ export function OrderDetailPage() {
             <section className="rounded-card border border-line bg-paper p-7 shadow-card">
               <h2 className="font-serif text-2xl text-ink">Refunds</h2>
               <p className="mt-1 text-[10px] leading-relaxed text-muted">
-                Stripe refund not yet processed — this records the refund in QuickTab.
+                Refunds are processed through Stripe and recorded here.
               </p>
 
               {refundsQuery.error && (
@@ -359,14 +376,19 @@ export function OrderDetailPage() {
                           <strong className="text-[12px] text-ink-soft">
                             {formatMoney(refund.amount, order.currency)}
                           </strong>
-                          <StatusPill tone={refund.status === "succeeded" ? "success" : refund.status === "failed" ? "danger" : "warning"} withDot={false}>
-                            {refund.status}
+                          <StatusPill tone={refundStatusTones[refund.status]} withDot={false}>
+                            {refundStatusLabels[refund.status]}
                           </StatusPill>
                         </div>
                         <p className="mt-1 text-[11px] text-muted">
                           {line ? `${line.name} × ${refund.quantity ?? 1}` : "Order-level refund"}
                           {refund.reason ? ` · ${refund.reason}` : ""}
                         </p>
+                        {refund.stripe_refund_id && (
+                          <p className="mt-1 break-all font-mono text-[10px] text-muted">
+                            {refund.stripe_refund_id}
+                          </p>
+                        )}
                         <p className="mt-1 text-[10px] text-muted">{formatTimestamp(refund.created_at, display.timezone)}</p>
                       </div>
                     )
@@ -417,7 +439,7 @@ export function OrderDetailPage() {
                         <label className={`${styles["custom-refund"]}`}>
                           Refund amount
                           <span>
-                            <strong>$</strong>
+                            <strong>{currencySymbol}</strong>
                             <input autoFocus type="number" min="0.01" max={refundable} step="0.01" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} />
                           </span>
                           <small>{customError ?? `Up to ${formatMoney(refundable, order.currency)} can be refunded.`}</small>
