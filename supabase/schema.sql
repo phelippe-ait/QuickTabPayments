@@ -3242,7 +3242,15 @@ begin
             'name',       oi.item_name_snapshot,
             'quantity',   oi.quantity,
             'unit_price', oi.unit_price_snapshot,
-            'subtotal',   oi.subtotal
+            'subtotal',   oi.subtotal,
+            'modifiers', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'name', oim.modifier_name_snapshot,
+                'price_adjustment', oim.price_adjustment_snapshot
+              ) order by oim.id)
+              from public.order_item_modifiers oim
+              where oim.order_item_id = oi.id
+            ), '[]'::jsonb)
           )
           order by oi.id
         )
@@ -3381,6 +3389,8 @@ declare
   v_seq             int;
   v_attempt         int := 0;
   v_pickup_estimate timestamptz;
+  v_line            jsonb;
+  v_order_item_id   uuid;
 begin
   -- -----------------------------------------------------------------
   -- Input validation
@@ -3421,6 +3431,30 @@ begin
        or (e->>'quantity')::int <= 0
   ) then
     raise exception 'invalid_quantity' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e ? 'modifier_ids' and jsonb_typeof(e->'modifier_ids') <> 'array'
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) or exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where jsonb_array_length(coalesce(e->'modifier_ids', '[]'::jsonb)) <> (
+      select count(distinct selected.value)
+      from jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+    )
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
   end if;
 
   -- -----------------------------------------------------------------
@@ -3473,7 +3507,7 @@ begin
 
   -- -----------------------------------------------------------------
   -- Validate every menu item belongs to this restaurant and is available.
-  -- Duplicate menu_item_id rows are folded into one line.
+  -- Each submitted cart row stays separate to preserve modifier variants.
   -- -----------------------------------------------------------------
   select count(distinct (e->>'menu_item_id')::uuid)
     into v_expected_lines
@@ -3495,7 +3529,51 @@ begin
     raise exception 'menu_item_unavailable' using errcode = 'P0001';
   end if;
 
-  -- Server-side pricing. The client price is never read.
+  -- Modifier ids are untrusted: every choice must be available and linked
+  -- to this item through one of its groups at this restaurant.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+    left join public.modifiers m
+      on m.id = selected.value::uuid
+     and m.is_available
+    left join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+     and item_group.modifier_group_id = m.modifier_group_id
+    left join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    where m.id is null or item_group.menu_item_id is null or g.id is null
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- Enforce each linked group's required/min/max rules on the server too.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where chosen.selected_count < greatest(g.min_selections, case when g.is_required then 1 else 0 end)
+       or chosen.selected_count > case when g.selection_type = 'single' then least(g.max_selections, 1) else g.max_selections end
+  ) then
+    raise exception 'invalid_modifier_selection' using errcode = 'P0001';
+  end if;
+
+  -- Price each submitted cart line from live database values. Distinct
+  -- modifier combinations remain distinct order_items.
   select
     jsonb_agg(
       jsonb_build_object(
@@ -3503,28 +3581,42 @@ begin
         'name',         priced.name,
         'quantity',     priced.quantity,
         'unit_price',   priced.unit_price,
-        'subtotal',     priced.line_subtotal
-      )
-      order by priced.display_order, priced.name
+        'subtotal',     priced.line_subtotal,
+        'modifiers',    priced.modifiers
+      ) order by priced.display_order, priced.name, priced.line_order
     ),
     round(coalesce(sum(priced.line_subtotal), 0), 2),
     max(priced.prep_time_minutes)
   into v_lines, v_total, v_prep_minutes
   from (
     select
-      mi.id                as menu_item_id,
-      mi.name              as name,
-      mi.display_order     as display_order,
-      mi.prep_time_minutes as prep_time_minutes,
-      sum((e->>'quantity')::int) as quantity,
-      mi.price             as unit_price,
-      round(mi.price * sum((e->>'quantity')::int), 2) as line_subtotal
-    from jsonb_array_elements(p_items) as e
+      mi.id as menu_item_id,
+      mi.name,
+      mi.display_order,
+      mi.prep_time_minutes,
+      e.ordinality as line_order,
+      (e.value->>'quantity')::int as quantity,
+      greatest(0, mi.price + selected.adjustment) as unit_price,
+      round(greatest(0, mi.price + selected.adjustment) * (e.value->>'quantity')::int, 2) as line_subtotal,
+      selected.modifiers
+    from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
     join public.menu_items mi
-      on mi.id = (e->>'menu_item_id')::uuid
+      on mi.id = (e.value->>'menu_item_id')::uuid
      and mi.restaurant_id = v_restaurant_id
      and mi.is_available
-    group by mi.id, mi.name, mi.display_order, mi.prep_time_minutes, mi.price
+    cross join lateral (
+      select
+        coalesce(sum(m.price_adjustment), 0) as adjustment,
+        coalesce(jsonb_agg(jsonb_build_object(
+          'modifier_id', m.id,
+          'name', m.name,
+          'price_adjustment', m.price_adjustment
+        ) order by m.display_order, m.name), '[]'::jsonb) as modifiers
+      from jsonb_array_elements_text(coalesce(e.value->'modifier_ids', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.is_available
+    ) selected
   ) as priced;
 
   -- GST-inclusive split: total is what the customer pays.
@@ -3591,22 +3683,39 @@ begin
     end;
   end loop;
 
-  insert into public.order_items (
-    order_id,
-    menu_item_id,
-    item_name_snapshot,
-    unit_price_snapshot,
-    quantity,
-    subtotal
-  )
-  select
-    v_order_id,
-    (line->>'menu_item_id')::uuid,
-    line->>'name',
-    (line->>'unit_price')::numeric,
-    (line->>'quantity')::int,
-    (line->>'subtotal')::numeric
-  from jsonb_array_elements(v_lines) as line;
+  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
+  loop
+    insert into public.order_items (
+      order_id,
+      menu_item_id,
+      item_name_snapshot,
+      unit_price_snapshot,
+      quantity,
+      subtotal
+    )
+    values (
+      v_order_id,
+      (v_line->>'menu_item_id')::uuid,
+      v_line->>'name',
+      (v_line->>'unit_price')::numeric,
+      (v_line->>'quantity')::int,
+      (v_line->>'subtotal')::numeric
+    )
+    returning id into v_order_item_id;
+
+    insert into public.order_item_modifiers (
+      order_item_id,
+      modifier_id,
+      modifier_name_snapshot,
+      price_adjustment_snapshot
+    )
+    select
+      v_order_item_id,
+      (modifier->>'modifier_id')::uuid,
+      modifier->>'name',
+      (modifier->>'price_adjustment')::numeric
+    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
+  end loop;
 
   return jsonb_build_object(
     'order_id',            v_order_id,

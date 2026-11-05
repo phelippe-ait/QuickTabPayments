@@ -242,6 +242,10 @@ function CustomerShell() {
                   quantity: item.quantity,
                   unitPrice: item.unitPrice,
                   subtotal: item.unitPrice * item.quantity,
+                  modifiers: (item.modifiers ?? []).map((modifier) => ({
+                    name: modifier.name,
+                    priceAdjustment: modifier.priceAdjustment,
+                  })),
                 })),
               }
 
@@ -283,11 +287,12 @@ function CustomerShell() {
       </footer>
       {selected && (
         <ProductModal
+          key={selected.id}
           item={selected}
           currency={currentContext.currency}
           onClose={() => setSelected(null)}
-          onAdd={(amount) => {
-            cart.add(selected, amount)
+          onAdd={(amount, modifiers) => {
+            cart.add(selected, amount, modifiers)
             setSelected(null)
           }}
         />

@@ -101,7 +101,14 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
               <ul className={styles["history-order-items"]}>
                 {order.items.map((item, index) => (
                   <li key={`${item.name}-${index}`}>
-                    <span>{item.quantity} × {item.name}</span>
+                    <span>
+                      {item.quantity} × {item.name}
+                      {(item.modifiers?.length ?? 0) > 0 && (
+                        <small className="mt-0.5 block text-[10px] text-muted">
+                          {item.modifiers?.map((modifier) => modifier.name).join(", ")}
+                        </small>
+                      )}
+                    </span>
                     <span>{formatMoney(item.subtotal, order.currency)}</span>
                   </li>
                 ))}

@@ -29,7 +29,7 @@ export type Order = {
   server: string
   guests: number
   payment: string
-  items: { name: string; qty: number; price: number }[]
+  items: { name: string; qty: number; price: number; modifiers?: string[] }[]
 }
 
 export type Reservation = {

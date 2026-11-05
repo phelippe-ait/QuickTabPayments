@@ -3,6 +3,7 @@ import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
+import { cartLineId } from "../../hooks/useCart"
 import type { CartItem } from "../../types"
 
 export function CartScreen({
@@ -32,11 +33,14 @@ export function CartScreen({
       </header>
       {items.length > 0 ? (
         items.map((item) => (
-          <article className={`${styles["order-card"]}`} key={item.menuItemId}>
+          <article className={`${styles["order-card"]}`} key={item.lineId ?? cartLineId(item.menuItemId, item.modifiers)}>
             <div>
               <span className={`${styles["item-name"]}`}>
                 <span>{item.name}</span>
                 <small>{formatMoney(item.unitPrice, currency)} each</small>
+                  {(item.modifiers?.length ?? 0) > 0 && (
+                    <small>{item.modifiers?.map((modifier) => modifier.name).join(", ")}</small>
+                  )}
               </span>
               <span>{formatMoney(item.unitPrice * item.quantity, currency)}</span>
             </div>
@@ -45,7 +49,7 @@ export function CartScreen({
                 <button
                   type="button"
                   aria-label={`Decrease ${item.name} quantity`}
-                  onClick={() => onDecrease(item.menuItemId)}
+                  onClick={() => onDecrease(item.lineId ?? cartLineId(item.menuItemId, item.modifiers))}
                 >
                   −
                 </button>
@@ -53,15 +57,15 @@ export function CartScreen({
                 <button
                   type="button"
                   aria-label={`Increase ${item.name} quantity`}
-                  onClick={() => onIncrease(item.menuItemId)}
+                  onClick={() => onIncrease(item.lineId ?? cartLineId(item.menuItemId, item.modifiers))}
                 >
                   +
                 </button>
               </span>
               <button
                 type="button"
-                aria-label={`Remove ${item.name}`}
-                onClick={() => onRemove(item.menuItemId)}
+                aria-label={`Remove ${item.name}${item.modifiers?.length ? ` with ${item.modifiers.map((modifier) => modifier.name).join(", ")}` : ""}`}
+                onClick={() => onRemove(item.lineId ?? cartLineId(item.menuItemId, item.modifiers))}
               >
                 Remove
               </button>

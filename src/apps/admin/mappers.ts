@@ -89,6 +89,12 @@ export function toOrderVM(
       subtotal: item.subtotal,
       imageUrl: item.menu_items?.image_url ?? null,
       notes: item.notes,
+      ...((item.order_item_modifiers?.length ?? 0) > 0
+        ? { modifiers: item.order_item_modifiers!.map((modifier) => ({
+            name: modifier.modifier_name_snapshot,
+            priceAdjustment: modifier.price_adjustment_snapshot,
+          })) }
+        : {}),
     })),
     payments: row.payments.map((payment) => ({
       id: payment.id,

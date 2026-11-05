@@ -47,6 +47,8 @@ const ERROR_CODES: PlaceOrderErrorCode[] = [
   "restaurant_not_found",
   "table_not_found",
   "menu_item_unavailable",
+  "invalid_modifier",
+  "invalid_modifier_selection",
   "order_number_conflict",
   "customer_location_required",
   "customer_location_invalid",
@@ -89,6 +91,9 @@ export async function createPaymentIntent(
         .map((item) => ({
           menu_item_id: item.menuItemId,
           quantity: Math.trunc(item.quantity),
+          ...((item.modifiers?.length ?? 0) > 0
+            ? { modifier_ids: item.modifiers!.map((modifier) => modifier.id) }
+            : {}),
         })),
       location: input.location,
     }),
