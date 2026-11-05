@@ -768,3 +768,17 @@ begin
   raise notice 'phase6 place_order creates pending orders ok';
 end $$;
 rollback;
+
+-- Phase 7 — guest order claiming. Only signed-in users may claim.
+-- Expected: anon=false, authenticated=true.
+select
+  has_function_privilege(
+    'anon',
+    'public.claim_guest_order(text)',
+    'EXECUTE'
+  ) as anon_can_claim_guest_order,
+  has_function_privilege(
+    'authenticated',
+    'public.claim_guest_order(text)',
+    'EXECUTE'
+  ) as auth_can_claim_guest_order;

@@ -91,6 +91,26 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
 }
 
 /**
+ * Attach an unclaimed guest order to the signed-in customer. Possession of the
+ * opaque tracking token authorises the claim; the RPC refuses cancelled orders
+ * and orders that already belong to someone.
+ */
+export async function claimGuestOrder(trackingToken: string): Promise<boolean> {
+  if (!trackingToken.trim()) return false;
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("claim_guest_order", {
+    p_tracking_token: trackingToken.trim(),
+  });
+
+  if (error) {
+    console.error("claim_guest_order failed", error);
+    return false;
+  }
+
+  return Boolean(data);
+}
+
+/**
  * Customer order history reads `order_items` (authoritative), never the old
  * JSON-in-notes convention.
  */

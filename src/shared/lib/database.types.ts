@@ -810,6 +810,34 @@ export type Database = {
         }
         Returns: string
       }
+      apply_payment_failed: {
+        Args: {
+          p_reason?: string | null
+          p_stripe_payment_intent_id: string
+        }
+        Returns: undefined
+      }
+      apply_payment_succeeded: {
+        Args: {
+          p_method?: string | null
+          p_receipt_url?: string | null
+          p_stripe_payment_intent_id: string
+        }
+        Returns: undefined
+      }
+      apply_refund_succeeded: {
+        Args: {
+          p_amount?: number | null
+          p_full?: boolean
+          p_stripe_payment_intent_id: string
+          p_stripe_refund_id?: string | null
+        }
+        Returns: undefined
+      }
+      claim_guest_order: {
+        Args: { p_tracking_token: string }
+        Returns: boolean
+      }
       claim_restaurant_invite: {
         Args: { p_name?: string; p_slug?: string }
         Returns: {
@@ -903,6 +931,16 @@ export type Database = {
           p_table_token: string
         }
         Returns: Json
+      }
+      record_payment_intent: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_method?: string | null
+          p_order_id: string
+          p_stripe_payment_intent_id: string
+        }
+        Returns: string
       }
       resolve_qr_context: {
         Args: { p_slug: string; p_token: string }

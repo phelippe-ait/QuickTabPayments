@@ -18,6 +18,7 @@ import type { PlacedOrder } from "./data/placeOrder"
 import { PaymentSetupError } from "./data/payments"
 import { splitInclusiveTax } from "@shared/lib/money"
 import { fetchMenu } from "./data/menuApi"
+import { claimGuestOrder } from "./data/orders"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
 
 export default function App() {
@@ -53,6 +54,7 @@ function CustomerShell() {
   const [authReturnScreen, setAuthReturnScreen] =
     useState<"menu" | "confirmation">("menu")
   const restoredLastOrder = useRef(false)
+  const claimedOrder = useRef<string | null>(null)
 
   // A reload (or an OAuth redirect) restores the confirmation screen for the
   // guest's last order at this table.
@@ -97,6 +99,16 @@ function CustomerShell() {
   useEffect(() => {
     if (!user && screen === "orders") setScreen("menu")
   }, [screen, user])
+
+  // A guest who signs in from the confirmation screen gets the order attached
+  // to their account, so it appears in order history.
+  useEffect(() => {
+    if (!user || !createdOrder) return
+    const key = `${user.id}:${createdOrder.orderId}`
+    if (claimedOrder.current === key) return
+    claimedOrder.current = key
+    void claimGuestOrder(createdOrder.trackingToken)
+  }, [createdOrder, user])
 
   const profileName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
