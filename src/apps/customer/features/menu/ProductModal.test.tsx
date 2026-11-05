@@ -10,6 +10,7 @@ const item: MenuItem = {
   price: 4.7,
   imageUrl: null,
   allergens: ["milk"],
+  dietaryTags: ["Vegetarian"],
   categoryId: "category-1",
   displayOrder: 0,
 }

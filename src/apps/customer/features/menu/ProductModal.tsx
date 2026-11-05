@@ -49,9 +49,14 @@ export function ProductModal({
         <div className={`${styles["modal-price"]}`}>
           {formatMoney(item.price, currency)}
         </div>
+        {item.dietaryTags.length > 0 && (
+          <div className={`${styles["modal-tags"]}`} aria-label="Dietary tags">
+            {item.dietaryTags.map((tag) => <span className={`${styles["menu-tag"]} ${styles["dietary-tag"]}`} key={tag}>{tag.replace(/\b\w/g, (letter) => letter.toUpperCase())}</span>)}
+          </div>
+        )}
         {item.allergens.length > 0 && (
           <p className={`${styles["modal-meta"]}`}>
-            <strong>Allergens:</strong> {item.allergens.join(", ")}
+            <strong>Contains:</strong> {item.allergens.map((tag) => tag.replace(/\b\w/g, (letter) => letter.toUpperCase())).join(", ")}
           </p>
         )}
         <div className={`${styles["modal-footer"]}`}>

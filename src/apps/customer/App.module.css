@@ -65,10 +65,15 @@
 .product-card:hover { background: var(--color-paper); }
 .product-copy { display: flex; flex-direction: column; min-width: 0; overflow: hidden; padding: 16px 14px 13px; }
 .product-copy strong { flex: 0 0 auto; color: var(--berry); font-size: 13px; margin-bottom: 5px; }
-.product-copy > span {
+.product-description {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
   font-size: 11.5px; line-height: 1.75; color: var(--color-muted-2);
 }
+.product-copy > .product-tags { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 4px; max-height: 24px; overflow: hidden; margin-top: 4px; }
+.menu-tag { display: inline-flex; align-items: center; width: fit-content; padding: 3px 6px; border-radius: 10px; font-size: 8px; line-height: 1; font-weight: 700; white-space: nowrap; }
+.dietary-tag { color: #42664c; background: #e7f0e5; }
+.allergen-tag { color: #865b35; background: #f5eadb; }
+.tag-overflow { align-self: center; color: var(--color-muted); font-size: 9px; }
 .product-copy em { flex: 0 0 auto; font-style: normal; color: var(--berry); font-size: 11.5px; margin-top: auto; padding-top: 10px; }
 .product-photo {
   position: relative;
@@ -130,6 +135,7 @@
 }
 .product-modal .photo-large img { border-radius: 10px; }
 .modal-meta { margin: -6px 0 12px !important; color: var(--color-muted-2); font-size: 11px !important; }
+.modal-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: -5px 0 13px; }
 .product-modal h2 { font-size: 16px; color: var(--color-muted-2); margin: 0 0 15px; }
 .product-modal p { font-size: 13px; line-height: 1.55; margin: 0 0 15px; }
 .modal-price { font-size: 13px; margin-bottom: 16px; }

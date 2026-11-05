@@ -25,7 +25,8 @@ const item: DbMenuItem = {
   is_available: true,
   display_order: 3,
   prep_time_minutes: 10,
-  allergens: [],
+  allergens: ["milk"],
+  dietary_tags: [],
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 }
@@ -52,6 +53,8 @@ describe("toMenuItemVM", () => {
       description: "Smooth and creamy",
       price: 4.7,
       imageUrl: "https://example.test/flat-white.webp",
+      allergens: ["milk"],
+      dietaryTags: [],
       isAvailable: true,
       prepTimeMinutes: 10,
       displayOrder: 3,

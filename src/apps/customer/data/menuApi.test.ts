@@ -40,6 +40,7 @@ const item = (
   display_order: displayOrder,
   prep_time_minutes: 4,
   allergens: ["milk"],
+  dietary_tags: ["Vegetarian"],
   created_at: "2026-10-21T08:00:00Z",
   updated_at: "2026-10-21T08:00:00Z",
 })
@@ -93,6 +94,7 @@ describe("mapMenu", () => {
       price: 4.7,
       imageUrl: null,
       allergens: ["milk"],
+      dietaryTags: ["Vegetarian"],
       categoryId: "a",
     })
     expect(menu[0].items[0]).not.toHaveProperty("prepTimeMinutes")
@@ -116,5 +118,6 @@ describe("toMenuItem", () => {
     const mapped = toMenuItem({ ...item("item-1", "a", "Coffee", 0), price: 5 as unknown as number, allergens: [] })
     expect(mapped.price).toBe(5)
     expect(mapped.allergens).toEqual([])
+    expect(mapped.dietaryTags).toEqual(["Vegetarian"])
   })
 })

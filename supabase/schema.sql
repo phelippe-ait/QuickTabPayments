@@ -18,7 +18,7 @@
 -- demo accounts, or any menu/order data. See README.md → "Database setup" for
 -- the data import steps.
 --
--- Generated from 19 migrations:
+-- Generated from 20 migrations:
 --   - 0001_profiles.sql
 --   - 0002_roles.sql
 --   - 0003_schema.sql
@@ -38,6 +38,7 @@
 --   - 0017_claim_guest_order.sql
 --   - 0018_phase6_rpc_lockdown.sql
 --   - 0019_tracking_payment_details.sql
+--   - 20261105025454_add_menu_item_dietary_tags.sql
 -- ===========================================================================
 
 -- ===========================================================================
@@ -3277,3 +3278,14 @@ comment on function public.get_order_tracking(text) is
 -- ---------------------------------------------------------------------
 -- End of migration
 -- ---------------------------------------------------------------------
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261105025454_add_menu_item_dietary_tags.sql
+-- ===========================================================================
+
+-- Store dietary claims separately from allergen disclosures on menu items.
+alter table public.menu_items
+  add column if not exists dietary_tags text[] not null default '{}';
+
+comment on column public.menu_items.dietary_tags is
+  'Dietary labels shown to customers, such as Vegetarian, Vegan, and Halal.';
