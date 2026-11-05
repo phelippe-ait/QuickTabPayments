@@ -5,6 +5,7 @@ import { Icon } from "@shared/ui/Icon";
 import { formatMoney, roundMoney, splitInclusiveTax } from "@shared/lib/money";
 import { HeaderButton } from "../../components/CustomerUi";
 import { simulatePayment } from "../../data/simulatedPayment";
+import type { CustomerLocation } from "../../data/geolocation";
 import {
   simulatedPaymentLabels,
   type CartItem,
@@ -15,6 +16,7 @@ export type PlaceOrderInput = {
   customerName: string;
   notes: string;
   paymentMethod: SimulatedPaymentMethod;
+  location?: CustomerLocation;
 };
 
 /**
@@ -32,6 +34,7 @@ export function CheckoutScreen({
   onPlaceOrder,
   defaultName = "",
   error = "",
+  onRequestLocation,
 }: {
   items: CartItem[];
   currency: string;
@@ -40,6 +43,7 @@ export function CheckoutScreen({
   canCheckout: boolean;
   onClose: () => void;
   onPlaceOrder: (input: PlaceOrderInput) => Promise<void>;
+  onRequestLocation?: () => Promise<CustomerLocation>;
   defaultName?: string;
   error?: string;
 }) {
@@ -47,6 +51,7 @@ export function CheckoutScreen({
   const [notes, setNotes] = useState("");
   const [processingMethod, setProcessingMethod] =
     useState<SimulatedPaymentMethod | null>(null);
+  const [attemptError, setAttemptError] = useState("");
   const hasCustomerName = customerName.trim().length > 0;
 
   const total = useMemo(
@@ -60,13 +65,25 @@ export function CheckoutScreen({
   const pay = async (method: SimulatedPaymentMethod) => {
     if (!canPay) return;
     setProcessingMethod(method);
+    setAttemptError("");
     try {
+      const location = onRequestLocation
+        ? await onRequestLocation()
+        : undefined;
       await simulatePayment(method);
-      await onPlaceOrder({
+      const input: PlaceOrderInput = {
         customerName: customerName.trim(),
         notes: notes.trim(),
         paymentMethod: method,
-      });
+      };
+      if (location) input.location = location;
+      await onPlaceOrder(input);
+    } catch (error) {
+      setAttemptError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't verify your location. Please try again.",
+      );
     } finally {
       setProcessingMethod(null);
     }
@@ -154,6 +171,11 @@ export function CheckoutScreen({
             {error}
           </p>
         )}
+        {attemptError && (
+          <p className={styles["auth-error"]} role="alert">
+            {attemptError}
+          </p>
+        )}
 
         <section
           className={`${styles["express-checkout"]}`}
@@ -166,6 +188,11 @@ export function CheckoutScreen({
               Test mode — payment is simulated. No money moves and no card
               details are required.
             </span>
+          </p>
+          <p className="mb-3 rounded-lg bg-sand px-3 py-2 text-xs text-ink-mid">
+            We’ll ask to use your location to check that you’re within 500 m of
+            the restaurant. Your location is used for this check and isn’t saved
+            with the order.
           </p>
           <div className={`${styles["express-options"]}`}>
             <button

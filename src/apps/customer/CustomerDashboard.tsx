@@ -17,6 +17,7 @@ import type { MenuItem, QrContext, Screen } from "./types"
 import { placeOrder, PlaceOrderError, type PlacedOrder } from "./data/placeOrder"
 import { fetchMenu } from "./data/menuApi"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
+import { requestCustomerLocation } from "./data/geolocation"
 
 export default function App() {
   return (
@@ -169,7 +170,8 @@ function CustomerShell() {
             setScreen("cart")
           }}
           error={checkoutError}
-          onPlaceOrder={async ({ customerName, notes, paymentMethod }) => {
+          onRequestLocation={requestCustomerLocation}
+          onPlaceOrder={async ({ customerName, notes, paymentMethod, location }) => {
             setCheckoutError("")
             try {
               const order = await placeOrder({
@@ -178,6 +180,7 @@ function CustomerShell() {
                 customerName,
                 notes,
                 items: cart.items,
+                location,
               })
               const placedOrder: PlacedOrder = { ...order, paymentMethod }
               if (source) saveLastOrder(source, placedOrder)

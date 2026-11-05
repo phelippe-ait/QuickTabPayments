@@ -13,6 +13,14 @@ export type Membership = {
   restaurant: Restaurant;
 };
 
+export type RestaurantLocation = {
+  restaurant_id: string;
+  latitude: number;
+  longitude: number;
+  label: string;
+  updated_at: string;
+};
+
 /**
  * The launch model is one active restaurant per staff user (the first active
  * membership wins). `fetchMemberships` exists so multi-restaurant switching can
@@ -91,6 +99,43 @@ export async function updateRestaurant(
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function fetchRestaurantLocation(
+  restaurantId: string,
+): Promise<RestaurantLocation | null> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("restaurant_locations")
+    .select("restaurant_id, latitude, longitude, label, updated_at")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveRestaurantLocation(
+  restaurantId: string,
+  point: { latitude: number; longitude: number; label: string } | null,
+): Promise<void> {
+  const client = requireSupabase();
+  if (!point) {
+    const { error } = await client
+      .from("restaurant_locations")
+      .delete()
+      .eq("restaurant_id", restaurantId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await client.from("restaurant_locations").upsert({
+    restaurant_id: restaurantId,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    label: point.label,
+  });
+  if (error) throw new Error(error.message);
 }
 
 export type StaffMember = Pick<
@@ -180,5 +225,6 @@ export const restaurantKeys = {
   all: ["restaurants"] as const,
   membership: (userId: string) => ["restaurants", "membership", userId] as const,
   detail: (id: string) => ["restaurants", "detail", id] as const,
+  location: (id: string) => ["restaurants", "location", id] as const,
   staff: (id: string) => ["restaurants", id, "staff"] as const,
 };

@@ -35,6 +35,10 @@ export type PlaceOrderErrorCode =
   | "restaurant_not_found"
   | "table_not_found"
   | "menu_item_unavailable"
+  | "customer_location_required"
+  | "customer_location_invalid"
+  | "outside_ordering_radius"
+  | "restaurant_location_not_configured"
   | "order_number_conflict"
   | "unknown"
 
@@ -50,6 +54,14 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "This table QR code is no longer valid. Please scan the QR code on your table again.",
   menu_item_unavailable:
     "One of your items just sold out. Please review your cart and try again.",
+  customer_location_required:
+    "Allow location access to confirm you are within 500 m of the restaurant, then try again.",
+  customer_location_invalid:
+    "We couldn't verify your location. Please try again.",
+  outside_ordering_radius:
+    "You need to be within 500 m of the restaurant to place an order.",
+  restaurant_location_not_configured:
+    "This restaurant hasn't set its ordering location yet. Please ask the restaurant team for help.",
   order_number_conflict:
     "We couldn't create an order number. Please try again in a moment.",
   unknown: "We couldn't place your order. Please try again.",
@@ -136,6 +148,7 @@ export async function placeOrder(input: {
   customerName: string
   notes?: string
   items: CartItem[]
+  location?: { latitude: number; longitude: number }
 }): Promise<PlacedOrder> {
   const client = requireSupabase()
 
@@ -155,6 +168,8 @@ export async function placeOrder(input: {
     p_customer_name: input.customerName.trim(),
     p_notes: input.notes?.trim() || null,
     p_items: items,
+    p_customer_latitude: input.location?.latitude ?? null,
+    p_customer_longitude: input.location?.longitude ?? null,
   })
 
   if (error) {

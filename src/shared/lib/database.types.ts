@@ -759,6 +759,38 @@ export type Database = {
           },
         ]
       }
+      restaurant_locations: {
+        Row: {
+          label: string
+          latitude: number
+          longitude: number
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          label: string
+          latitude: number
+          longitude: number
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          label?: string
+          latitude?: number
+          longitude?: number
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_locations_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: true
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
           created_at: string
@@ -904,6 +936,8 @@ export type Database = {
           p_notes?: string | null
           p_restaurant_slug: string
           p_table_token: string
+          p_customer_latitude?: number | null
+          p_customer_longitude?: number | null
         }
         Returns: Json
       }
