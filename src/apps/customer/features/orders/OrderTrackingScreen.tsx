@@ -5,6 +5,10 @@ import { supabase } from "@shared/lib/supabase"
 import { cn } from "@shared/lib/cn"
 import { formatMoney, inclusiveTaxLabel } from "@shared/lib/money"
 import { orderStatusLabels, orderStatusTones } from "@shared/orders/status"
+import {
+  paymentSummaryLabel,
+  paymentSummaryTone,
+} from "@shared/orders/paymentLabels"
 import { CUSTOMER_TAGLINE } from "../../constants"
 import type { OrderStatus } from "@shared/lib/database.types"
 import { Badge, type BadgeProps } from "@shared/ui/shadcn/badge"
@@ -143,6 +147,12 @@ export function OrderTrackingScreen() {
   const { user } = useAuth()
   const tracking = useTracking(token)
   const { order, refresh } = tracking
+  const paymentTone = order
+    ? paymentSummaryTone(order.paymentStatus, order.refundedTotal)
+    : null
+  const paymentLabel = order
+    ? paymentSummaryLabel(order.paymentStatus, order.refundedTotal)
+    : null
 
   // Signed-in owners/staff may receive Realtime updates; polling is the
   // fallback for them and the primary mechanism for guests.
@@ -388,6 +398,39 @@ export function OrderTrackingScreen() {
                     <dd>{formatMoney(order.total, order.currency)}</dd>
                   </div>
                 </dl>
+
+                {order.paymentStatus && (
+                  <div className="mt-4 flex items-center justify-between border-t border-line-soft pt-3 text-[12px] text-ink-mid">
+                    <span>Payment</span>
+                    <Badge
+                      variant={
+                        paymentTone === "primary"
+                          ? "default"
+                          : (paymentTone ?? "neutral")
+                      }
+                    >
+                      {paymentLabel}
+                    </Badge>
+                  </div>
+                )}
+
+                {order.refundedTotal > 0 && (
+                  <p className="mt-2 text-[11px] text-muted">
+                    Refunded to date:{" "}
+                    {formatMoney(order.refundedTotal, order.currency)}
+                  </p>
+                )}
+
+                {order.receiptUrl && (
+                  <a
+                    className="mt-3 inline-block text-[11px] font-bold text-berry underline underline-offset-2"
+                    href={order.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View receipt
+                  </a>
+                )}
               </CardContent>
             </Card>
           </>

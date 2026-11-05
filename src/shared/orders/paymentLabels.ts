@@ -49,3 +49,26 @@ export function paymentMethodLabel(
 ): string {
   return method ? paymentMethodLabels[method] : "—";
 }
+
+/**
+ * Customer-facing payment label. A succeeded payment with refunds against it is
+ * "Partially refunded"; the webhook flips it to `refunded` only when the whole
+ * charge is refunded.
+ */
+export function paymentSummaryLabel(
+  status: PaymentStatus | null | undefined,
+  refundedTotal: number,
+): string | null {
+  if (!status) return null;
+  if (status === "succeeded" && refundedTotal > 0) return "Partially refunded";
+  return paymentStatusLabels[status];
+}
+
+export function paymentSummaryTone(
+  status: PaymentStatus | null | undefined,
+  refundedTotal: number,
+): StatusTone | null {
+  if (!status) return null;
+  if (status === "succeeded" && refundedTotal > 0) return "warning";
+  return paymentStatusTones[status];
+}

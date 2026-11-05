@@ -1,5 +1,9 @@
 import { requireSupabase } from "@shared/data/client"
-import type { OrderStatus } from "@shared/lib/database.types"
+import type {
+  OrderStatus,
+  PaymentMethodType,
+  PaymentStatus,
+} from "@shared/lib/database.types"
 
 export type TrackingOrderItem = {
   name: string
@@ -20,6 +24,11 @@ export type TrackingOrder = {
   tableNumber: string | null
   restaurantName: string
   items: TrackingOrderItem[]
+  paymentStatus: PaymentStatus | null
+  paymentMethodType: PaymentMethodType | null
+  receiptUrl: string | null
+  amountPaid: number
+  refundedTotal: number
 }
 
 /** Guests cannot receive RLS-filtered Realtime rows, so they poll. */
@@ -66,6 +75,17 @@ export function mapTracking(raw: unknown): TrackingOrder | null {
       typeof row.table_number === "string" ? row.table_number : null,
     restaurantName:
       typeof row.restaurant_name === "string" ? row.restaurant_name : "",
+    paymentStatus:
+      typeof row.payment_status === "string"
+        ? (row.payment_status as PaymentStatus)
+        : null,
+    paymentMethodType:
+      typeof row.payment_method_type === "string"
+        ? (row.payment_method_type as PaymentMethodType)
+        : null,
+    receiptUrl: typeof row.receipt_url === "string" ? row.receipt_url : null,
+    amountPaid: num(row.amount_paid),
+    refundedTotal: num(row.refunded_total),
     items,
   }
 }

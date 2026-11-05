@@ -21,6 +21,11 @@ const trackedOrder = {
   createdAt: "2026-10-25T02:00:00Z",
   tableNumber: "T05",
   restaurantName: "QuickTab Demo Cafe",
+  paymentStatus: "succeeded" as const,
+  paymentMethodType: "card" as const,
+  receiptUrl: "https://receipt.example",
+  amountPaid: 4.7,
+  refundedTotal: 0,
   items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
 }
 
@@ -72,6 +77,21 @@ describe("OrderTrackingScreen", () => {
     expect(
       await screen.findByText(/Your payment didn’t complete|Your payment didn't complete/i),
     ).toBeInTheDocument()
+  })
+
+  it("shows a receipt link and a partial refund amount", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      refundedTotal: 1.2,
+    })
+    renderTracking()
+
+    expect(await screen.findByText(/partially refunded/i)).toBeInTheDocument()
+    expect(screen.getByText(/refunded to date/i)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /view receipt/i })).toHaveAttribute(
+      "href",
+      "https://receipt.example",
+    )
   })
 
   it("shows a safe not-found screen for a bad token", async () => {

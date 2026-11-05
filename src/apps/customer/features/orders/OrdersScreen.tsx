@@ -6,7 +6,7 @@ import { Button } from "@shared/ui/Button"
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { formatMoney } from "@shared/lib/money"
 import { orderStatusLabels } from "@shared/orders/status"
-import { paymentStatusLabels } from "@shared/orders/paymentLabels"
+import { paymentSummaryLabel } from "@shared/orders/paymentLabels"
 import { HeaderButton } from "../../components/CustomerUi"
 import {
   getCustomerOrderHistory,
@@ -90,7 +90,10 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
                     </span>
                     {order.paymentStatus && (
                       <span className={styles["order-status-pill"]}>
-                        {paymentStatusLabels[order.paymentStatus]}
+                        {paymentSummaryLabel(
+                          order.paymentStatus,
+                          order.refundedTotal,
+                        )}
                       </span>
                     )}
                   </div>
@@ -108,14 +111,31 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
                 <span>Total</span>
                 <strong>{formatMoney(order.total, order.currency)}</strong>
               </div>
-              {order.trackingToken && (
-                <Link
-                  className={styles["history-track-link"]}
-                  to={trackingUrl(order.orderNumber, order.trackingToken)}
-                >
-                  Track order
-                </Link>
+              {order.refundedTotal > 0 && (
+                <p className="mt-2 text-[11px] text-muted">
+                  Refunded to date: {formatMoney(order.refundedTotal, order.currency)}
+                </p>
               )}
+              <div className="flex flex-wrap gap-4">
+                {order.trackingToken && (
+                  <Link
+                    className={styles["history-track-link"]}
+                    to={trackingUrl(order.orderNumber, order.trackingToken)}
+                  >
+                    Track order
+                  </Link>
+                )}
+                {order.receiptUrl && (
+                  <a
+                    className={styles["history-track-link"]}
+                    href={order.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View receipt
+                  </a>
+                )}
+              </div>
             </article>
           ))}
         </section>

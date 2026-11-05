@@ -1,5 +1,9 @@
 import { requireSupabase } from "@shared/data/client"
-import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
+import type {
+  OrderStatus,
+  PaymentStatus,
+  RefundStatus,
+} from "@shared/lib/database.types"
 
 export type CustomerOrderItem = {
   name: string
@@ -23,6 +27,7 @@ export type CustomerOrder = {
   items: CustomerOrderItem[]
   paymentStatus: PaymentStatus | null
   receiptUrl: string | null
+  refundedTotal: number
 }
 
 type HistoryRow = {
@@ -48,6 +53,10 @@ type HistoryRow = {
     amount: number
     receipt_url: string | null
   }>
+  refunds: Array<{
+    amount: number
+    status: RefundStatus
+  }>
 }
 
 const historySelect = `
@@ -62,32 +71,44 @@ const historySelect = `
   tables(table_number),
   restaurants(name, currency),
   order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal),
-  payments(status, payment_method_type, amount, receipt_url)
+  payments(status, payment_method_type, amount, receipt_url),
+  refunds(amount, status)
 `
 
 /** Pure mapper so history rendering can be tested without Supabase. */
 export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
-  return rows.map((row) => ({
-    id: row.id,
-    orderNumber: row.order_number,
-    status: row.status,
-    subtotal: Number(row.subtotal),
-    tax: Number(row.tax),
-    total: Number(row.total),
-    currency: row.restaurants?.currency ?? "AUD",
-    restaurantName: row.restaurants?.name ?? "",
-    tableNumber: row.tables?.table_number ?? null,
-    trackingToken: row.tracking_token,
-    createdAt: row.created_at,
-    paymentStatus: row.payments?.[0]?.status ?? null,
-    receiptUrl: row.payments?.[0]?.receipt_url ?? null,
-    items: (row.order_items ?? []).map((item) => ({
-      name: item.item_name_snapshot,
-      quantity: item.quantity,
-      unitPrice: Number(item.unit_price_snapshot),
-      subtotal: Number(item.subtotal),
-    })),
-  }))
+  return rows.map((row) => {
+    const payment =
+      row.payments?.find(
+        (entry) => entry.status === "succeeded" || entry.status === "refunded",
+      ) ?? row.payments?.[0]
+    const refundedTotal = (row.refunds ?? [])
+      .filter((refund) => refund.status === "succeeded")
+      .reduce((total, refund) => total + Number(refund.amount), 0)
+
+    return {
+      id: row.id,
+      orderNumber: row.order_number,
+      status: row.status,
+      subtotal: Number(row.subtotal),
+      tax: Number(row.tax),
+      total: Number(row.total),
+      currency: row.restaurants?.currency ?? "AUD",
+      restaurantName: row.restaurants?.name ?? "",
+      tableNumber: row.tables?.table_number ?? null,
+      trackingToken: row.tracking_token,
+      createdAt: row.created_at,
+      paymentStatus: payment?.status ?? null,
+      receiptUrl: payment?.receipt_url ?? null,
+      refundedTotal,
+      items: (row.order_items ?? []).map((item) => ({
+        name: item.item_name_snapshot,
+        quantity: item.quantity,
+        unitPrice: Number(item.unit_price_snapshot),
+        subtotal: Number(item.subtotal),
+      })),
+    }
+  })
 }
 
 /**

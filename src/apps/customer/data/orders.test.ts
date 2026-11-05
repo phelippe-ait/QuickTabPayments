@@ -31,6 +31,7 @@ describe("mapCustomerOrders", () => {
             receipt_url: "https://receipt",
           },
         ],
+        refunds: [{ amount: 1.2, status: "succeeded" }],
       },
     ])
 
@@ -42,6 +43,7 @@ describe("mapCustomerOrders", () => {
       trackingToken: "token-1",
       paymentStatus: "succeeded",
       receiptUrl: "https://receipt",
+      refundedTotal: 1.2,
       items: [
         { name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 },
       ],
@@ -63,6 +65,7 @@ describe("mapCustomerOrders", () => {
         restaurants: null,
         order_items: [],
         payments: [],
+        refunds: [],
       },
     ])
 
@@ -70,5 +73,6 @@ describe("mapCustomerOrders", () => {
     expect(orders[0].currency).toBe("AUD")
     expect(orders[0].items).toEqual([])
     expect(orders[0].paymentStatus).toBeNull()
+    expect(orders[0].refundedTotal).toBe(0)
   })
 })
