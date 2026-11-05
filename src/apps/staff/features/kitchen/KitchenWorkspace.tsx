@@ -100,12 +100,17 @@ export function KitchenWorkspace({
                 {order.items.map((item) => (
                   <div
                     className="flex items-center gap-3 border-b border-sand py-3.5 last:border-0"
-                    key={item.name}
+                    key={`${item.name}-${item.modifiers?.join(",") ?? ""}`}
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sand text-sm font-bold">
                       {item.qty}
                     </span>
-                    <span className="text-sm font-bold">{item.name}</span>
+                    <span className="text-sm font-bold">
+                      {item.name}
+                      {(item.modifiers?.length ?? 0) > 0 && (
+                        <small className="mt-0.5 block font-normal text-muted">{item.modifiers?.join(", ")}</small>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>

@@ -10,6 +10,7 @@ export type TrackingOrderItem = {
   quantity: number
   unitPrice: number
   subtotal: number
+  modifiers?: { name: string; priceAdjustment: number }[]
 }
 
 export type TrackingOrder = {
@@ -57,6 +58,15 @@ export function mapTracking(raw: unknown): TrackingOrder | null {
             quantity: num(line.quantity),
             unitPrice: num(line.unit_price),
             subtotal: num(line.subtotal),
+            ...(Array.isArray(line.modifiers) && line.modifiers.length > 0
+              ? { modifiers: line.modifiers.flatMap((entry) => {
+                  if (!entry || typeof entry !== "object") return []
+                  const modifier = entry as Record<string, unknown>
+                  return typeof modifier.name === "string"
+                    ? [{ name: modifier.name, priceAdjustment: num(modifier.price_adjustment) }]
+                    : []
+                }) }
+              : {}),
           },
         ]
       })

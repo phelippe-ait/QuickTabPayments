@@ -20,6 +20,7 @@ export type StaffOrderRow = {
     quantity: number
     unit_price_snapshot: number
     notes: string | null
+    order_item_modifiers?: { modifier_name_snapshot: string }[]
   }[]
   payments: {
     status: PaymentStatus
@@ -54,7 +55,8 @@ export async function fetchStaffOrders(restaurantId: string) {
         item_name_snapshot,
         quantity,
         unit_price_snapshot,
-        notes
+        notes,
+        order_item_modifiers (modifier_name_snapshot)
       ),
       payments (
         status,
@@ -120,6 +122,9 @@ export function mapStaffOrder(row: StaffOrderRow): Order {
       name: item.item_name_snapshot,
       qty: item.quantity,
       price: item.unit_price_snapshot,
+      ...(item.order_item_modifiers?.length
+        ? { modifiers: item.order_item_modifiers.map((modifier) => modifier.modifier_name_snapshot) }
+        : {}),
     })),
   }
 }

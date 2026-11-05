@@ -46,6 +46,10 @@ export function reduceOpenOrdersByTable(
 
 export type OrderItemWithImage = OrderItem & {
   menu_items: { image_url: string | null } | null;
+  order_item_modifiers?: {
+    modifier_name_snapshot: string;
+    price_adjustment_snapshot: number;
+  }[];
 };
 
 export type OrderWithDetails = Order & {
@@ -83,7 +87,7 @@ export function sanitiseOrderSearch(value: string): string {
 
 const orderSelect = `
   *,
-  order_items(*, menu_items(image_url)),
+  order_items(*, menu_items(image_url), order_item_modifiers(modifier_name_snapshot, price_adjustment_snapshot)),
   payments(*),
   refunds(*),
   tables(table_number)

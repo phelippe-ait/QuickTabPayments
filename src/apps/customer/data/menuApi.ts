@@ -1,6 +1,6 @@
 import { requireSupabase } from "@shared/data/client"
 import type { MenuCategory as MenuCategoryRow, MenuItem as MenuItemRow } from "@shared/lib/database.types"
-import type { MenuCategory, MenuItem } from "../types"
+import type { MenuCategory, MenuItem, ModifierGroup } from "../types"
 
 function compareOrder(
   a: { display_order: number; name: string },
@@ -109,6 +109,60 @@ export async function fetchMenu(restaurantId: string): Promise<MenuCategory[]> {
   }
 
   return mapMenu(categoriesResult.data ?? [], itemsResult.data ?? [])
+}
+
+/** Load the live modifier groups and available options attached to an item. */
+export async function fetchItemModifierGroups(
+  menuItemId: string,
+): Promise<ModifierGroup[]> {
+  const client = requireSupabase()
+  const { data: links, error: linkError } = await client
+    .from("menu_item_modifier_groups")
+    .select("modifier_group_id, display_order")
+    .eq("menu_item_id", menuItemId)
+    .order("display_order", { ascending: true })
+
+  if (linkError) throw new Error("Could not load item options. Please try again.")
+  if (!links?.length) return []
+
+  const groupIds = links.map((link) => link.modifier_group_id)
+  const [{ data: groups, error: groupError }, { data: modifiers, error: modifierError }] =
+    await Promise.all([
+      client
+        .from("modifier_groups")
+        .select("id, name, selection_type, min_selections, max_selections, is_required, display_order")
+        .in("id", groupIds),
+      client
+        .from("modifiers")
+        .select("id, modifier_group_id, name, price_adjustment, display_order")
+        .in("modifier_group_id", groupIds)
+        .eq("is_available", true)
+        .order("display_order", { ascending: true }),
+    ])
+
+  if (groupError || modifierError) {
+    throw new Error("Could not load item options. Please try again.")
+  }
+
+  const groupOrder = new Map(links.map((link, index) => [link.modifier_group_id, index]))
+  return (groups ?? [])
+    .slice()
+    .sort((a, b) => (groupOrder.get(a.id) ?? 0) - (groupOrder.get(b.id) ?? 0))
+    .map((group) => ({
+      id: group.id,
+      name: group.name,
+      selectionType: group.selection_type,
+      minSelections: group.min_selections,
+      maxSelections: group.max_selections,
+      isRequired: group.is_required,
+      options: (modifiers ?? [])
+        .filter((modifier) => modifier.modifier_group_id === group.id)
+        .map((modifier) => ({
+          id: modifier.id,
+          name: modifier.name,
+          priceAdjustment: Number(modifier.price_adjustment),
+        })),
+    }))
 }
 
 /** All item ids currently offered by the menu (used to reconcile the cart). */

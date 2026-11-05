@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { roundMoney } from "@shared/lib/money"
-import type { CartItem, MenuItem } from "../types"
+import type { CartItem, MenuItem, ModifierChoice } from "../types"
 import type { QrSource } from "../data/qrContext"
 
 export const CART_STORAGE_PREFIX = "quicktab:cart"
@@ -10,7 +10,12 @@ export function cartStorageKey(source: QrSource): string {
 }
 
 export function serializeCart(items: CartItem[]): string {
-  return JSON.stringify({ version: 1, items })
+  return JSON.stringify({ version: 2, items })
+}
+
+export function cartLineId(menuItemId: string, modifiers: ModifierChoice[] = []): string {
+  const modifierKey = modifiers.map((modifier) => modifier.id).sort().join(",")
+  return `${menuItemId}::${modifierKey}`
 }
 
 /** Tolerant parser: malformed/old storage must never break ordering. */
@@ -34,9 +39,36 @@ export function parseCart(raw: string | null): CartItem[] {
       const quantity = Math.trunc(Number(row.quantity))
       if (!Number.isFinite(unitPrice) || unitPrice < 0) return []
       if (!Number.isFinite(quantity) || quantity <= 0) return []
-      if (seen.has(row.menuItemId)) return []
-      seen.add(row.menuItemId)
-      return [{ menuItemId: row.menuItemId, name: row.name, unitPrice, quantity }]
+      const modifiers = Array.isArray(row.modifiers)
+        ? row.modifiers.flatMap((entry) => {
+            if (!entry || typeof entry !== "object") return []
+            const modifier = entry as Record<string, unknown>
+            if (typeof modifier.id !== "string" || typeof modifier.name !== "string") return []
+            const priceAdjustment = Number(modifier.priceAdjustment)
+            return [{
+              id: modifier.id,
+              name: modifier.name,
+              priceAdjustment: Number.isFinite(priceAdjustment) ? priceAdjustment : 0,
+              groupName: typeof modifier.groupName === "string" ? modifier.groupName : "",
+            }]
+          })
+        : []
+      const lineId = cartLineId(row.menuItemId, modifiers)
+      if (seen.has(lineId)) return []
+      seen.add(lineId)
+      const baseUnitPrice = Number(row.baseUnitPrice)
+      const legacyLine = {
+        menuItemId: row.menuItemId,
+        name: row.name,
+        unitPrice,
+        quantity,
+      }
+      return [modifiers.length > 0 ? {
+        ...legacyLine,
+        lineId,
+        baseUnitPrice: Number.isFinite(baseUnitPrice) && baseUnitPrice >= 0 ? baseUnitPrice : unitPrice - modifiers.reduce((sum, modifier) => sum + modifier.priceAdjustment, 0),
+        modifiers,
+      } : legacyLine]
     })
   } catch {
     return []
@@ -109,17 +141,21 @@ export function useCart(source: QrSource | null) {
   )
 
   const add = useCallback(
-    (item: MenuItem, amount = 1) => {
+    (item: MenuItem, amount = 1, modifiers: ModifierChoice[] = []) => {
       const quantity = Math.max(1, Math.trunc(amount))
+      const lineId = cartLineId(item.id, modifiers)
+      const unitPrice = Math.max(0, roundMoney(item.price + modifiers.reduce((sum, modifier) => sum + modifier.priceAdjustment, 0)))
       update((items) => {
-        const existing = items.find((line) => line.menuItemId === item.id)
+        const existing = items.find((line) => (line.lineId ?? cartLineId(line.menuItemId, line.modifiers)) === lineId)
         if (existing) {
           return items.map((line) =>
-            line.menuItemId === item.id
+            (line.lineId ?? cartLineId(line.menuItemId, line.modifiers)) === lineId
               ? {
                   ...line,
+                  ...(modifiers.length > 0 ? { lineId } : {}),
                   name: item.name,
-                  unitPrice: item.price,
+                  ...(modifiers.length > 0 ? { baseUnitPrice: item.price, modifiers } : {}),
+                  unitPrice,
                   quantity: line.quantity + quantity,
                 }
               : line,
@@ -130,8 +166,9 @@ export function useCart(source: QrSource | null) {
           {
             menuItemId: item.id,
             name: item.name,
-            unitPrice: item.price,
+            unitPrice,
             quantity,
+            ...(modifiers.length > 0 ? { lineId, baseUnitPrice: item.price, modifiers } : {}),
           },
         ]
       })
@@ -140,10 +177,10 @@ export function useCart(source: QrSource | null) {
   )
 
   const increase = useCallback(
-    (menuItemId: string) =>
+    (lineId: string) =>
       update((items) =>
         items.map((line) =>
-          line.menuItemId === menuItemId
+          (line.lineId ?? cartLineId(line.menuItemId, line.modifiers)) === lineId
             ? { ...line, quantity: line.quantity + 1 }
             : line,
         ),
@@ -152,10 +189,10 @@ export function useCart(source: QrSource | null) {
   )
 
   const decrease = useCallback(
-    (menuItemId: string) =>
+    (lineId: string) =>
       update((items) =>
         items.flatMap((line) => {
-          if (line.menuItemId !== menuItemId) return [line]
+          if ((line.lineId ?? cartLineId(line.menuItemId, line.modifiers)) !== lineId) return [line]
           if (line.quantity <= 1) return []
           return [{ ...line, quantity: line.quantity - 1 }]
         }),
@@ -164,8 +201,8 @@ export function useCart(source: QrSource | null) {
   )
 
   const remove = useCallback(
-    (menuItemId: string) =>
-      update((items) => items.filter((line) => line.menuItemId !== menuItemId)),
+    (lineId: string) =>
+      update((items) => items.filter((line) => (line.lineId ?? cartLineId(line.menuItemId, line.modifiers)) !== lineId)),
     [update],
   )
 
@@ -185,20 +222,26 @@ export function useCart(source: QrSource | null) {
         const next = items.flatMap((line) => {
           const item = byId.get(line.menuItemId)
           if (!item) return []
-          if (
-            line.name === item.name &&
-            line.unitPrice === item.price
-          ) {
+          const modifiers = line.modifiers ?? []
+          const unitPrice = Math.max(0, roundMoney(item.price + modifiers.reduce((sum, modifier) => sum + modifier.priceAdjustment, 0)))
+          if (line.name === item.name && (modifiers.length === 0 || line.baseUnitPrice === item.price) && line.unitPrice === unitPrice) {
             return [line]
           }
-          return [{ ...line, name: item.name, unitPrice: item.price }]
+          return [{
+            ...line,
+            name: item.name,
+            unitPrice,
+            ...(modifiers.length > 0 ? { baseUnitPrice: item.price } : {}),
+          }]
         })
         const unchanged =
           next.length === items.length &&
           next.every(
             (line, index) =>
               line.menuItemId === items[index]?.menuItemId &&
+              line.lineId === items[index]?.lineId &&
               line.name === items[index]?.name &&
+              line.baseUnitPrice === items[index]?.baseUnitPrice &&
               line.unitPrice === items[index]?.unitPrice &&
               line.quantity === items[index]?.quantity,
           )

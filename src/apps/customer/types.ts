@@ -23,6 +23,30 @@ export type MenuItem = {
   displayOrder: number;
 };
 
+/** Customer selectable options configured for a menu item. */
+export type ModifierOption = {
+  id: string;
+  name: string;
+  priceAdjustment: number;
+};
+
+export type ModifierGroup = {
+  id: string;
+  name: string;
+  selectionType: "single" | "multiple";
+  minSelections: number;
+  maxSelections: number;
+  isRequired: boolean;
+  options: ModifierOption[];
+};
+
+export type ModifierChoice = {
+  id: string;
+  name: string;
+  priceAdjustment: number;
+  groupName: string;
+};
+
 /** A menu section loaded from `public.menu_categories`, with its items. */
 export type MenuCategory = {
   id: string;
@@ -34,10 +58,14 @@ export type MenuCategory = {
 
 /** Cart lines are keyed by `menu_item_id`; the price is display-only. */
 export type CartItem = {
+  /** Stable key for a menu item + its selected modifier set. */
+  lineId?: string;
   menuItemId: string;
   name: string;
+  baseUnitPrice?: number;
   unitPrice: number;
   quantity: number;
+  modifiers?: ModifierChoice[];
 };
 
 /** Resolved QR destination, held for the life of the session. */

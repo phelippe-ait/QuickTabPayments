@@ -3,7 +3,7 @@ import { getStripe } from "./_lib/stripe.js";
 import { adminClient, userClient } from "./_lib/supabaseAdmin.js";
 import { bearer, json } from "./_lib/http.js";
 
-type ItemInput = { menu_item_id: string; quantity: number };
+type ItemInput = { menu_item_id: string; quantity: number; modifier_ids?: string[] };
 type LocationInput = { latitude: number; longitude: number };
 
 type Body = {
@@ -47,6 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       p_items: items.map((item) => ({
         menu_item_id: item.menu_item_id,
         quantity: Math.trunc(Number(item.quantity)),
+        ...(Array.isArray(item.modifier_ids) && item.modifier_ids.length > 0
+          ? { modifier_ids: item.modifier_ids }
+          : {}),
       })),
       p_customer_latitude: location?.latitude ?? null,
       p_customer_longitude: location?.longitude ?? null,

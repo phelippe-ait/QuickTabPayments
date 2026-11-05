@@ -1,11 +1,12 @@
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import { HeaderButton } from "../../components/CustomerUi"
 import { ProductPhoto } from "./ProductPhoto"
-import type { MenuItem } from "../../types"
+import { fetchItemModifierGroups } from "../../data/menuApi"
+import type { MenuItem, ModifierChoice, ModifierGroup } from "../../types"
 
 export function ProductModal({
   item,
@@ -16,11 +17,61 @@ export function ProductModal({
   item: MenuItem;
   currency: string;
   onClose: () => void;
-  onAdd: (quantity: number) => void;
+  onAdd: (quantity: number, modifiers: ModifierChoice[]) => void;
 }) {
   const [quantity, setQuantity] = useState(1);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
+  const [groups, setGroups] = useState<ModifierGroup[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const selectedOptionCount = useMemo(
+    () => Object.values(selectedOptions).reduce((count, ids) => count + ids.length, 0),
+    [selectedOptions],
+  );
+  const missingRequiredGroup = groups.find((group) => {
+    const minimum = group.isRequired ? Math.max(1, group.minSelections) : group.minSelections;
+    return (selectedOptions[group.id]?.length ?? 0) < minimum;
+  });
+  const invalidGroup = groups.find((group) => {
+    const maximum = group.selectionType === "single" ? 1 : group.maxSelections;
+    return (selectedOptions[group.id]?.length ?? 0) > maximum;
+  });
+  const selectedUpcharge = groups.reduce(
+    (total, group) => total + group.options
+      .filter((option) => selectedOptions[group.id]?.includes(option.id))
+      .reduce((sum, option) => sum + option.priceAdjustment, 0),
+    0,
+  );
   const panelRef = useDialogFocus<HTMLElement>(onClose);
   useBodyScrollLock();
+
+  const loadOptions = useCallback(() => {
+    setOptionsLoading(true);
+    setOptionsError("");
+    void fetchItemModifierGroups(item.id)
+      .then(setGroups)
+      .catch((error: unknown) => {
+        setOptionsError(error instanceof Error ? error.message : "Could not load item options. Please try again.");
+      })
+      .finally(() => setOptionsLoading(false));
+  }, [item.id]);
+
+  useEffect(() => {
+    loadOptions();
+  }, [loadOptions]);
+
+  const toggleOption = (groupId: string, optionId: string, maximum: number) => {
+    setSelectedOptions((current) => {
+      const selected = current[groupId] ?? [];
+      if (selected.includes(optionId)) {
+        return { ...current, [groupId]: selected.filter((id) => id !== optionId) };
+      }
+      if (selected.length >= maximum) {
+        return { ...current, [groupId]: maximum === 1 ? [optionId] : selected };
+      }
+      return { ...current, [groupId]: [...selected, optionId] };
+    });
+  };
 
   return (
     <div
@@ -59,6 +110,57 @@ export function ProductModal({
             <strong>Contains:</strong> {item.allergens.map((tag) => tag.replace(/\b\w/g, (letter) => letter.toUpperCase())).join(", ")}
           </p>
         )}
+        {optionsLoading && (
+          <p className={styles["option-loading"]} role="status">Loading options…</p>
+        )}
+        {optionsError && (
+          <div className={styles["option-error"]} role="alert">
+            {optionsError}
+            <button type="button" onClick={loadOptions}>Retry</button>
+          </div>
+        )}
+        {groups.map((group) => {
+          const maximum = group.selectionType === "single" ? Math.min(1, group.maxSelections) : group.maxSelections;
+          const minimum = group.isRequired ? Math.max(1, group.minSelections) : group.minSelections;
+          const selectedCount = selectedOptions[group.id]?.length ?? 0;
+          return (
+            <fieldset className={styles["modifier-group"]} key={group.id}>
+              <legend>
+                <span>{group.name}</span>
+                <small>
+                  {group.selectionType === "single"
+                    ? (minimum > 0 ? "Choose one" : "Choose up to one")
+                    : (minimum > 0 ? `Choose ${minimum}${maximum > minimum ? `–${maximum}` : ""}` : `Choose up to ${maximum}`)}
+                  {group.isRequired && <b> Required</b>}
+                </small>
+              </legend>
+              {group.options.map((option) => {
+                const checked = selectedOptions[group.id]?.includes(option.id) ?? false;
+                return (
+                  <label className={styles["modifier-option"]} key={option.id}>
+                    <input
+                      type={group.selectionType === "single" ? "radio" : "checkbox"}
+                      name={`modifier-${group.id}`}
+                      checked={checked}
+                      disabled={maximum === 0 || (!checked && selectedCount >= maximum)}
+                      onChange={() => toggleOption(group.id, option.id, maximum)}
+                    />
+                    <span>{option.name}</span>
+                    {option.priceAdjustment !== 0 && (
+                      <strong>{option.priceAdjustment > 0 ? "+" : "−"}{formatMoney(Math.abs(option.priceAdjustment), currency)}</strong>
+                    )}
+                  </label>
+                );
+              })}
+              {group.options.length === 0 && (
+                <p className={styles["modifier-hint"]}>No options are currently available.</p>
+              )}
+              {minimum > 0 && selectedCount < minimum && (
+                <p className={styles["modifier-hint"]}>Select at least {minimum} option{minimum === 1 ? "" : "s"}.</p>
+              )}
+            </fieldset>
+          );
+        })}
         <div className={`${styles["modal-footer"]}`}>
           <div className={`${styles["quantity"]}`}>
             <button
@@ -81,9 +183,19 @@ export function ProductModal({
             variant="outline"
             size="sm"
             className="rounded-[5px]"
-            onClick={() => onAdd(quantity)}
+            disabled={optionsLoading || Boolean(optionsError) || Boolean(missingRequiredGroup || invalidGroup)}
+            onClick={() => onAdd(quantity, groups.flatMap((group) =>
+              group.options
+                .filter((option) => selectedOptions[group.id]?.includes(option.id))
+                .map((option) => ({
+                  id: option.id,
+                  name: option.name,
+                  priceAdjustment: option.priceAdjustment,
+                  groupName: group.name,
+                })),
+            ))}
           >
-            Add to Order
+            Add to Order{selectedOptionCount > 0 ? ` · ${formatMoney(Math.max(0, item.price + selectedUpcharge), currency)} each` : ""}
           </Button>
         </div>
       </section>

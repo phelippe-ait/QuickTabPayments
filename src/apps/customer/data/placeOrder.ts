@@ -7,6 +7,7 @@ export type PlacedOrderItem = {
   quantity: number
   unitPrice: number
   subtotal: number
+  modifiers?: { name: string; priceAdjustment: number }[]
 }
 
 export type PlacedOrder = {
@@ -40,6 +41,8 @@ export type PlaceOrderErrorCode =
   | "restaurant_not_found"
   | "table_not_found"
   | "menu_item_unavailable"
+  | "invalid_modifier"
+  | "invalid_modifier_selection"
   | "customer_location_required"
   | "customer_location_invalid"
   | "outside_ordering_radius"
@@ -59,6 +62,8 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "This table QR code is no longer valid. Please scan the QR code on your table again.",
   menu_item_unavailable:
     "One of your items just sold out. Please review your cart and try again.",
+  invalid_modifier: "One of the selected options is no longer available. Please review your item.",
+  invalid_modifier_selection: "Please review the required options for your item and try again.",
   customer_location_required:
     "Allow location access to confirm you are within 500 m of the restaurant, then try again.",
   customer_location_invalid:
@@ -123,6 +128,14 @@ export function mapPlacedOrder(raw: unknown): PlacedOrder | null {
             quantity: num(line.quantity),
             unitPrice: num(line.unit_price),
             subtotal: num(line.subtotal),
+            ...(Array.isArray(line.modifiers) && line.modifiers.length > 0
+              ? { modifiers: line.modifiers.flatMap((modifier) => {
+                  if (!modifier || typeof modifier !== "object") return []
+                  const selected = modifier as Record<string, unknown>
+                  if (typeof selected.name !== "string") return []
+                  return [{ name: selected.name, priceAdjustment: num(selected.price_adjustment) }]
+                }) }
+              : {}),
           },
         ]
       })
@@ -157,12 +170,15 @@ export async function placeOrder(input: {
 }): Promise<PlacedOrder> {
   const client = requireSupabase()
 
-  // Only ids + quantities cross the wire. The server prices the order.
+  // Only item/modifier ids + quantities cross the wire. The server prices the order.
   const items = input.items
     .filter((item) => item.quantity > 0)
     .map((item) => ({
       menu_item_id: item.menuItemId,
       quantity: Math.trunc(item.quantity),
+      ...((item.modifiers?.length ?? 0) > 0
+        ? { modifier_ids: item.modifiers!.map((modifier) => modifier.id) }
+        : {}),
     }))
 
   if (items.length === 0) throw new PlaceOrderError("empty_cart")

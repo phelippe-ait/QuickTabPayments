@@ -115,6 +115,11 @@ export function OrderConfirmation({
                 <li key={`${item.name}-${index}`} className="flex justify-between gap-3">
                   <span>
                     {item.quantity} × {item.name}
+                    {(item.modifiers?.length ?? 0) > 0 && (
+                      <small className="mt-1 block text-[10px] text-muted">
+                        {item.modifiers?.map((modifier) => modifier.name).join(", ")}
+                      </small>
+                    )}
                   </span>
                   <span>{formatMoney(item.subtotal, order.currency)}</span>
                 </li>

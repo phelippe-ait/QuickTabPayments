@@ -15,6 +15,7 @@ import {
 import { stripePublishableKey, type PaymentIntentResponse } from "../../data/payments";
 import type { CustomerLocation } from "../../data/geolocation";
 import type { CartItem } from "../../types";
+import { cartLineId } from "../../hooks/useCart";
 
 export type PlaceOrderInput = {
   customerName: string;
@@ -126,9 +127,14 @@ export function CheckoutScreen({
           </h2>
           <ul className="flex flex-col gap-2 text-[12px] text-ink-mid">
             {items.map((item) => (
-              <li key={item.menuItemId} className="flex justify-between gap-3">
+              <li key={item.lineId ?? cartLineId(item.menuItemId, item.modifiers)} className="flex justify-between gap-3">
                 <span>
                   {item.quantity} × {item.name}
+                  {(item.modifiers?.length ?? 0) > 0 && (
+                    <small className="mt-1 block text-[10px] text-muted">
+                      {item.modifiers?.map((modifier) => modifier.name).join(", ")}
+                    </small>
+                  )}
                 </span>
                 <span>{formatMoney(item.unitPrice * item.quantity, currency)}</span>
               </li>

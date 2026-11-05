@@ -293,6 +293,9 @@ export function OrderDetailPage() {
                     <strong>{item.name}</strong>
                     <small>Quantity {item.quantity} · {formatMoney(item.unitPrice, order.currency)} each</small>
                     {item.notes && <small>{item.notes}</small>}
+                    {(item.modifiers?.length ?? 0) > 0 && (
+                      <small>Options: {item.modifiers?.map((modifier) => modifier.name).join(", ")}</small>
+                    )}
                   </div>
                   <strong>{formatMoney(item.subtotal, order.currency)}</strong>
                 </div>

@@ -62,6 +62,7 @@ export type OrderLineVM = {
   subtotal: number;
   imageUrl: string | null;
   notes: string | null;
+  modifiers?: { name: string; priceAdjustment: number }[];
 };
 
 export type PaymentVM = {

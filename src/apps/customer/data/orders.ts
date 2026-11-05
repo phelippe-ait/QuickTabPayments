@@ -10,6 +10,7 @@ export type CustomerOrderItem = {
   quantity: number
   unitPrice: number
   subtotal: number
+  modifiers?: { name: string; priceAdjustment: number }[]
 }
 
 export type CustomerOrder = {
@@ -46,6 +47,10 @@ type HistoryRow = {
     quantity: number
     unit_price_snapshot: number
     subtotal: number
+    order_item_modifiers?: Array<{
+      modifier_name_snapshot: string
+      price_adjustment_snapshot: number
+    }>
   }>
   payments: Array<{
     status: PaymentStatus
@@ -70,7 +75,7 @@ const historySelect = `
   created_at,
   tables(table_number),
   restaurants(name, currency),
-  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal),
+  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal, order_item_modifiers(modifier_name_snapshot, price_adjustment_snapshot)),
   payments(status, payment_method_type, amount, receipt_url),
   refunds(amount, status)
 `
@@ -106,6 +111,12 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
         quantity: item.quantity,
         unitPrice: Number(item.unit_price_snapshot),
         subtotal: Number(item.subtotal),
+        ...((item.order_item_modifiers?.length ?? 0) > 0
+          ? { modifiers: item.order_item_modifiers!.map((modifier) => ({
+              name: modifier.modifier_name_snapshot,
+              priceAdjustment: Number(modifier.price_adjustment_snapshot),
+            })) }
+          : {}),
       })),
     }
   })
