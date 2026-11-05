@@ -712,6 +712,42 @@ select
     'EXECUTE'
   ) as service_can_apply_payment;
 
+-- 0018 lockdown: the remaining two payment RPCs. Same expectation —
+-- anon=false, authenticated=false, service_role=true. (On Supabase,
+-- `revoke ... from public` alone does NOT remove the default-privilege
+-- grants to anon/authenticated; 0018 revokes from all three explicitly.)
+select
+  has_function_privilege(
+    'anon',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as anon_can_fail_payment,
+  has_function_privilege(
+    'authenticated',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as auth_can_fail_payment,
+  has_function_privilege(
+    'service_role',
+    'public.apply_payment_failed(text,text)',
+    'EXECUTE'
+  ) as service_can_fail_payment,
+  has_function_privilege(
+    'anon',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as anon_can_apply_refund,
+  has_function_privilege(
+    'authenticated',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as auth_can_apply_refund,
+  has_function_privilege(
+    'service_role',
+    'public.apply_refund_succeeded(text,text,numeric,boolean)',
+    'EXECUTE'
+  ) as service_can_apply_refund;
+
 -- place_order now creates `pending` orders. Place a real order as anon and
 -- assert the returned status; the rollback discards the fixture.
 begin;
