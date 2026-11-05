@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import styles from "../../App.module.css"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
@@ -24,10 +24,6 @@ export function ProductModal({
   const [groups, setGroups] = useState<ModifierGroup[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState("");
-  const selectedOptionCount = useMemo(
-    () => Object.values(selectedOptions).reduce((count, ids) => count + ids.length, 0),
-    [selectedOptions],
-  );
   const missingRequiredGroup = groups.find((group) => {
     const minimum = group.isRequired ? Math.max(1, group.minSelections) : group.minSelections;
     return (selectedOptions[group.id]?.length ?? 0) < minimum;
@@ -49,7 +45,23 @@ export function ProductModal({
     setOptionsLoading(true);
     setOptionsError("");
     void fetchItemModifierGroups(item.id)
-      .then(setGroups)
+      .then((loadedGroups) => {
+        setGroups(loadedGroups);
+        setSelectedOptions(Object.fromEntries(loadedGroups.flatMap((group) => {
+          const defaultOptionName: Record<string, string> = {
+            size: "regular",
+            milk: "regular milk",
+            strength: "regular",
+            sweetness: "no sugar",
+            temperature: "standard",
+          };
+          const defaultName = defaultOptionName[group.name.toLowerCase()];
+          const defaultOption = defaultName
+            ? group.options.find((option) => option.name.toLowerCase() === defaultName)
+            : undefined;
+          return defaultOption ? [[group.id, [defaultOption.id]]] : [];
+        })));
+      })
       .catch((error: unknown) => {
         setOptionsError(error instanceof Error ? error.message : "Could not load item options. Please try again.");
       })
@@ -195,7 +207,7 @@ export function ProductModal({
                 })),
             ))}
           >
-            Add to Order{selectedOptionCount > 0 ? ` · ${formatMoney(Math.max(0, item.price + selectedUpcharge), currency)} each` : ""}
+            Add to Order{selectedUpcharge !== 0 ? ` · ${formatMoney(Math.max(0, item.price + selectedUpcharge), currency)} each` : ""}
           </Button>
         </div>
       </section>
