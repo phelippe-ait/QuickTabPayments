@@ -322,6 +322,7 @@ export function MenuScreen({
                       <button
                         className={`${styles["product-card"]}`}
                         key={item.id}
+                        aria-label={`View ${item.name}`}
                         onClick={() => onSelect(item)}
                       >
                         <span className={`${styles["product-copy"]}`}>

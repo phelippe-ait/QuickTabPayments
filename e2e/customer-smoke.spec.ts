@@ -16,8 +16,12 @@ test("scan QR -> menu -> add to cart", async ({ page }) => {
   await page.goto(`/?r=${slug}&t=${token}`);
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
 
-  const firstProduct = page.getByRole("button", { name: /add|view/i }).first();
-  if (!(await firstProduct.isVisible().catch(() => false))) {
+  const firstProduct = page.getByRole("button", { name: /^View / }).first();
+  const menuReady = await firstProduct
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!menuReady) {
     test.skip(true, "The demo menu is empty in this environment.");
   }
   await firstProduct.click();
