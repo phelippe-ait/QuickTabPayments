@@ -232,7 +232,7 @@ The Vite dev server does not run `/api` functions. For local payments run:
 
 ```bash
 npm run dev:all
-stripe listen --forward-to localhost:3001/api/webhooks/stripe
+npm run dev:stripe   # or: stripe listen --forward-to localhost:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded
 ```
 
 If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout shows an honest

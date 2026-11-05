@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
  *
  * The full card-payment variant needs Stripe test keys plus a webhook relay:
  *   npx vercel dev --listen 3001
- *   stripe listen --forward-to localhost:3001/api/webhooks/stripe
+ *   stripe listen --forward-to localhost:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded
  *   STRIPE_TEST=1 npm run test:e2e -- order-lifecycle
  * Without `STRIPE_TEST=1` the spec skips so core CI stays green.
  */

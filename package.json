@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "dev:api": "vercel dev --listen 3001",
     "dev:all": "concurrently -n web,api \"npm run dev\" \"npm run dev:api\"",
+    "dev:stripe": "stripe listen --forward-to localhost:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:bundle": "node scripts/build-schema-bundle.mjs",
