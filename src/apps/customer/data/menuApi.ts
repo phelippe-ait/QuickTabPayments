@@ -21,6 +21,7 @@ type CustomerMenuItemRow = Pick<
   | "is_available"
   | "display_order"
   | "allergens"
+  | "dietary_tags"
 >
 
 export function toMenuItem(row: CustomerMenuItemRow): MenuItem {
@@ -31,6 +32,7 @@ export function toMenuItem(row: CustomerMenuItemRow): MenuItem {
     price: Number(row.price),
     imageUrl: row.image_url,
     allergens: row.allergens ?? [],
+    dietaryTags: row.dietary_tags ?? [],
     categoryId: row.category_id,
     displayOrder: row.display_order,
   }
@@ -89,7 +91,7 @@ export async function fetchMenu(restaurantId: string): Promise<MenuCategory[]> {
     client
       .from("menu_items")
       .select(
-        "id, restaurant_id, category_id, name, description, price, image_url, is_available, display_order, allergens, created_at, updated_at",
+        "id, restaurant_id, category_id, name, description, price, image_url, is_available, display_order, allergens, dietary_tags, created_at, updated_at",
       )
       .eq("restaurant_id", restaurantId)
       .eq("is_available", true)

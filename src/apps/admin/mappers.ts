@@ -34,6 +34,8 @@ export function toMenuItemVM(
     description: row.description ?? "",
     price: row.price,
     imageUrl: row.image_url,
+    allergens: row.allergens ?? [],
+    dietaryTags: row.dietary_tags ?? [],
     isAvailable: row.is_available,
     prepTimeMinutes: row.prep_time_minutes,
     displayOrder: row.display_order,

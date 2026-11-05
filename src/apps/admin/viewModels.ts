@@ -17,6 +17,8 @@ export type MenuItemVM = {
   description: string;
   price: number;
   imageUrl: string | null;
+  allergens: string[];
+  dietaryTags: string[];
   isAvailable: boolean;
   prepTimeMinutes: number;
   displayOrder: number;

@@ -118,6 +118,8 @@ main { min-width: 0; background: var(--color-cream-3); }
 .name-price h3 { margin: 0; color: var(--color-ink-soft); font-family: "DM Serif Display", serif; font-size: 21px; font-weight: 400; }
 .name-price strong { color: var(--color-berry); font-size: 13px; }
 .menu-copy > p:last-child { min-height: 38px; margin: 8px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.55; }
+.admin-menu-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.admin-menu-tags span { padding: 4px 7px; border-radius: 10px; color: #42664c; background: #e7f0e5; font-size: 9px; font-weight: 700; }
 .add-card { min-height: 302px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--color-line); border-radius: 12px; color: var(--color-muted); background: rgba(255,255,255,.34); }
 .add-card span { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 13px; border-radius: 50%; color: var(--color-berry); background: var(--color-berry-soft); }
 .add-card strong { color: var(--color-ink-mid); font-size: 13px; }
@@ -260,6 +262,7 @@ main { min-width: 0; background: var(--color-cream-3); }
 .qr-modal code { display: block; overflow: hidden; padding: 10px 12px; border-radius: 7px; color: var(--color-muted-2); background: var(--color-cream-2); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 90; max-width: min(360px, calc(100% - 48px)); padding: 13px 17px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; color: #fff; background: var(--color-ink-dark); box-shadow: 0 12px 32px rgba(43,39,45,.24); font-size: 11px; font-weight: 700; animation: rise .22s ease; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid > .wide { grid-column: 1 / -1; }
 .form-grid label { color: var(--color-ink-mid); font-size: 11px; font-weight: 700; }
 .form-grid label.wide { grid-column: 1 / -1; }
 .form-grid input:not([type="checkbox"]), .form-grid select, .form-grid textarea { width: 100%; margin-top: 7px; padding: 11px 12px; border: 1px solid var(--color-line); border-radius: 8px; outline: 0; color: var(--color-ink-soft); background: #fff; font-size: 13px; font-weight: 400; }
@@ -271,6 +274,14 @@ main { min-width: 0; background: var(--color-cream-3); }
 .switch-row strong, .switch-row small { display: block; }
 .switch-row small { margin-top: 3px; color: var(--color-muted); font-weight: 400; }
 .switch-row input { width: 36px; height: 19px; accent-color: var(--color-berry); }
+.tag-fieldset { min-width: 0; margin: 0; padding: 13px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: #fff; }
+.tag-fieldset legend { padding: 0 5px; color: var(--color-ink-mid); font-size: 11px; font-weight: 700; }
+.tag-help { display: block; margin: -3px 0 10px; color: var(--color-muted); font-size: 10px; font-weight: 400; }
+.tag-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.form-grid .tag-option { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--color-line-soft); border-radius: 16px; color: var(--color-ink-mid); background: var(--color-paper); font-size: 10px; font-weight: 500; cursor: pointer; }
+.tag-option input { width: 13px; height: 13px; margin: 0; accent-color: var(--color-berry); }
+.form-grid .tag-custom { display: block; margin-top: 12px; color: var(--color-muted); font-size: 10px; font-weight: 600; }
+.form-grid .tag-custom input { padding: 8px 10px; font-size: 11px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--color-line-soft); }
 .section-editor > p { margin: 0 0 8px; color: var(--color-muted); font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .section-editor > label { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; overflow: hidden; margin-bottom: 8px; border: 1px solid var(--color-line); border-radius: 8px; background: #fff; }
