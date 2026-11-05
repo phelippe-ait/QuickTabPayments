@@ -25,7 +25,7 @@ export function CartScreen({
   onCheckout: () => void;
 }) {
   return (
-    <main className={`${styles["page-screen"]} cart-screen`}>
+    <main className={`${styles["page-screen"]}`}>
       <header className={`${styles["page-header"]}`}>
         <h1>Review Your Order</h1>
         <HeaderButton icon="close" label="Close cart" onClick={onClose} />
@@ -43,20 +43,28 @@ export function CartScreen({
             <div>
               <span className={`${styles["qty-pill"]}`}>
                 <button
+                  type="button"
                   aria-label={`Decrease ${item.name} quantity`}
                   onClick={() => onDecrease(item.menuItemId)}
                 >
                   −
                 </button>
-                <span>{item.quantity}</span>
+                <span aria-live="polite">{item.quantity}</span>
                 <button
+                  type="button"
                   aria-label={`Increase ${item.name} quantity`}
                   onClick={() => onIncrease(item.menuItemId)}
                 >
                   +
                 </button>
               </span>
-              <button onClick={() => onRemove(item.menuItemId)}>Remove</button>
+              <button
+                type="button"
+                aria-label={`Remove ${item.name}`}
+                onClick={() => onRemove(item.menuItemId)}
+              >
+                Remove
+              </button>
             </div>
           </article>
         ))
@@ -74,7 +82,11 @@ export function CartScreen({
       )}
       <div className={`${styles["checkout-dock"]}`}>
         <strong>Total: {formatMoney(total, currency)}</strong>
-        <button disabled={!items.length} onClick={onCheckout}>
+        <button
+          type="button"
+          disabled={!items.length}
+          onClick={onCheckout}
+        >
           Checkout
         </button>
       </div>

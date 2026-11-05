@@ -9,12 +9,14 @@ import {
 } from "react"
 import styles from "../App.module.css"
 import { ConfirmDialog } from "../components/AdminUi"
-import { useAdminToast } from "./useAdminToast"
+import { useAdminToast, type ToastTone } from "./useAdminToast"
 import type { Confirmation } from "../types"
 
 type AdminUiContextValue = {
   /** Show a short-lived status toast. */
-  notify: (message: string) => void
+  notify: (message: string, tone?: ToastTone) => void
+  /** Show a short-lived error toast (announced with role="alert"). */
+  notifyError: (message: string) => void
   /** Ask for confirmation before a destructive action. */
   confirm: (confirmation: Confirmation) => void
 }
@@ -35,7 +37,11 @@ export function AdminUiProvider({ children }: { children: ReactNode }) {
   )
 
   const value = useMemo<AdminUiContextValue>(
-    () => ({ notify: showToast, confirm }),
+    () => ({
+      notify: showToast,
+      notifyError: (message: string) => showToast(message, "error"),
+      confirm,
+    }),
     [confirm, showToast],
   )
 
@@ -49,8 +55,11 @@ export function AdminUiProvider({ children }: { children: ReactNode }) {
         />
       )}
       {toast && (
-        <div className={styles["toast"]} role="status">
-          {toast}
+        <div
+          className={`${styles["toast"]} ${toast.tone === "error" ? styles["toast-error"] : ""}`}
+          role={toast.tone === "error" ? "alert" : "status"}
+        >
+          {toast.message}
         </div>
       )}
     </AdminUiContext.Provider>

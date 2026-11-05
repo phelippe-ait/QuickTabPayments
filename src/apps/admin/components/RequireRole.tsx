@@ -13,18 +13,36 @@ import { Button, buttonVariants } from "@shared/ui/Button"
 export function RequireRole({
   roles,
   children,
+  fallbackTo = "/admin/orders",
+  fallbackLabel = "Go to order history",
 }: {
   roles: StaffRole[]
   children: ReactNode
+  fallbackTo?: string
+  fallbackLabel?: string
 }) {
   const { role } = useRestaurant()
 
   if (role && roles.includes(role)) return <>{children}</>
 
-  return <RoleBlocked role={role} />
+  return (
+    <RoleBlocked
+      role={role}
+      fallbackTo={fallbackTo}
+      fallbackLabel={fallbackLabel}
+    />
+  )
 }
 
-function RoleBlocked({ role }: { role: StaffRole | null }) {
+function RoleBlocked({
+  role,
+  fallbackTo,
+  fallbackLabel,
+}: {
+  role: StaffRole | null
+  fallbackTo: string
+  fallbackLabel: string
+}) {
   const { signOut } = useAuth()
 
   return (
@@ -41,8 +59,8 @@ function RoleBlocked({ role }: { role: StaffRole | null }) {
           : "We couldn't confirm your role for this restaurant."}
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link to="/admin/orders" className={buttonVariants()}>
-          Go to order history
+        <Link to={fallbackTo} className={buttonVariants()}>
+          {fallbackLabel}
         </Link>
         <Button variant="outline" onClick={() => void signOut()}>
           Sign out

@@ -15,12 +15,12 @@ import { staffPermissions } from "./staff.utils";
 const roleFilters: Array<StaffRole | "all"> = ["all", "owner", "manager", "kitchen"];
 
 export function UsersPage() {
-  const { notify, confirm } = useAdminUi();
+  const { notify, notifyError, confirm } = useAdminUi();
   const { restaurant, role } = useRestaurant();
   const { user } = useAuth();
   const staffQuery = useStaff(restaurant?.id ?? "", {
     onSuccess: notify,
-    onError: notify,
+    onError: notifyError,
   });
   const viewerRole: StaffRole = role ?? "kitchen";
   const viewerUserId = user?.id ?? "";
@@ -113,7 +113,11 @@ export function UsersPage() {
           </div>
         </>
       ) : staffQuery.isLoading ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading the team…</div>
+        <div className="grid gap-4 py-8" role="status" aria-label="Loading the team">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="h-16 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : (
         <>
           <div className={`${styles["toolbar"]} user-toolbar`}>

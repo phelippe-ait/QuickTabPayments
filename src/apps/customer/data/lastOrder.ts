@@ -45,6 +45,9 @@ export function readLastOrder(source: QrSource): PlacedOrder | null {
       tax: Number(row.tax ?? 0),
       total: Number(row.total ?? 0),
       currency: typeof row.currency === "string" ? row.currency : "AUD",
+      taxRate: Number.isFinite(Number(row.taxRate))
+        ? Number(row.taxRate)
+        : undefined,
       restaurantName:
         typeof row.restaurantName === "string" ? row.restaurantName : "",
       tableNumber:
@@ -56,6 +59,15 @@ export function readLastOrder(source: QrSource): PlacedOrder | null {
       paymentMethod: isSimulatedPaymentMethod(row.paymentMethod)
         ? row.paymentMethod
         : undefined,
+      paymentStatus:
+        row.paymentStatus === "pending" ||
+        row.paymentStatus === "succeeded" ||
+        row.paymentStatus === "failed" ||
+        row.paymentStatus === "refunded"
+          ? row.paymentStatus
+          : undefined,
+      receiptUrl:
+        typeof row.receiptUrl === "string" ? row.receiptUrl : null,
       items: Array.isArray(row.items)
         ? row.items.flatMap((entry) => {
             if (!entry || typeof entry !== "object") return []

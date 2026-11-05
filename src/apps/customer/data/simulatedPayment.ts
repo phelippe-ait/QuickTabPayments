@@ -4,9 +4,8 @@ import type { SimulatedPaymentMethod } from "../types"
 export const SIMULATED_PAYMENT_DELAY_MS = 800
 
 /**
- * Phase 5 simulation only. No Stripe SDK, network request, or payment row is
- * involved. Phase 6 replaces this function with PaymentIntent confirmation;
- * the rest of the checkout flow stays the same.
+ * @deprecated Phase 5 simulation only. Checkout now uses Stripe Elements
+ * (`features/checkout/StripeCheckout.tsx`). Kept for old "last order" records.
  */
 export async function simulatePayment(
   method: SimulatedPaymentMethod,

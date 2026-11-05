@@ -15,8 +15,8 @@ const ALL_ITEMS = "all"
 
 export function CatalogPage() {
   const { restaurant } = useRestaurant()
-  const { notify, confirm } = useAdminUi()
-  const menu = useMenu(restaurant?.id ?? "", { onSuccess: notify, onError: notify })
+  const { notify, notifyError, confirm } = useAdminUi()
+  const menu = useMenu(restaurant?.id ?? "", { onSuccess: notify, onError: notifyError })
   const currency = restaurant?.currency ?? "AUD"
 
   const [query, setQuery] = useState("")
@@ -80,16 +80,21 @@ export function CatalogPage() {
           </div>
         </>
       ) : menu.isLoading ? (
-        <div className="py-16 text-center text-sm text-muted-2" role="status">Loading catalog…</div>
+        <div className="grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading catalog">
+          <span className="sr-only">Loading catalog…</span>
+          {[0, 1, 2, 3, 4, 5].map((row) => (
+            <div key={row} className="h-56 animate-pulse rounded-card bg-line-soft" />
+          ))}
+        </div>
       ) : (
         <>
           <div className={`${styles["toolbar"]}`}>
             <label className={`${styles["search-box"]}`}><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search menu items" /></label>
             <div className={`${styles["section-tools"]}`}>
               <div className={`${styles["filter-pills"]}`}>
-                <button className={categoryId === ALL_ITEMS ? styles["active"] : ""} onClick={() => setCategoryId(ALL_ITEMS)}>All items</button>
+                <button type="button" aria-pressed={categoryId === ALL_ITEMS} className={categoryId === ALL_ITEMS ? styles["active"] : ""} onClick={() => setCategoryId(ALL_ITEMS)}>All items</button>
                 {menu.categories.map((category) => (
-                  <button key={category.id} className={categoryId === category.id ? styles["active"] : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>
+                  <button type="button" aria-pressed={categoryId === category.id} key={category.id} className={categoryId === category.id ? styles["active"] : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>
                 ))}
               </div>
               <button className={`${styles["manage-sections"]}`} onClick={() => setSectionsModalOpen(true)}><Icon name="edit" size={14} />Manage sections</button>
@@ -106,7 +111,7 @@ export function CatalogPage() {
             <EmptyState title="No menu items found" description="Try changing your search or section filter." />
           ) : <div className={`${styles["catalog-grid"]}`}>
             {visible.map((item) => (
-              <article className={`${styles["menu-card"]} ${selected.includes(item.id) ? styles["selected"] : ""}`} key={item.id}>
+              <article className={`${styles["menu-card"]} ${item.isAvailable ? styles["available"] : styles["unavailable"]} ${selected.includes(item.id) ? styles["selected"] : ""}`} key={item.id}>
                 <div className={`${styles["menu-image"]}`}>
                   {item.imageUrl ? (
                     <img src={item.imageUrl} alt={item.name} />
@@ -116,7 +121,11 @@ export function CatalogPage() {
                   <label className={`${styles["card-select"]}`} aria-label={`Select ${item.name}`}>
                     <input type="checkbox" checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
                   </label>
-                  <StatusPill tone={item.isAvailable ? "success" : "neutral"} withDot={false} className="absolute left-[45px] top-3">{item.isAvailable ? "Available" : "Unavailable"}</StatusPill>
+                  {item.isAvailable ? (
+                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3">Available</StatusPill>
+                  ) : (
+                    <span className={`${styles["unavailable-banner"]}`}>Unavailable</span>
+                  )}
                   <div className={`${styles["card-actions"]}`}>
                     <button aria-label={`Edit ${item.name}`} onClick={() => setItemModal({ open: true, item })}><Icon name="edit" size={16} /></button>
                     <button className={`${styles["danger"]}`} aria-label={`Delete ${item.name}`} onClick={() => requestDelete(item)}><Icon name="trash" size={16} /></button>

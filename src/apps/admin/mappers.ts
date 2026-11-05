@@ -99,6 +99,7 @@ export function toOrderVM(
       paidAt: payment.paid_at,
       receiptUrl: payment.receipt_url,
       failureReason: payment.failure_reason,
+      stripePaymentIntentId: payment.stripe_payment_intent_id,
     })),
     refundedTotal: (row.refunds ?? [])
       .filter((refund) => refund.status === "succeeded")

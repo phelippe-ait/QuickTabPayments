@@ -24,7 +24,7 @@ if (!("IntersectionObserver" in globalThis)) {
 }
 
 // jsdom does not implement matchMedia.
-if (!window.matchMedia) {
+if (typeof window !== "undefined" && !window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     configurable: true,

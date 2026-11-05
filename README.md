@@ -2,7 +2,7 @@
 
 QuickTab is a scan-to-order QR food pickup platform designed for cafés and takeaway restaurants.
 
-Customers scan a physical QR code and open the restaurant's menu directly in their browser. They can browse the live menu, place an order at their table, and track its progress without downloading a mobile application. Online payment is intentionally deferred to Phase 6 (Stripe).
+Customers scan a physical QR code and open the restaurant's menu directly in their browser. They can browse the live menu, place an order at their table, pay with Stripe (test mode by default), and track its progress without downloading a mobile application.
 
 QuickTab is designed as a tool for individual restaurants rather than a marketplace. Each restaurant can have its own website and table-level QR codes.
 
@@ -17,10 +17,12 @@ accounts.
    ```bash
    npm ci
    ```
-3. Start the development server:
+3. Start the development server (Vite + local API functions):
    ```bash
-   npm run dev
+   npm run dev:all
    ```
+   `npm run dev` still works for menu browsing; checkout payments need the API
+   runner and Stripe test keys. See "Stripe payments" below.
 4. Open <http://localhost:5173/>.
 5. Sign in at <http://localhost:5173/admin> using the account details in
    `DEMO_CREDENTIALS.md`.
@@ -51,12 +53,12 @@ must unpause it in the Supabase dashboard.
 | Backend & Database | Supabase (PostgreSQL) |
 | Authentication | Supabase Auth |
 | Real-Time Communication | Supabase Realtime |
-| Payment Processing | Stripe — **deferred to Phase 6; not installed** |
+| Payment Processing | Stripe Elements + serverless PaymentIntents/webhooks (test mode) |
 | QR Code Generation | node-qrcode |
 | Component Library | shadcn/ui for net-new Phase 5+ components; hand-rolled `src/shared/ui` elsewhere |
 | Hosting & Deployment | Vercel |
 | Unit Testing | Vitest |
-| End-to-End Testing | Not configured (planned) |
+| End-to-End Testing | Playwright (customer smoke + gated payment lifecycle) |
 
 ## Getting Started
 
@@ -127,10 +129,11 @@ The demo Supabase project has three staff accounts. The passwords are in
 | Kitchen | `kitchen@quicktab.demo` | `/admin/orders` and `/staff` kitchen view |
 
 The customer app works as a guest, so the reviewer can test the menu, cart,
-simulated checkout, and guest tracking without signing in.
+checkout (when Stripe test keys are configured), and guest tracking without
+signing in.
 
-`/staff` has no login screen of its own. Sign in at `/admin` first, then open
-`/staff` in the same browser session.
+`/staff` has its own sign-in screen. Staff accounts are created by an owner or
+manager; signed-in users without an active membership see a no-access state.
 
 ### Routes
 
@@ -140,13 +143,13 @@ The app serves several surfaces from the same build:
 | --- | --- |
 | `/` | Customer app (browse, order, track) |
 | `/order/:orderNumber?token=…` | Public guest order tracking |
-| `/staff` | Staff dashboard (unguarded until Phase 7) |
+| `/staff` | Staff dashboard (auth + role gated) |
 | `/admin` | Admin dashboard |
 
 Useful things to try:
 
-- Open `/` and place an order with a name and notes, using one of the simulated
-  payment methods.
+- Open `/` and place an order with a name and notes, then pay with Stripe test
+  card `4242 4242 4242 4242` (when Stripe test keys are configured).
 - Open the tracking page from the order confirmation.
 - Sign in at `/admin` as the owner and edit a menu item, a table, or the
   restaurant settings.
@@ -158,12 +161,16 @@ Useful things to try:
 ## Available Scripts
 
 ```bash
-npm run dev         # Start the development server
+npm run dev         # Start the Vite SPA only
+npm run dev:api     # Start the local /api runner on 127.0.0.1:3001
+npm run dev:all     # Start Vite + the local /api runner together
+npm run dev:stripe  # Forward Stripe webhooks to the local API
 npm run build       # Build the application for production
 npm run preview     # Preview the production build locally
 npm run lint        # Run ESLint
 npm run test        # Run the unit/integration test suite once
 npm run test:watch  # Re-run tests on change while developing
+npm run test:e2e    # Run Playwright end-to-end tests
 npm run db:bundle   # Regenerate supabase/schema.sql from the migrations
 npm run db:export   # Export the hosted database data (see Database setup)
 ```
@@ -213,6 +220,36 @@ VITE_RESTAURANT_SLUG=quicktab-demo-cafe
 
 Restart `npm run dev` after changing `.env.local`; Vite only reads environment
 variables at startup.
+
+### Stripe payments (Phase 6)
+
+The customer checkout uses Stripe Elements and the `/api` serverless functions.
+Add to `.env.local` (and to Vercel → Environment Variables for deploys):
+
+```env
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...   # bundled, safe in the browser
+STRIPE_SECRET_KEY=sk_test_...             # server only
+STRIPE_WEBHOOK_SECRET=whsec_...           # from `stripe listen`
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable / anon key>
+SUPABASE_SERVICE_ROLE_KEY=<service_role key>  # server only, bypasses RLS
+```
+
+The Vite dev server does not run `/api` functions. `npm run dev:all` starts
+both Vite and a small local API runner (`scripts/dev-api.ts`) that mounts the
+same handlers on `http://127.0.0.1:3001`. No Vercel login is needed for local
+development; `npm run dev:api:vercel` is available if you specifically want to
+test through `vercel dev`.
+
+```bash
+npm run dev:all
+npm run dev:stripe   # or: stripe listen --forward-to http://127.0.0.1:3001/api/webhooks/stripe --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded
+```
+
+If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout shows an honest
+"Payments are not configured" notice instead of a fake payment form. See
+`docs/PAYMENTS_API_CONTRACT.md` for request/response shapes and the order ↔
+payment status mapping.
 
 ## Authentication setup
 
@@ -270,10 +307,17 @@ only as a documented development fallback.
 - Admin → Catalog can edit each item's **prep time (minutes)**. Customers do
   not see per-item prep estimates or the order ETA; the value remains stored
   server-side for future operational use.
-- Checkout collects a name and optional notes, then offers four **simulated**
-  payment methods: Credit/Debit Card, Apple Pay, Google Pay, and Link. Selecting
-  one runs a short fake authorization and then places the order. No Stripe SDK,
-  network request, or `payments` row is involved; Stripe remains Phase 6.
+- Checkout collects a name and optional notes, then mounts a Stripe
+  `PaymentElement` (card, Apple Pay and Google Pay where available). Pressing
+  Pay creates a **pending** order and PaymentIntent via
+  `POST /api/create-payment-intent`; the Stripe webhook then confirms the order
+  and stores the receipt. If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout
+  shows an honest "Payments are not configured" notice.
+- Customers can view their Stripe receipt and see whether an order was
+  **partially refunded** or **fully refunded** in order history and on the
+  public tracking page.
+- A guest who signs in from the confirmation screen claims that order using its
+  opaque tracking token, so it appears in their order history.
 - `place_order(...)` is a `SECURITY DEFINER` RPC. It validates the restaurant,
   table and every menu item, recomputes all prices/tax/totals server-side, and
   inserts `orders` + `order_items` atomically. The client only sends menu item
@@ -299,9 +343,10 @@ Supabase stack.
 ### `supabase/schema.sql` — one-file schema
 
 `supabase/schema.sql` is generated from the numbered migrations in
-`supabase/migrations/` (`0001` … `0015`). It creates the same tables, enums,
-functions, RLS policies, triggers, storage buckets, and Realtime publication as
-the migrations.
+`supabase/migrations/` (including
+`20261105025454_add_menu_item_dietary_tags.sql`). It creates the same tables,
+enums, functions, RLS policies, triggers, storage buckets, and Realtime
+publication as the migrations.
 
 Use it when you want to create the schema by running **one SQL file**:
 
@@ -460,16 +505,24 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `0001` … `0015` create the profiles table, enums, tenants, menus, orders,
   payments, refunds, RLS policies, Storage buckets, staff management,
   restaurant invites, order placement, and guest tracking.
-- `0015_phase5_order_placement.sql` adds `tracking_token`, `place_order`, and
-  `get_order_tracking`.
+- `0016_phase6_payments.sql` makes `place_order` create `pending` orders and
+  adds the service-role payment/refund RPCs.
+- `0017_claim_guest_order.sql` lets a guest claim an order after signing in.
+- `0018_phase6_rpc_lockdown.sql` revokes the payment RPCs from `anon` and
+  `authenticated` (Supabase grants them directly by default) and keeps them
+  service-role only.
+- `0019_tracking_payment_details.sql` adds payment status, receipt URL, amount
+  paid and refunded total to the token-scoped tracking RPC.
+- `20261105025454_add_menu_item_dietary_tags.sql` adds dietary tags to menu
+  items.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 
 `supabase/tests/rls_checks.sql` is a manual verification script: fill in the
 `<...>` placeholders from the helper queries at the top of each section, run it
-in the SQL Editor, and compare the printed results/comments. Phase 5 checks
-cover guest placement, tampered prices, cross-restaurant items, deactivated
-tables, guest tracking, and the unchanged `orders` select policy.
+in the SQL Editor, and compare the printed results/comments. It covers guest
+placement, tampered prices, cross-restaurant items, deactivated tables, guest
+tracking, guest-order claiming, and the service-role-only payment RPC grants.
 
 ## Project Structure
 
@@ -542,7 +595,8 @@ npm run test:watch  # Re-run on change while developing
 ```
 
 The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
-mappers, and shared helpers. No end-to-end suite is configured in this phase.
+mappers, and shared helpers. Playwright covers a customer smoke test and a
+gated payment lifecycle spec (`npm run test:e2e`).
 
 ## Build and Deployment
 
@@ -555,15 +609,20 @@ npm run build
 The generated production files are placed in the `dist/` directory.
 
 The project is intended to be deployed using **Vercel**. When deploying, set
-`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the project's environment
-variables, and in Supabase **Authentication → URL Configuration** set the Site
-URL to the deployed origin and add both `https://<domain>/**` and
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and
+`VITE_STRIPE_PUBLISHABLE_KEY` (build-time) in the project's environment
+variables, plus the server-only `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. In
+Supabase **Authentication → URL Configuration** set the Site URL to the
+deployed origin and add both `https://<domain>/**` and
 `http://localhost:5173/**` to the Redirect URLs. The `vercel.json` SPA rewrite
-keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh.
+keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh while
+letting `/api/*` reach the serverless functions.
 
-Known risk (until Phase 7): the `/staff` route has no auth gate. It still needs
-a signed-in staff account to load restaurant data, but the route itself is not
-protected.
+The `/staff` route is auth-gated: signed-out visitors get a staff sign-in
+screen, and signed-in users without an active membership see a no-access state.
+Reservations are hidden behind `RESERVATIONS_ENABLED` until they have a backing
+table.
 
 ## Troubleshooting
 
@@ -586,8 +645,9 @@ not configured for localhost; use email/password.
 
 ### `/staff` says “No active staff restaurant found”
 
-`/staff` has no login screen. Sign in at `/admin` with a staff account first,
-then open `/staff` in the same browser session.
+Sign in at `/staff` with a staff account that has an active restaurant
+membership. Owners and managers can add team members in Admin → Users. A
+signed-in account without a membership sees the no-access screen.
 
 ### Node version errors
 

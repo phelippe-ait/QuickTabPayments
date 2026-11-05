@@ -12,13 +12,20 @@ dist
 dist-ssr
 *.local
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Environment variables (keep .env.example committed)
 .env
 
 # AI / agent tooling and working docs (not part of the app)
 /.agents/
 /skills-lock.json
-/docs/
+/docs/*
+!/docs/PAYMENTS_API_CONTRACT.md
 /AGENTS.md
 /CLAUDE.md
 /.claude/
@@ -52,3 +59,6 @@ supabase/.temp/
 /supabase/auth_data.sql
 /supabase/public_data.sql
 /supabase/*.dump
+
+# Vercel CLI local link
+.vercel

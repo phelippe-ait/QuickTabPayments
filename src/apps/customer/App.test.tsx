@@ -39,6 +39,7 @@ vi.mock("./data/menuApi", () => ({
           price: 4.7,
           imageUrl: null,
           allergens: [],
+          dietaryTags: [],
           categoryId: "category-1",
           displayOrder: 0,
         },

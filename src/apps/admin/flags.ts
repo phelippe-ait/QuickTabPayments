@@ -6,8 +6,8 @@
  */
 
 /**
- * Refund actions are hidden until the Stripe refund call is wired. The schema
- * and read-only refund history still ship (see M6); flipping this to `true`
- * only reveals the record-a-refund UI.
+ * Refund actions use the real Stripe refund API (`POST /api/refunds`).
+ * The schema, read-only refund history and the record-a-refund UI all ship
+ * (see M6); flip this to `false` only if the server endpoint is unavailable.
  */
 export const REFUNDS_ENABLED = true;
