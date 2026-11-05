@@ -65,7 +65,34 @@ Unhandled events return `200` so Stripe stops retrying.
 | `payment_intent.payment_failed` | payment → `failed` (+ reason); order `pending → cancelled` |
 | `charge.refunded` | matching refund → `succeeded`; payment → `refunded` only when fully refunded |
 
-Redelivery is a no-op because the RPCs guard on the current status.
+Redelivery is a no-op because the RPCs guard on the current status. Partial
+refunds leave the payment `succeeded` and are represented by `refunds` rows;
+the customer UI labels them **Partially refunded**.
+
+The four payment RPCs (`record_payment_intent`, `apply_payment_succeeded`,
+`apply_payment_failed`, `apply_refund_succeeded`) are **service-role only**.
+`0018_phase6_rpc_lockdown.sql` explicitly revokes them from `public`, `anon`
+and `authenticated`; calling them with the anon key returns `401 / 42501`.
+
+## Customer tracking payload
+
+`get_order_tracking(token)` is token-authorised and returns payment details for
+the tracking page:
+
+```json
+{
+  "order_number": "QT-260105-0001",
+  "status": "confirmed",
+  "payment_status": "succeeded",
+  "payment_method_type": "card",
+  "receipt_url": "https://pay.stripe.com/receipts/...",
+  "amount_paid": 42.0,
+  "refunded_total": 10.0
+}
+```
+
+`refunded_total > 0` with `payment_status = "succeeded"` means a partial refund;
+`payment_status = "refunded"` means the charge was fully refunded.
 
 ## Status mapping
 
