@@ -3,6 +3,7 @@ import { Link } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { formatMoney } from "@shared/lib/money"
 import { orderStatusLabels } from "@shared/orders/status"
 import { paymentStatusLabels } from "@shared/orders/paymentLabels"
@@ -45,7 +46,12 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
         />
       </header>
       {loading ? (
-        <p className={styles["orders-message"]} role="status">Loading your orders…</p>
+        <section className="grid gap-3" role="status" aria-label="Loading your orders">
+          <span className="sr-only">Loading your orders…</span>
+          {[0, 1, 2].map((row) => (
+            <Skeleton key={row} className="h-40 rounded-[7px]" />
+          ))}
+        </section>
       ) : error ? (
         <div className={styles["empty-cart"]} role="alert">
           <h2>We couldn’t load your orders</h2>

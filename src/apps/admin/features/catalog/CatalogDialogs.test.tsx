@@ -6,6 +6,7 @@ import { ItemModal, SectionsModal } from "./CatalogDialogs"
 vi.mock("../../hooks/AdminUiProvider", () => ({
   useAdminUi: () => ({
     notify: vi.fn(),
+    notifyError: vi.fn(),
     confirm: (confirmation: { onConfirm: () => void }) =>
       confirmation.onConfirm(),
   }),

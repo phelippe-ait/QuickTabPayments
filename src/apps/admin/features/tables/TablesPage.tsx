@@ -16,8 +16,8 @@ import type { TableVM } from "../../viewModels"
 
 export function TablesPage() {
   const { restaurant } = useRestaurant()
-  const { notify, confirm } = useAdminUi()
-  const tables = useTables(restaurant?.id ?? "", { onSuccess: notify, onError: notify })
+  const { notify, notifyError, confirm } = useAdminUi()
+  const tables = useTables(restaurant?.id ?? "", { onSuccess: notify, onError: notifyError })
   const slug = restaurant?.slug ?? ""
   const restaurantName = restaurant?.name ?? "Your restaurant"
 

@@ -3,6 +3,7 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
 import { Stat } from "../../components/StaffUi"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { KitchenStatus, Order } from "../../types"
 
@@ -62,8 +63,11 @@ export function KitchenWorkspace({
 )}
 
 {ordersLoading && orders.length === 0 ? (
-  <div role="status" className="rounded-[22px] border border-line bg-paper px-6 py-20 text-center">
-    Loading orders...
+  <div className="grid gap-5 lg:grid-cols-2" role="status" aria-label="Loading orders">
+    <span className="sr-only">Loading orders...</span>
+    {[0, 1, 2, 3].map((row) => (
+      <Skeleton key={row} className="h-64 rounded-[22px]" />
+    ))}
   </div>
 ) : ordersError && orders.length === 0 ? (
   <div className="rounded-[22px] border border-line bg-paper px-6 py-20 text-center">

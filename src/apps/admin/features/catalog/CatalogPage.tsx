@@ -15,8 +15,8 @@ const ALL_ITEMS = "all"
 
 export function CatalogPage() {
   const { restaurant } = useRestaurant()
-  const { notify, confirm } = useAdminUi()
-  const menu = useMenu(restaurant?.id ?? "", { onSuccess: notify, onError: notify })
+  const { notify, notifyError, confirm } = useAdminUi()
+  const menu = useMenu(restaurant?.id ?? "", { onSuccess: notify, onError: notifyError })
   const currency = restaurant?.currency ?? "AUD"
 
   const [query, setQuery] = useState("")
@@ -111,7 +111,7 @@ export function CatalogPage() {
             <EmptyState title="No menu items found" description="Try changing your search or section filter." />
           ) : <div className={`${styles["catalog-grid"]}`}>
             {visible.map((item) => (
-              <article className={`${styles["menu-card"]} ${selected.includes(item.id) ? styles["selected"] : ""}`} key={item.id}>
+              <article className={`${styles["menu-card"]} ${item.isAvailable ? styles["available"] : styles["unavailable"]} ${selected.includes(item.id) ? styles["selected"] : ""}`} key={item.id}>
                 <div className={`${styles["menu-image"]}`}>
                   {item.imageUrl ? (
                     <img src={item.imageUrl} alt={item.name} />
@@ -121,7 +121,11 @@ export function CatalogPage() {
                   <label className={`${styles["card-select"]}`} aria-label={`Select ${item.name}`}>
                     <input type="checkbox" checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
                   </label>
-                  <StatusPill tone={item.isAvailable ? "success" : "neutral"} withDot={false} className="absolute left-[45px] top-3">{item.isAvailable ? "Available" : "Unavailable"}</StatusPill>
+                  {item.isAvailable ? (
+                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3">Available</StatusPill>
+                  ) : (
+                    <span className={`${styles["unavailable-banner"]}`}>Unavailable</span>
+                  )}
                   <div className={`${styles["card-actions"]}`}>
                     <button aria-label={`Edit ${item.name}`} onClick={() => setItemModal({ open: true, item })}><Icon name="edit" size={16} /></button>
                     <button className={`${styles["danger"]}`} aria-label={`Delete ${item.name}`} onClick={() => requestDelete(item)}><Icon name="trash" size={16} /></button>

@@ -2,6 +2,7 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
 import { formatMoney } from "@shared/lib/money"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { Order } from "../../types"
 
@@ -67,7 +68,12 @@ export function OrderHistory({
         {error ? (
           <p role="alert" className="p-12 text-center text-sm text-muted">{error}</p>
         ) : isLoading ? (
-          <p className="p-12 text-center text-sm text-muted">Loading recent orders…</p>
+          <div className="grid gap-2 p-4" role="status" aria-label="Loading recent orders">
+            <span className="sr-only">Loading recent orders…</span>
+            {[0, 1, 2, 3].map((row) => (
+              <Skeleton key={row} className="h-16 rounded-xl" />
+            ))}
+          </div>
         ) : filteredOrders.map((order) => (
           <button
             aria-label={`View details for order ${order.id}`}

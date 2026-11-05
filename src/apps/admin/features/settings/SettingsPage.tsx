@@ -53,11 +53,11 @@ type SettingsForm = {
 
 export function SettingsPage() {
   const { restaurant, role } = useRestaurant();
-  const { notify } = useAdminUi();
+  const { notify, notifyError } = useAdminUi();
   const restaurantId = restaurant?.id ?? "";
   const settings = useRestaurantSettings(restaurantId, {
     onSaved: notify,
-    onError: notify,
+    onError: notifyError,
   });
   const source = settings.restaurant ?? restaurant;
   const isOwner = role === "owner";

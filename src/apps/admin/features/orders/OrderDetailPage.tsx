@@ -48,7 +48,7 @@ function formatTimestamp(iso: string | null, timezone: string): string {
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { restaurant, role } = useRestaurant()
-  const { notify, confirm } = useAdminUi()
+  const { notify, notifyError, confirm } = useAdminUi()
   const display = {
     currency: restaurant?.currency ?? "AUD",
     timezone: restaurant?.timezone ?? "UTC",
@@ -64,7 +64,7 @@ export function OrderDetailPage() {
   const refundsQuery = useRefunds(order?.id ?? "")
   const refundMutation = useCreateRefund(order?.id ?? "", {
     onSuccess: notify,
-    onError: notify,
+    onError: notifyError,
   })
   const [now, setNow] = useState(() => Date.now())
   const [refundMode, setRefundMode] = useState<"full" | "partial" | "custom" | null>(null)
@@ -77,7 +77,7 @@ export function OrderDetailPage() {
   }, [])
   const mutations = useOrderMutations(restaurant?.id ?? "", {
     onSuccess: notify,
-    onError: notify,
+    onError: notifyError,
   })
   const canManage = role === "owner" || role === "manager"
 

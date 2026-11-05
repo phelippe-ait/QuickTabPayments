@@ -15,12 +15,12 @@ import { staffPermissions } from "./staff.utils";
 const roleFilters: Array<StaffRole | "all"> = ["all", "owner", "manager", "kitchen"];
 
 export function UsersPage() {
-  const { notify, confirm } = useAdminUi();
+  const { notify, notifyError, confirm } = useAdminUi();
   const { restaurant, role } = useRestaurant();
   const { user } = useAuth();
   const staffQuery = useStaff(restaurant?.id ?? "", {
     onSuccess: notify,
-    onError: notify,
+    onError: notifyError,
   });
   const viewerRole: StaffRole = role ?? "kitchen";
   const viewerUserId = user?.id ?? "";

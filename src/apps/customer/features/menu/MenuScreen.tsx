@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
+import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useAuth } from "@shared/auth/AuthContext"
 import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
@@ -243,9 +244,9 @@ export function MenuScreen({
         {menuQuery.isPending ? (
           <section aria-label="Loading menu" role="status" className="space-y-3 pb-10">
             {[0, 1, 2].map((row) => (
-              <div
+              <Skeleton
                 key={row}
-                className="h-[112px] animate-pulse rounded-lg border border-line-2 bg-paper"
+                className="h-[112px] rounded-lg border border-line-2"
               />
             ))}
             <span className="sr-only">Loading the menu…</span>

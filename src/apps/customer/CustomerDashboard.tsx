@@ -118,10 +118,14 @@ function CustomerShell() {
   if (qrState.status === "loading") {
     return (
       <div className={styles["app-shell"]}>
-        <main className="flex min-h-dvh items-center justify-center bg-cream">
-          <p role="status" className="text-sm text-ink-mid">
-            Opening the menu…
-          </p>
+        <main className="flex min-h-dvh items-center justify-center bg-cream px-5">
+          <div className="w-full max-w-md space-y-3" role="status" aria-label="Opening the menu">
+            <div className="mx-auto h-8 w-48 animate-pulse rounded-lg bg-line-soft" />
+            <div className="h-40 w-full animate-pulse rounded-card bg-line-soft" />
+            <div className="h-12 w-full animate-pulse rounded-lg bg-line-soft" />
+            <div className="h-28 w-full animate-pulse rounded-lg bg-line-soft" />
+            <span className="sr-only">Opening the menu…</span>
+          </div>
         </main>
       </div>
     )

@@ -25,7 +25,7 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
 }))
 
 vi.mock("../../hooks/AdminUiProvider", () => ({
-  useAdminUi: () => ({ notify: mocks.notify, confirm: mocks.confirm }),
+  useAdminUi: () => ({ notify: mocks.notify, notifyError: vi.fn(), confirm: mocks.confirm }),
 }))
 
 vi.mock("../../hooks/useTables", () => ({
