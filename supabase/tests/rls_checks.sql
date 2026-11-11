@@ -818,3 +818,58 @@ select
     'public.claim_guest_order(text)',
     'EXECUTE'
   ) as auth_can_claim_guest_order;
+
+-- ---------------------------------------------------------------------
+-- P01 — subscription plan column (0020)
+-- ---------------------------------------------------------------------
+-- `plan` has no column-level policy: Postgres has no column-level RLS, and
+-- it is covered by the existing `restaurants` row policies. These checks
+-- document that reads keep working for anon/customers while cross-tenant
+-- writes stay blocked.
+--
+-- <restaurant-slug>       demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <customer-user-uuid>    a signed-in user with no staff role
+-- <manager-user-uuid>     an active manager of the demo restaurant
+-- <other-restaurant-uuid> a different restaurant's id
+
+-- (ab) Anonymous customers can read the plan of an active restaurant.
+-- Expected: one row with plan = basic/standard/premium.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select slug, plan
+from public.restaurants
+where slug = '<restaurant-slug>';
+rollback;
+
+-- (ac) A signed-in customer (not staff) can read the plan as well.
+-- Expected: one row with plan = basic/standard/premium.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select slug, plan
+from public.restaurants
+where slug = '<restaurant-slug>';
+rollback;
+
+-- (ad) A manager of restaurant A cannot change restaurant B's plan.
+-- Expected: UPDATE 0 (the row is invisible under `restaurants_staff_update`).
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.restaurants
+   set plan = 'premium'
+ where id = '<other-restaurant-uuid>';
+rollback;

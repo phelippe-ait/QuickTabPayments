@@ -708,6 +708,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -726,6 +727,7 @@ export type Database = {
           name: string
           owner_id: string
           phone?: string | null
+          plan?: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate?: number
           timezone?: string
@@ -744,6 +746,7 @@ export type Database = {
           name?: string
           owner_id?: string
           phone?: string | null
+          plan?: Database["public"]["Enums"]["restaurant_plan"]
           slug?: string
           tax_rate?: number
           timezone?: string
@@ -891,6 +894,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -918,6 +922,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -1012,6 +1017,7 @@ export type Database = {
       payment_method_type: "card" | "apple_pay" | "google_pay" | "other"
       payment_status: "pending" | "succeeded" | "failed" | "refunded"
       refund_status: "requested" | "succeeded" | "failed"
+      restaurant_plan: "basic" | "standard" | "premium"
       staff_role: "owner" | "manager" | "kitchen"
     }
     CompositeTypes: {
