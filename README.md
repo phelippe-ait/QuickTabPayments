@@ -267,15 +267,13 @@ For a **new** Supabase project:
    URLs.
 3. Run the database schema and import the demo data (see
    [Database setup](#database-setup)).
-4. Social logins (optional): enable **Google** under Providers. Its OAuth
+4. Social login (optional): enable **Google** under Providers. Its OAuth
    redirect URI must be
-   `https://<project-ref>.supabase.co/auth/v1/callback`. Apple and Facebook are
-   intentionally deferred; their buttons stay disabled.
+   `https://<project-ref>.supabase.co/auth/v1/callback`.
 
 In the customer app **Google and email/password** are the supported sign-in
-methods. Apple and Facebook remain visible but disabled until configured.
-Email/password is sufficient for the reviewer; Google OAuth requires additional
-URL/provider configuration and is not required for the demo.
+methods. Email/password is sufficient for the reviewer; Google OAuth requires
+additional URL/provider configuration and is not required for the demo.
 
 ## QR scanning contract
 
