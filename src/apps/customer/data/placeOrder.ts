@@ -18,6 +18,10 @@ export type PlacedOrder = {
   subtotal: number
   tax: number
   total: number
+  /** Tip added on top of the GST-inclusive total; no GST on the tip. */
+  tipAmount?: number
+  /** total + tipAmount — the amount actually charged. */
+  amountDue?: number
   currency: string
   /** Restaurant GST rate, used for consistent labels after a reload. */
   taxRate?: number
@@ -149,6 +153,8 @@ export function mapPlacedOrder(raw: unknown): PlacedOrder | null {
     subtotal: num(row.subtotal),
     tax: num(row.tax),
     total: num(row.total),
+    ...(row.tip_amount != null ? { tipAmount: num(row.tip_amount) } : {}),
+    ...(row.amount_due != null ? { amountDue: num(row.amount_due) } : {}),
     currency: typeof row.currency === "string" ? row.currency : "AUD",
     restaurantName:
       typeof row.restaurant_name === "string" ? row.restaurant_name : "",

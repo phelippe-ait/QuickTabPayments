@@ -82,6 +82,7 @@ const orderRow: OrderWithDetails = {
   status: "preparing",
   subtotal: 12.4,
   tax: 1.24,
+  tip_amount: 0,
   total: 13.64,
   tracking_token: "tracking-token-1",
   notes: null,

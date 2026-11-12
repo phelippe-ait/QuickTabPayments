@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatMoney, roundMoney, splitInclusiveTax } from "./money"
+import { computeTipPreview, formatMoney, roundMoney, splitInclusiveTax } from "./money"
 
 describe("formatMoney", () => {
   it("formats numeric amounts with the restaurant currency", () => {
@@ -47,5 +47,55 @@ describe("splitInclusiveTax", () => {
   it("treats a negative or invalid rate as zero", () => {
     expect(splitInclusiveTax(10, -0.1)).toEqual({ subtotal: 10, tax: 0 })
     expect(splitInclusiveTax(10, Number.NaN)).toEqual({ subtotal: 10, tax: 0 })
+  })
+})
+
+describe("computeTipPreview", () => {
+  it("returns zero for no tip", () => {
+    expect(computeTipPreview(42, null)).toBe(0)
+    expect(computeTipPreview(42, undefined)).toBe(0)
+    expect(computeTipPreview(42, { type: "none" })).toBe(0)
+  })
+
+  it("computes percentage tips on the post-tax total", () => {
+    expect(computeTipPreview(42, { type: "percent", value: 0 })).toBe(0)
+    expect(computeTipPreview(42, { type: "percent", value: 10 })).toBe(4.2)
+    expect(computeTipPreview(42, { type: "percent", value: 25 })).toBe(10.5)
+    // 4.255 rounds half-up to 4.26, matching Postgres numeric rounding.
+    expect(computeTipPreview(42.55, { type: "percent", value: 10 })).toBe(4.26)
+  })
+
+  it("computes fixed tips", () => {
+    expect(computeTipPreview(42, { type: "fixed", value: 0 })).toBe(0)
+    expect(computeTipPreview(42, { type: "fixed", value: 5.5 })).toBe(5.5)
+    expect(computeTipPreview(42, { type: "fixed", value: 500 })).toBe(500)
+    expect(computeTipPreview(42, { type: "fixed", value: 2.345 })).toBe(2.35)
+  })
+
+  it("rejects values outside the SQL caps", () => {
+    expect(() => computeTipPreview(42, { type: "percent", value: -5 })).toThrow(
+      "invalid_tip",
+    )
+    expect(() => computeTipPreview(42, { type: "percent", value: 25.01 })).toThrow(
+      "invalid_tip",
+    )
+    expect(() => computeTipPreview(42, { type: "fixed", value: -1 })).toThrow(
+      "invalid_tip",
+    )
+    expect(() => computeTipPreview(42, { type: "fixed", value: 500.01 })).toThrow(
+      "invalid_tip",
+    )
+  })
+
+  it("rejects bad types and non-finite values", () => {
+    expect(() =>
+      computeTipPreview(42, { type: "bogus" } as never),
+    ).toThrow("invalid_tip")
+    expect(() =>
+      computeTipPreview(42, { type: "percent", value: Number.NaN }),
+    ).toThrow("invalid_tip")
+    expect(() =>
+      computeTipPreview(42, { type: "fixed", value: Number.POSITIVE_INFINITY }),
+    ).toThrow("invalid_tip")
   })
 })

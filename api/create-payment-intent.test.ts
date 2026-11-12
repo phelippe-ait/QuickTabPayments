@@ -59,6 +59,8 @@ const placed = {
   order_number: "QT-1",
   tracking_token: "tok",
   total: 42,
+  tip_amount: 0,
+  amount_due: 42,
   currency: "AUD",
 };
 
@@ -114,7 +116,7 @@ describe("POST /api/create-payment-intent", () => {
     );
     expect(mocks.adminRpc).toHaveBeenCalledWith(
       "record_payment_intent",
-      expect.objectContaining({ p_stripe_payment_intent_id: "pi_1" }),
+      expect.objectContaining({ p_stripe_payment_intent_id: "pi_1", p_amount: 42 }),
     );
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({
@@ -122,6 +124,61 @@ describe("POST /api/create-payment-intent", () => {
       orderNumber: "QT-1",
       status: "pending",
     });
+  });
+
+  it("charges amount_due and forwards a valid tip to the RPC", async () => {
+    mocks.userRpc.mockResolvedValueOnce({
+      data: { ...placed, tip_amount: 4.2, amount_due: 46.2 },
+      error: null,
+    });
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        tip: { type: "percent", value: 10 },
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_tip: { type: "percent", value: 10 },
+      }),
+    );
+    expect(mocks.createIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 4620,
+        metadata: expect.objectContaining({ tipAmount: "4.2" }),
+      }),
+    );
+    expect(mocks.adminRpc).toHaveBeenCalledWith(
+      "record_payment_intent",
+      expect.objectContaining({ p_amount: 46.2 }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ amount: 46.2 });
+  });
+
+  it("rejects a malformed tip before calling the RPC", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        tip: { type: "percent", value: "10" },
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_request" });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
   });
 
   it("cancels the intent when the payment row cannot be recorded", async () => {

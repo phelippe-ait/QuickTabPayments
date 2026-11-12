@@ -349,6 +349,7 @@ export type Database = {
           subtotal: number
           table_id: string | null
           tax: number
+          tip_amount: number
           total: number
           tracking_token: string
           updated_at: string
@@ -367,6 +368,7 @@ export type Database = {
           subtotal?: number
           table_id?: string | null
           tax?: number
+          tip_amount?: number
           total?: number
           tracking_token?: string
           updated_at?: string
@@ -385,6 +387,7 @@ export type Database = {
           subtotal?: number
           table_id?: string | null
           tax?: number
+          tip_amount?: number
           total?: number
           tracking_token?: string
           updated_at?: string
@@ -978,6 +981,7 @@ export type Database = {
           p_table_token: string
           p_customer_latitude?: number | null
           p_customer_longitude?: number | null
+          p_tip?: Json | null
         }
         Returns: Json
       }

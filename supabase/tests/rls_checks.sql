@@ -1146,3 +1146,164 @@ begin
   raise notice 'P03 legal status transition allowed ok';
 end $$;
 rollback;
+
+-- ---------------------------------------------------------------------
+-- P04 — tips
+-- ---------------------------------------------------------------------
+-- <restaurant-slug>  demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <table-token>      an active table's qr_token for <restaurant-uuid>
+-- <menu-item-uuid>   an available menu item for <restaurant-uuid>
+-- <customer-user-uuid> signed-in customer's auth user id
+
+-- (al) Anon places an order with a 10% tip. Expected: NOTICE
+--      "P04 percent tip computed ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_result     jsonb;
+  v_total      numeric;
+  v_tip        numeric;
+  v_amount_due numeric;
+  v_expected   numeric;
+begin
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P04 Tip',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+    ),
+    null,
+    null,
+    jsonb_build_object('type', 'percent', 'value', 10)
+  );
+
+  v_total      := (v_result->>'total')::numeric;
+  v_tip        := (v_result->>'tip_amount')::numeric;
+  v_amount_due := (v_result->>'amount_due')::numeric;
+  v_expected   := round(v_total * 10 / 100, 2);
+
+  if v_tip is distinct from v_expected then
+    raise exception 'expected tip %, got %', v_expected, v_tip;
+  end if;
+
+  if v_amount_due is distinct from round(v_total + v_tip, 2) then
+    raise exception 'expected amount_due %, got %', round(v_total + v_tip, 2), v_amount_due;
+  end if;
+
+  raise notice 'P04 percent tip computed ok';
+end $$;
+rollback;
+
+-- (am) Tampered tips are rejected by the RPC. Expected: NOTICE
+--      "P04 invalid tips rejected ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P04 Bad Tip',
+      null,
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+      ),
+      null,
+      null,
+      jsonb_build_object('type', 'percent', 'value', -5)
+    );
+    raise exception 'expected invalid_tip';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_tip' then
+    raise exception 'expected invalid_tip, got %', v_err;
+  end if;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P04 Bad Tip',
+      null,
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+      ),
+      null,
+      null,
+      jsonb_build_object('type', 'fixed', 'value', 999)
+    );
+    raise exception 'expected invalid_tip';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_tip' then
+    raise exception 'expected invalid_tip, got %', v_err;
+  end if;
+
+  raise notice 'P04 invalid tips rejected ok';
+end $$;
+rollback;
+
+-- (an) A customer cannot update orders.tip_amount directly. Expected: NOTICE
+--      "P04 customer cannot update tip_amount ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_result  jsonb;
+  v_order_id uuid;
+  v_updated int;
+begin
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P04 Customer Tip',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+    ),
+    null,
+    null,
+    jsonb_build_object('type', 'fixed', 'value', 1)
+  );
+
+  v_order_id := (v_result->>'order_id')::uuid;
+
+  update public.orders
+     set tip_amount = 99.99
+   where id = v_order_id;
+  get diagnostics v_updated = row_count;
+
+  if v_updated <> 0 then
+    raise exception 'customer updated tip_amount directly';
+  end if;
+
+  raise notice 'P04 customer cannot update tip_amount ok';
+end $$;
+rollback;

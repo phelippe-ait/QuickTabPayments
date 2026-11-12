@@ -130,7 +130,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       const { data, error } = await client
         .from("orders")
         .select(
-          "id, restaurant_id, table_id, customer_id, customer_name_snapshot, order_number, status, subtotal, tax, total, notes, pickup_time_estimate, tracking_token, created_at, updated_at, completed_at, tables(table_number), payments(status, payment_method_type)",
+          "id, restaurant_id, table_id, customer_id, customer_name_snapshot, order_number, status, subtotal, tax, total, tip_amount, notes, pickup_time_estimate, tracking_token, created_at, updated_at, completed_at, tables(table_number), payments(status, payment_method_type)",
         )
         .eq("restaurant_id", restaurantId)
         .order("created_at", { ascending: false })
