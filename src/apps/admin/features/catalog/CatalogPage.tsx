@@ -8,8 +8,10 @@ import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useMenu } from "../../hooks/useMenu"
+import { useModifiers } from "../../hooks/useModifiers"
 import type { MenuItemVM } from "../../viewModels"
 import { ItemModal, SectionsModal } from "./CatalogDialogs"
+import { ModifierDialog } from "./ModifierDialog"
 
 const ALL_ITEMS = "all"
 
@@ -17,6 +19,7 @@ export function CatalogPage() {
   const { restaurant } = useRestaurant()
   const { notify, notifyError, confirm } = useAdminUi()
   const menu = useMenu(restaurant?.id ?? "", { onSuccess: notify, onError: notifyError })
+  const modifiers = useModifiers(restaurant?.id ?? "", { onSuccess: notify, onError: notifyError })
   const currency = restaurant?.currency ?? "AUD"
 
   const [query, setQuery] = useState("")
@@ -27,6 +30,7 @@ export function CatalogPage() {
     item: null,
   })
   const [sectionsModalOpen, setSectionsModalOpen] = useState(false)
+  const [modifierItem, setModifierItem] = useState<MenuItemVM | null>(null)
 
   const visible = menu.items.filter(
     (item) =>
@@ -127,6 +131,7 @@ export function CatalogPage() {
                     <span className={`${styles["unavailable-banner"]}`}>Unavailable</span>
                   )}
                   <div className={`${styles["card-actions"]}`}>
+                    <button aria-label={`Manage modifiers for ${item.name}`} onClick={() => setModifierItem(item)}><Icon name="sliders" size={16} /></button>
                     <button aria-label={`Edit ${item.name}`} onClick={() => setItemModal({ open: true, item })}><Icon name="edit" size={16} /></button>
                     <button className={`${styles["danger"]}`} aria-label={`Delete ${item.name}`} onClick={() => requestDelete(item)}><Icon name="trash" size={16} /></button>
                   </div>
@@ -156,6 +161,26 @@ export function CatalogPage() {
           onClose={closeItemModal}
           onCreate={menu.createItem}
           onUpdate={menu.updateItem}
+        />
+      )}
+      {modifierItem && (
+        <ModifierDialog
+          item={modifierItem}
+          currency={currency}
+          groups={modifiers.groups}
+          links={modifiers.links}
+          isLoading={modifiers.isLoading}
+          error={modifiers.error}
+          onRetry={modifiers.refetch}
+          onClose={() => setModifierItem(null)}
+          onCreateGroup={modifiers.createGroup}
+          onUpdateGroup={modifiers.updateGroup}
+          onDeleteGroup={modifiers.deleteGroup}
+          onAddModifier={modifiers.addModifier}
+          onUpdateOption={modifiers.updateOption}
+          onDeleteOption={modifiers.deleteOption}
+          onReorderOptions={modifiers.reorderOptions}
+          onSetGroupLink={modifiers.setGroupLink}
         />
       )}
       {sectionsModalOpen && (
