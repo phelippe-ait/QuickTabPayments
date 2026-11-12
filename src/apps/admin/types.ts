@@ -3,6 +3,7 @@ export type Section =
   | "tables"
   | "users"
   | "orders"
+  | "reports"
   | "settings";
 
 export type Confirmation = {

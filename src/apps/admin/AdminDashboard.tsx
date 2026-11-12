@@ -49,7 +49,7 @@ function AdminLayoutContent() {
   const sections: Section[] =
     role === "kitchen"
       ? ["orders"]
-      : ["catalog", "tables", "users", "orders", "settings"]
+      : ["catalog", "tables", "users", "orders", "reports", "settings"]
   const userName = getProfileName(profile, user?.email)
 
   const requestSignOut = () => {
