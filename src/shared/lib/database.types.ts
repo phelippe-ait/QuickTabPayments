@@ -949,6 +949,10 @@ export type Database = {
         Args: { p_token: string }
         Returns: Json
       }
+      get_sales_report: {
+        Args: { p_from: string | null; p_to: string | null }
+        Returns: Json
+      }
       is_manager_of: { Args: { p_restaurant_id: string }; Returns: boolean }
       is_owner_of: { Args: { p_restaurant_id: string }; Returns: boolean }
       is_staff_of: { Args: { p_restaurant_id: string }; Returns: boolean }

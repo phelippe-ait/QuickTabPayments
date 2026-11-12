@@ -873,3 +873,189 @@ update public.restaurants
    set plan = 'premium'
  where id = '<other-restaurant-uuid>';
 rollback;
+
+-- ---------------------------------------------------------------------
+-- P02 — sales reporting RPC (0021)
+-- ---------------------------------------------------------------------
+-- get_sales_report() resolves the restaurant from the caller's active
+-- restaurant_staff row (owner|manager) and rejects everyone else. The
+-- report is aggregated server-side, so these checks only need to prove
+-- the caller gate and restaurant scoping.
+--
+-- <restaurant-uuid>        demo restaurant A id
+-- <restaurant-slug>        demo restaurant A slug
+-- <manager-user-uuid>      active manager of A
+-- <kitchen-user-uuid>      active kitchen staff of A
+-- <customer-user-uuid>     signed-in user with no staff role
+-- <other-staff-user-uuid>  owner/manager of a different restaurant B
+
+-- Execute privilege: anon=false, authenticated=true.
+select
+  has_function_privilege(
+    'anon',
+    'public.get_sales_report(timestamptz,timestamptz)',
+    'EXECUTE'
+  ) as anon_can_get_sales_report,
+  has_function_privilege(
+    'authenticated',
+    'public.get_sales_report(timestamptz,timestamptz)',
+    'EXECUTE'
+  ) as auth_can_get_sales_report;
+
+-- (ae) A manager of A gets a report scoped to A.
+-- Expected: NOTICE P02 get_sales_report manager scope ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_out      jsonb;
+  v_expected numeric;
+  v_top      jsonb;
+  v_hours    jsonb;
+begin
+  v_out := public.get_sales_report(now() - interval '7 days', now());
+
+  if v_out->>'currency' is null
+     or v_out->>'from' is null
+     or v_out->>'to' is null then
+    raise exception 'report is missing header fields: %', v_out;
+  end if;
+
+  -- Money is text with exactly 2 decimals.
+  if (v_out->>'gross_revenue')     !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'paid_revenue')   !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'refunded_amount') !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'aov')            !~ '^-?[0-9]+\.[0-9]{2}$' then
+    raise exception 'report money is not 2-dp text: %', v_out;
+  end if;
+
+  -- Exactly 24 zero-filled hours.
+  v_hours := v_out->'busy_hours';
+  if jsonb_typeof(v_hours) <> 'array' or jsonb_array_length(v_hours) <> 24 then
+    raise exception 'busy_hours is not 24 entries: %', v_hours;
+  end if;
+
+  if jsonb_typeof(v_out->'top_items') <> 'array' then
+    raise exception 'top_items is not an array: %', v_out->'top_items';
+  end if;
+
+  -- Manager is staff of A, so RLS lets the comparison query see A's orders.
+  select round(coalesce(sum(o.total), 0), 2)
+    into v_expected
+  from public.orders o
+  where o.restaurant_id = '<restaurant-uuid>'
+    and o.created_at >= now() - interval '7 days'
+    and o.created_at <  now()
+    and o.status <> 'cancelled';
+
+  if (v_out->>'gross_revenue')::numeric is distinct from v_expected then
+    raise exception 'gross_revenue % <> direct aggregate %',
+      v_out->>'gross_revenue', v_expected;
+  end if;
+
+  raise notice 'P02 get_sales_report manager scope ok';
+end $$;
+rollback;
+
+-- (af) Kitchen staff of A are rejected.
+-- Expected: NOTICE P02 get_sales_report kitchen not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for kitchen';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P02 get_sales_report kitchen not_authorised ok';
+end $$;
+rollback;
+
+-- (ag) A signed-in customer (no staff row) is rejected.
+-- Expected: NOTICE P02 get_sales_report customer not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for customer';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P02 get_sales_report customer not_authorised ok';
+end $$;
+rollback;
+
+-- (ah) Owner/manager of a different restaurant B is rejected.
+-- Expected: NOTICE P02 get_sales_report other restaurant not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<other-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for other restaurant staff';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P02 get_sales_report other restaurant not_authorised ok';
+end $$;
+rollback;
+
+-- (ai) Cross-restaurant leakage (manual procedure, seeds nothing here).
+-- The function scopes every aggregate to the resolved restaurant id, so
+-- restaurant B's orders can never appear in A's report. To verify by hand:
+--   1. As manager of A, record the report for a known window:
+--        select public.get_sales_report(now() - interval '1 day', now());
+--   2. In a scratch transaction (rolled back afterwards), insert an order
+--      for restaurant B with a distinctive total:
+--        insert into public.orders (restaurant_id, order_number, status, total)
+--        values ('<other-restaurant-uuid>', 'RLS-B-LEAK', 'confirmed', 999.99);
+--   3. Call get_sales_report again for A in the same window and compare:
+--      currency, from, to, order_count, gross_revenue, paid_revenue,
+--      refunded_amount, aov, top_items and busy_hours must be identical.
+--   4. rollback;
