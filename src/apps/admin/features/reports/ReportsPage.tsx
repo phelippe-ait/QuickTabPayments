@@ -12,7 +12,10 @@ import {
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { PageHeader } from "../../components/AdminUi"
 import { useSalesReport } from "../../hooks/useSalesReport"
+import { BusyHoursCard } from "./BusyHoursCard"
+import { PopularItemsCard } from "./PopularItemsCard"
 import { ReportPeriodSelector } from "./ReportPeriodSelector"
+import { TopItemsCard } from "./TopItemsCard"
 import {
   formatPeriodLabel,
   getPeriodRange,
@@ -146,6 +149,23 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
             </p>
           )}
 
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <div className="lg:col-span-2">
+              <BusyHoursCard
+                hours={report.busy_hours}
+                timezone={restaurant.timezone}
+              />
+            </div>
+            <TopItemsCard
+              items={report.top_items}
+              currency={report.currency}
+            />
+            <PopularItemsCard
+              items={report.popular_items}
+              currency={report.currency}
+            />
+          </div>
+
           {isFetching && (
             <p className="mt-4 text-xs text-muted" aria-live="polite">
               Updating report…
@@ -181,20 +201,38 @@ function KpiCard({
 
 function LoadingCards() {
   return (
-    <div
-      className={kpiGridClassName}
-      role="status"
-      aria-label="Loading sales report"
-    >
-      {Array.from({ length: 5 }, (_, index) => (
-        <Card key={index}>
-          <div className="flex h-full flex-col gap-3 p-5">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-9 w-32" />
-            <Skeleton className="h-2 w-28" />
+    <div role="status" aria-label="Loading sales report">
+      <div className={kpiGridClassName}>
+        {Array.from({ length: 5 }, (_, index) => (
+          <Card key={index}>
+            <div className="flex h-full flex-col gap-3 p-5">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-2 w-28" />
+            </div>
+          </Card>
+        ))}
+      </div>
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card className="lg:col-span-2">
+          <div className="flex flex-col gap-3 p-6">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-40 w-full" />
           </div>
         </Card>
-      ))}
+        <Card>
+          <div className="flex flex-col gap-3 p-6">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </Card>
+        <Card>
+          <div className="flex flex-col gap-3 p-6">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -25,7 +25,10 @@ export type SalesReport = {
   paid_revenue: number;
   refunded_amount: number;
   aov: number;
+  /** Revenue-led top 10 (migration 0021). */
   top_items: SalesReportTopItem[];
+  /** Quantity-led top 10 for kitchen prep (migration 0026). */
+  popular_items: SalesReportTopItem[];
   busy_hours: SalesReportBusyHour[];
 };
 
@@ -48,6 +51,14 @@ function asRecords(value: unknown): Record<string, unknown>[] {
     : [];
 }
 
+function itemRecords(value: unknown): SalesReportTopItem[] {
+  return asRecords(value).map((item) => ({
+    name: typeof item.name === "string" ? item.name : "",
+    quantity: toInteger(item.quantity),
+    revenue: toNumber(item.revenue),
+  }));
+}
+
 /** Parse the RPC's jsonb payload, tolerating null/missing money fields. */
 export function parseSalesReport(payload: unknown): SalesReport {
   const row =
@@ -64,11 +75,8 @@ export function parseSalesReport(payload: unknown): SalesReport {
     paid_revenue: toNumber(row.paid_revenue),
     refunded_amount: toNumber(row.refunded_amount),
     aov: toNumber(row.aov),
-    top_items: asRecords(row.top_items).map((item) => ({
-      name: typeof item.name === "string" ? item.name : "",
-      quantity: toInteger(item.quantity),
-      revenue: toNumber(item.revenue),
-    })),
+    top_items: itemRecords(row.top_items),
+    popular_items: itemRecords(row.popular_items),
     busy_hours: asRecords(row.busy_hours).map((entry) => ({
       hour: toInteger(entry.hour),
       orders: toInteger(entry.orders),

@@ -48,6 +48,7 @@ const report: SalesReport = {
   refunded_amount: 50,
   aov: 102.88,
   top_items: [],
+  popular_items: [],
   busy_hours: [],
 }
 
@@ -102,6 +103,41 @@ describe("ReportsPage", () => {
     render(<ReportsPage />)
 
     expect(screen.getByText("Gross revenue")).toBeInTheDocument()
+  })
+
+  it("renders the top items, busy hours, and popular items cards", () => {
+    mocks.sales = {
+      ...mocks.sales,
+      report: {
+        ...report,
+        top_items: [
+          { name: "Flat White", quantity: 8, revenue: 40 },
+          { name: "Croissant", quantity: 3, revenue: 19.5 },
+        ],
+        popular_items: [
+          { name: "Croissant", quantity: 14, revenue: 91 },
+          { name: "Flat White", quantity: 8, revenue: 40 },
+        ],
+        busy_hours: Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          orders: hour === 13 ? 5 : 0,
+        })),
+      },
+    }
+
+    render(<ReportsPage />)
+
+    expect(
+      screen.getByRole("heading", { name: "Top items" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Busy hours" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Popular items" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Busiest: 1pm")).toBeInTheDocument()
+    expect(screen.getAllByText("Flat White")).toHaveLength(2)
   })
 
   it("shows the period selector", () => {
@@ -162,7 +198,9 @@ describe("ReportsPage", () => {
 
     render(<ReportsPage />)
 
-    expect(screen.getByText(/no orders in this period/i)).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/no orders in this period/i).length,
+    ).toBeGreaterThan(0)
     expect(screen.getAllByText(/A?\$0\.00/)).toHaveLength(4)
     expect(screen.getByText("0")).toBeInTheDocument()
   })

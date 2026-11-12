@@ -34,6 +34,7 @@ const report: SalesReport = {
   refunded_amount: 0,
   aov: 40,
   top_items: [],
+  popular_items: [],
   busy_hours: [],
 }
 

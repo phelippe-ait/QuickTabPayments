@@ -21,6 +21,10 @@ const payload = {
     { name: "Flat White", quantity: 8, revenue: "40.00" },
     { name: "Croissant", quantity: 3, revenue: "19.50" },
   ],
+  popular_items: [
+    { name: "Croissant", quantity: 14, revenue: "91.00" },
+    { name: "Flat White", quantity: 8, revenue: "40.00" },
+  ],
   busy_hours: [
     { hour: 8, orders: 2 },
     { hour: 9, orders: 5 },
@@ -56,6 +60,10 @@ describe("fetchSalesReport", () => {
       top_items: [
         { name: "Flat White", quantity: 8, revenue: 40 },
         { name: "Croissant", quantity: 3, revenue: 19.5 },
+      ],
+      popular_items: [
+        { name: "Croissant", quantity: 14, revenue: 91 },
+        { name: "Flat White", quantity: 8, revenue: 40 },
       ],
       busy_hours: [
         { hour: 8, orders: 2 },
@@ -115,6 +123,7 @@ describe("parseSalesReport", () => {
     expect(report.refunded_amount).toBe(0)
     expect(report.aov).toBe(0)
     expect(report.top_items).toEqual([])
+    expect(report.popular_items).toEqual([])
     expect(report.busy_hours).toEqual([])
   })
 
@@ -124,6 +133,7 @@ describe("parseSalesReport", () => {
       order_count: 0,
       gross_revenue: 0,
       top_items: [],
+      popular_items: [],
       busy_hours: [],
     })
   })

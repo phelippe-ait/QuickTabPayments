@@ -1745,3 +1745,97 @@ update public.tables
    set status = 'occupied'
  where id = '<table-uuid>';
 rollback;
+
+-- =====================================================================
+-- P10 — popular-items report (0026)
+-- =====================================================================
+-- The replacement `get_sales_report` keeps the same caller gate and adds a
+-- `popular_items` array (top 10 by quantity). No new policy or grant is
+-- introduced, so this section proves the payload shape and ordering.
+--
+-- Reuse the P02 placeholders: <manager-user-uuid>, <kitchen-user-uuid>,
+-- <customer-user-uuid>, <other-staff-user-uuid>.
+
+-- (ax) Manager payload includes a quantity-ordered popular-items array and
+--      the existing revenue-led top-items array.
+-- Expected: NOTICE P10 get_sales_report popular_items ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_out     jsonb;
+  v_pop     jsonb;
+  v_top     jsonb;
+  v_entry   jsonb;
+  v_prev    int;
+begin
+  v_out := public.get_sales_report(now() - interval '7 days', now());
+  v_pop := v_out->'popular_items';
+  v_top := v_out->'top_items';
+
+  if jsonb_typeof(v_pop) <> 'array' then
+    raise exception 'popular_items is not an array: %', v_pop;
+  end if;
+
+  if jsonb_typeof(v_top) <> 'array' then
+    raise exception 'top_items is not an array: %', v_top;
+  end if;
+
+  if jsonb_array_length(v_pop) > 10 then
+    raise exception 'popular_items has more than 10 entries: %',
+      jsonb_array_length(v_pop);
+  end if;
+
+  v_prev := null;
+  for v_entry in select * from jsonb_array_elements(v_pop) loop
+    if v_entry->>'name' is null or (v_entry->>'quantity') is null then
+      raise exception 'popular item is missing name/quantity: %', v_entry;
+    end if;
+
+    if (v_entry->>'revenue') !~ '^-?[0-9]+\.[0-9]{2}$' then
+      raise exception 'popular item revenue is not 2-dp text: %', v_entry;
+    end if;
+
+    if v_prev is not null and (v_entry->>'quantity')::int > v_prev then
+      raise exception 'popular_items is not quantity-descending: %', v_pop;
+    end if;
+
+    v_prev := (v_entry->>'quantity')::int;
+  end loop;
+
+  raise notice 'P10 get_sales_report popular_items ok';
+end $$;
+rollback;
+
+-- (ay) Kitchen staff still cannot call the report after the replacement.
+-- Expected: NOTICE P10 get_sales_report kitchen not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for kitchen';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P10 get_sales_report kitchen not_authorised ok';
+end $$;
+rollback;
