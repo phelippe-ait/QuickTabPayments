@@ -45,8 +45,10 @@ export type PlaceOrderErrorCode =
   | "restaurant_not_found"
   | "table_not_found"
   | "menu_item_unavailable"
-  | "invalid_modifier"
   | "invalid_modifier_selection"
+  | "modifier_selection_invalid"
+  | "modifier_required"
+  | "invalid_modifier"
   | "customer_location_required"
   | "customer_location_invalid"
   | "outside_ordering_radius"
@@ -66,8 +68,10 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "This table QR code is no longer valid. Please scan the QR code on your table again.",
   menu_item_unavailable:
     "One of your items just sold out. Please review your cart and try again.",
-  invalid_modifier: "One of the selected options is no longer available. Please review your item.",
   invalid_modifier_selection: "Please review the required options for your item and try again.",
+  modifier_selection_invalid: "Please review the options selected for your item and try again.",
+  modifier_required: "Please choose the required options for your item.",
+  invalid_modifier: "One of the selected options is no longer available. Please review your item.",
   customer_location_required:
     "Allow location access to confirm you are within 500 m of the restaurant, then try again.",
   customer_location_invalid:
@@ -183,7 +187,7 @@ export async function placeOrder(input: {
       menu_item_id: item.menuItemId,
       quantity: Math.trunc(item.quantity),
       ...((item.modifiers?.length ?? 0) > 0
-        ? { modifier_ids: item.modifiers!.map((modifier) => modifier.id) }
+        ? { modifiers: item.modifiers!.map((modifier) => modifier.id) }
         : {}),
     }))
 

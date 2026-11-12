@@ -809,6 +809,7 @@ export type Database = {
           qr_token: string
           restaurant_id: string
           seats: number | null
+          status: Database["public"]["Enums"]["table_status"]
           table_number: string
         }
         Insert: {
@@ -819,6 +820,7 @@ export type Database = {
           qr_token?: string
           restaurant_id: string
           seats?: number | null
+          status?: Database["public"]["Enums"]["table_status"]
           table_number: string
         }
         Update: {
@@ -829,6 +831,7 @@ export type Database = {
           qr_token?: string
           restaurant_id?: string
           seats?: number | null
+          status?: Database["public"]["Enums"]["table_status"]
           table_number?: string
         }
         Relationships: [
@@ -1027,6 +1030,7 @@ export type Database = {
       refund_status: "requested" | "succeeded" | "failed"
       restaurant_plan: "basic" | "standard" | "premium"
       staff_role: "owner" | "manager" | "kitchen"
+      table_status: "available" | "occupied" | "needs_cleaning"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -1307,3 +1307,441 @@ begin
   raise notice 'P04 customer cannot update tip_amount ok';
 end $$;
 rollback;
+
+-- ---------------------------------------------------------------------
+-- P05 — modifier validation + pricing inside place_order
+-- ---------------------------------------------------------------------
+-- <restaurant-uuid>    demo restaurant id
+-- <restaurant-slug>    demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <table-token>        an active table's qr_token for <restaurant-uuid>
+-- <menu-item-uuid>     an available menu item for <restaurant-uuid> that has
+--                      at least one modifier group linked to it
+
+-- (ao) A valid modifier set is priced from live DB values, folded into one
+--      line and snapshotted. Extra pricing hints in the payload are ignored.
+--      Expected: NOTICE "P05 valid modifiers priced + snapshotted ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_ids             jsonb;
+  v_base            numeric;
+  v_adjustment      numeric;
+  v_expected_price  numeric;
+  v_result          jsonb;
+  v_tracking        jsonb;
+  v_expected_count  int;
+begin
+  -- Pick the minimum required modifiers from each linked group (one from
+  -- each required/minimum group, respecting single-selection limits).
+  select coalesce(jsonb_agg(chosen.id order by chosen.group_id, chosen.display_order), '[]'::jsonb)
+    into v_ids
+  from (
+    select
+      m.id,
+      g.id as group_id,
+      m.display_order,
+      row_number() over (partition by g.id order by m.display_order, m.name) as rn,
+      greatest(g.min_selections, case when g.is_required then 1 else 0 end) as need
+    from public.menu_item_modifier_groups img
+    join public.modifier_groups g on g.id = img.modifier_group_id
+    join public.modifiers m
+      on m.modifier_group_id = g.id
+     and m.is_available
+    where img.menu_item_id = '<menu-item-uuid>'
+  ) as chosen
+  where chosen.rn <= chosen.need;
+
+  select mi.price
+    into v_base
+  from public.menu_items mi
+  where mi.id = '<menu-item-uuid>';
+
+  select coalesce(sum(m.price_adjustment), 0)
+    into v_adjustment
+  from jsonb_array_elements_text(v_ids) as selected(value)
+  join public.modifiers m on m.id = selected.value::uuid;
+
+  v_expected_price := round(v_base + v_adjustment, 2);
+  v_expected_count := jsonb_array_length(v_ids);
+
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P05 Modifiers',
+    null,
+    jsonb_build_array(
+      jsonb_build_object(
+        'menu_item_id', '<menu-item-uuid>',
+        'quantity', 1,
+        'modifiers', v_ids,
+        -- Tampered pricing hints: the server must ignore these and read the
+        -- live menu/modifier values instead.
+        'unit_price', 0.01,
+        'price_adjustment', 9999
+      )
+    )
+  );
+
+  if (v_result->'items'->0->>'unit_price')::numeric is distinct from v_expected_price then
+    raise exception 'expected unit_price %, got %',
+      v_expected_price, v_result->'items'->0->>'unit_price';
+  end if;
+
+  -- get_order_tracking is security definer and returns the snapshots that
+  -- were written to order_item_modifiers.
+  v_tracking := public.get_order_tracking(v_result->>'tracking_token');
+
+  if jsonb_array_length(v_tracking->'items'->0->'modifiers') <> v_expected_count then
+    raise exception 'expected % modifier snapshots, got %',
+      v_expected_count, jsonb_array_length(v_tracking->'items'->0->'modifiers');
+  end if;
+
+  raise notice 'P05 valid modifiers priced + snapshotted ok';
+end $$;
+rollback;
+
+-- (ap) A modifier that belongs to another restaurant's item is rejected. A
+--      throwaway second restaurant is created inside the transaction and
+--      rolled back with it. Expected: NOTICE
+--      "P05 foreign modifier rejected ok".
+begin;
+do $$
+declare
+  v_owner   uuid;
+  v_foreign_restaurant uuid;
+  v_group   uuid;
+  v_modifier uuid;
+begin
+  select id into v_owner from public.profiles limit 1;
+
+  if v_owner is null then
+    raise notice 'P05 foreign modifier check skipped (no profiles)';
+    return;
+  end if;
+
+  insert into public.restaurants (owner_id, slug, name, is_active)
+  values (
+    v_owner,
+    'rls-p05-foreign-' || gen_random_uuid(),
+    'RLS P05 Foreign Restaurant',
+    true
+  )
+  returning id into v_foreign_restaurant;
+
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (v_foreign_restaurant, 'Foreign extras', 'multiple', 0, 5, false, 0)
+  returning id into v_group;
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment)
+  values (v_group, 'Foreign choice', 1.00)
+  returning id into v_modifier;
+
+  create temp table p05_foreign_fixture as select v_modifier as modifier_id;
+  grant select on p05_foreign_fixture to anon;
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_foreign uuid;
+  v_err     text;
+begin
+  select modifier_id into v_foreign from p05_foreign_fixture;
+
+  if v_foreign is null then
+    raise notice 'P05 foreign modifier check skipped (no fixture)';
+    return;
+  end if;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Foreign',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', jsonb_build_array(v_foreign)
+        )
+      )
+    );
+    raise exception 'expected invalid_modifier';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_modifier' then
+    raise exception 'expected invalid_modifier, got %', v_err;
+  end if;
+
+  raise notice 'P05 foreign modifier rejected ok';
+end $$;
+rollback;
+
+-- (aq) Exceeding a multiple group's max_selections is rejected. A temporary
+--      max-2 group with three modifiers is created inside the transaction and
+--      rolled back with it. Expected: NOTICE
+--      "P05 max selections rejected ok".
+begin;
+do $$
+declare
+  v_group uuid;
+begin
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (
+    '<restaurant-uuid>', 'RLS P05 Max', 'multiple', 0, 2, false, 9999
+  )
+  returning id into v_group;
+
+  insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id)
+  values ('<menu-item-uuid>', v_group);
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment, display_order)
+  values
+    (v_group, 'Max A', 0, 0),
+    (v_group, 'Max B', 0, 1),
+    (v_group, 'Max C', 0, 2);
+
+  create temp table p05_max_fixture as
+    select jsonb_agg(id order by display_order) as modifier_ids
+    from public.modifiers
+    where modifier_group_id = v_group;
+
+  grant select on p05_max_fixture to anon;
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_ids jsonb;
+  v_err text;
+begin
+  select modifier_ids into v_ids from p05_max_fixture;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Max',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', v_ids
+        )
+      )
+    );
+    raise exception 'expected modifier_selection_invalid';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'modifier_selection_invalid' then
+    raise exception 'expected modifier_selection_invalid, got %', v_err;
+  end if;
+
+  raise notice 'P05 max selections rejected ok';
+end $$;
+rollback;
+
+-- (ar) Skipping a required group is rejected. A temporary required group is
+--      created inside the transaction and rolled back with it. Expected:
+--      NOTICE "P05 required group enforced ok".
+begin;
+do $$
+declare
+  v_group uuid;
+begin
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (
+    '<restaurant-uuid>', 'RLS P05 Required', 'single', 0, 1, true, 10000
+  )
+  returning id into v_group;
+
+  insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id)
+  values ('<menu-item-uuid>', v_group);
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment, display_order)
+  values (v_group, 'Required choice', 0, 0);
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Required',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', '[]'::jsonb
+        )
+      )
+    );
+    raise exception 'expected modifier_required';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'modifier_required' then
+    raise exception 'expected modifier_required, got %', v_err;
+  end if;
+
+  raise notice 'P05 required group enforced ok';
+end $$;
+rollback;
+
+-- (as) Identical item + modifier lines fold into one order line while a
+--      different modifier selection stays separate. Expected: NOTICE
+--      "P05 identical lines fold ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_a       uuid;
+  v_b       uuid;
+  v_result  jsonb;
+begin
+  -- Two available modifiers from the same optional group: one variant each.
+  select m.id
+    into v_a
+  from public.menu_item_modifier_groups img
+  join public.modifiers m on m.modifier_group_id = img.modifier_group_id and m.is_available
+  where img.menu_item_id = '<menu-item-uuid>'
+  order by m.display_order, m.name
+  limit 1;
+
+  if v_a is null then
+    raise notice 'P05 folding check skipped (item has no available modifiers)';
+    return;
+  end if;
+
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P05 Fold',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', jsonb_build_array(v_a)),
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', jsonb_build_array(v_a)),
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', '[]'::jsonb)
+    )
+  );
+
+  if jsonb_array_length(v_result->'items') <> 2 then
+    raise exception 'expected 2 folded lines, got %', jsonb_array_length(v_result->'items');
+  end if;
+
+  raise notice 'P05 identical lines fold ok';
+end $$;
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P06 — table operational status (0025)
+-- ---------------------------------------------------------------------
+-- <restaurant-uuid>       restaurant A id
+-- <table-uuid>            an active table belonging to restaurant A
+-- <kitchen-user-uuid>     active kitchen staff of restaurant A
+-- <customer-user-uuid>    signed-in user with no staff role
+-- <other-staff-user-uuid> owner/manager of a different restaurant B
+--
+-- No new policy is added: `tables_staff_manage` already scopes writes with
+-- is_staff_of(restaurant_id), and `tables_public_read` is SELECT-only.
+-- These checks prove the new `status` column inherits that behaviour.
+
+-- (at) Kitchen staff of A can update A's table status. Expected: UPDATE 1.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'needs_cleaning'
+ where id = '<table-uuid>';
+rollback;
+
+-- (au) A signed-in customer cannot update a table. Expected: UPDATE 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'available'
+ where id = '<table-uuid>';
+rollback;
+
+-- (av) Anon cannot update a table at all. Expected: UPDATE 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+update public.tables
+   set status = 'available'
+ where id = '<table-uuid>';
+rollback;
+
+-- (aw) Staff of restaurant B cannot update A's table status. Expected:
+--      UPDATE 0 (the row is invisible under `tables_staff_manage`).
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<other-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'occupied'
+ where id = '<table-uuid>';
+rollback;

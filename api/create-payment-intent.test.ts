@@ -163,6 +163,73 @@ describe("POST /api/create-payment-intent", () => {
     expect(res.body).toMatchObject({ amount: 46.2 });
   });
 
+  it("forwards whitelisted modifier ids to the RPC", async () => {
+    const size = "11111111-1111-4111-8111-111111111111";
+    const milk = "22222222-2222-4222-8222-222222222222";
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [
+          { menu_item_id: "item-1", quantity: 2, modifiers: [size, milk] },
+        ],
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [
+          { menu_item_id: "item-1", quantity: 2, modifiers: [size, milk] },
+        ],
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects a non-uuid modifier before calling the RPC", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [
+          { menu_item_id: "item-1", quantity: 1, modifiers: ["not-a-uuid"] },
+        ],
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_request" });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
+  });
+
+  it("leaves items without modifiers byte-identical", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1, modifiers: undefined }],
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [{ menu_item_id: "item-1", quantity: 1 }],
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
   it("rejects a malformed tip before calling the RPC", async () => {
     const res = makeRes();
     await handler(
