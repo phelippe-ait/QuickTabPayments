@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useId, useState, type ReactNode } from "react"
 import { Button } from "@shared/ui/shadcn/button"
 import {
   PERIOD_PRESET_LABELS,
@@ -20,6 +20,8 @@ type ReportPeriodSelectorProps = {
   onChange: (period: ReportPeriod) => void
   /** Injectable clock for tests; defaults to the real current time. */
   now?: Date
+  /** Optional controls rendered beside the preset row (for example, export). */
+  actions?: ReactNode
 }
 
 /**
@@ -30,6 +32,7 @@ export function ReportPeriodSelector({
   timezone,
   onChange,
   now,
+  actions,
 }: ReportPeriodSelectorProps) {
   const errorId = useId()
   const [initial] = useState(() =>
@@ -58,30 +61,33 @@ export function ReportPeriodSelector({
 
   return (
     <section className="mt-6 flex flex-col gap-4" aria-label="Report period">
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Period presets"
-      >
-        {FIXED_PRESETS.map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={preset === value ? "default" : "secondary"}
-            aria-pressed={preset === value}
-            onClick={() => selectPreset(value)}
-          >
-            {PERIOD_PRESET_LABELS[value]}
-          </Button>
-        ))}
-        <Button
-          size="sm"
-          variant={preset === "custom" ? "default" : "secondary"}
-          aria-pressed={preset === "custom"}
-          onClick={() => setPreset("custom")}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Period presets"
         >
-          {PERIOD_PRESET_LABELS.custom}
-        </Button>
+          {FIXED_PRESETS.map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={preset === value ? "default" : "secondary"}
+              aria-pressed={preset === value}
+              onClick={() => selectPreset(value)}
+            >
+              {PERIOD_PRESET_LABELS[value]}
+            </Button>
+          ))}
+          <Button
+            size="sm"
+            variant={preset === "custom" ? "default" : "secondary"}
+            aria-pressed={preset === "custom"}
+            onClick={() => setPreset("custom")}
+          >
+            {PERIOD_PRESET_LABELS.custom}
+          </Button>
+        </div>
+        {actions}
       </div>
 
       {preset === "custom" && (

@@ -13,6 +13,7 @@ import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { PageHeader } from "../../components/AdminUi"
 import { useSalesReport } from "../../hooks/useSalesReport"
 import { BusyHoursCard } from "./BusyHoursCard"
+import { ExportCsvButton } from "./ExportCsvButton"
 import { PopularItemsCard } from "./PopularItemsCard"
 import { ReportPeriodSelector } from "./ReportPeriodSelector"
 import { TopItemsCard } from "./TopItemsCard"
@@ -24,6 +25,7 @@ import {
 
 type ReportRestaurant = {
   id: string
+  name: string
   currency: string
   timezone: string
 }
@@ -69,6 +71,7 @@ export function ReportsPage() {
         <ReportsOverview
           restaurant={{
             id: restaurant.id,
+            name: restaurant.name,
             currency: restaurant.currency,
             timezone: restaurant.timezone,
           }}
@@ -91,7 +94,17 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
 
   return (
     <>
-      <ReportPeriodSelector timezone={restaurant.timezone} onChange={setPeriod} />
+      <ReportPeriodSelector
+        timezone={restaurant.timezone}
+        onChange={setPeriod}
+        actions={
+          <ExportCsvButton
+            report={report}
+            restaurantName={restaurant.name}
+            loading={isLoading}
+          />
+        }
+      />
 
       {error ? (
         <Card role="alert" className="mt-6 border-danger/40">
