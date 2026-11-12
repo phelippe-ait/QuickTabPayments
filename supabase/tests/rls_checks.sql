@@ -887,7 +887,8 @@ rollback;
 -- <manager-user-uuid>      active manager of A
 -- <kitchen-user-uuid>      active kitchen staff of A
 -- <customer-user-uuid>     signed-in user with no staff role
--- <other-staff-user-uuid>  owner/manager of a different restaurant B
+-- <other-restaurant-uuid>  a different restaurant B id
+-- <other-staff-user-uuid>  owner/manager of restaurant B
 
 -- Execute privilege: anon=false, authenticated=true.
 select
@@ -1018,8 +1019,10 @@ begin
 end $$;
 rollback;
 
--- (ah) Owner/manager of a different restaurant B is rejected.
--- Expected: NOTICE P02 get_sales_report other restaurant not_authorised ok.
+-- (ah) Owner/manager of a different restaurant B gets B's report, resolved
+--      from B's membership, and never A's numbers. (The RPC has no restaurant
+--      argument, so a B caller can only ever resolve B.)
+-- Expected: NOTICE P02 get_sales_report other restaurant scoped to B ok.
 begin;
 select set_config(
   'request.jwt.claims',
@@ -1029,20 +1032,27 @@ select set_config(
 set local role authenticated;
 do $$
 declare
-  v_err text;
+  v_out      jsonb;
+  v_expected numeric;
 begin
-  begin
-    perform public.get_sales_report(now() - interval '7 days', now());
-    raise exception 'expected not_authorised for other restaurant staff';
-  exception
-    when others then
-      v_err := sqlerrm;
-  end;
+  v_out := public.get_sales_report(now() - interval '7 days', now());
 
-  if v_err is distinct from 'not_authorised' then
-    raise exception 'expected not_authorised, got %', v_err;
+  -- B's staff can read B's orders under RLS, so direct aggregation is a fair
+  -- oracle for the RPC's scoped result.
+  select round(coalesce(sum(o.total), 0), 2)
+    into v_expected
+  from public.orders o
+  where o.restaurant_id = '<other-restaurant-uuid>'
+    and o.created_at >= now() - interval '7 days'
+    and o.created_at <  now()
+    and o.status <> 'cancelled';
+
+  if (v_out->>'gross_revenue')::numeric is distinct from v_expected then
+    raise exception 'B gross_revenue % <> direct aggregate %',
+      v_out->>'gross_revenue', v_expected;
   end if;
-  raise notice 'P02 get_sales_report other restaurant not_authorised ok';
+
+  raise notice 'P02 get_sales_report other restaurant scoped to B ok';
 end $$;
 rollback;
 
@@ -1839,3 +1849,496 @@ begin
   raise notice 'P10 get_sales_report kitchen not_authorised ok';
 end $$;
 rollback;
+
+-- =====================================================================
+-- P12 — reporting RLS verification (hard gate)
+-- =====================================================================
+-- Maps to B2.7. `get_sales_report(p_from timestamptz, p_to timestamptz)`
+-- takes no restaurant argument: the tenant is always resolved from the
+-- caller's active `restaurant_staff` row, so a caller cannot spoof it.
+--
+-- Every check below is self-contained. It builds throwaway restaurants A
+-- and B (fixed `c12…` ids, created_at in 2000 so they sort before any demo
+-- restaurant), picks existing profiles from `public.profiles`, seeds orders,
+-- and rolls everything back. No placeholders to substitute.
+--
+-- What green looks like when this section is run:
+--   (az) owner of A ....... PASS — report is A's 100.00 only (B's 999.99
+--                                  order in the same window must not leak)
+--   (ba) manager of A ..... PASS — report is A's 100.00 only
+--   (bb) kitchen of A ..... PASS — raises `not_authorised`
+--   (bc) owner of B ....... PASS — report is B's 999.99, never A's 100.00
+--   (bd) plain customer ... PASS — raises `not_authorised`
+--   (be) anon ............. PASS — EXECUTE = false; call raises 42501
+--   (bf) cross-tenant ..... PASS — A's report is identical before and
+--                                  after B receives another 500.00 order
+--   (bg) no spoofable arg . PASS — the RPC has exactly 2 timestamptz
+--                                  arguments and no restaurant/uuid one
+--
+-- Fixture ids: A = c12a0000-0000-4000-8000-000000000001
+--              B = c12b0000-0000-4000-8000-000000000001
+--
+-- The `update`/`delete` statements below clear the chosen profiles' existing
+-- memberships so each check has exactly the roles it intends. The SQL
+-- editor runs as postgres/supabase_admin, which the staff guard treats as
+-- privileged; all changes are rolled back.
+
+-- (az) Owner of A gets A's report only. Restaurant B has a larger order in
+--      the same window, so any leak would show 1099.99 or order_count = 2.
+-- Expected: NOTICE P12 owner report scoped to A ok.
+begin;
+do $$
+declare
+  v_owner uuid;
+begin
+  select id into v_owner from public.profiles order by created_at, id limit 1;
+  if v_owner is null then
+    raise exception 'P12 needs at least one profile row';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_owner, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'owner A: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'owner A: gross_revenue %, expected 100.00 (B leak = 1099.99)',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 owner report scoped to A ok';
+end $$;
+rollback;
+
+-- (ba) Manager of A is allowed and gets the same A-scoped numbers.
+-- Expected: NOTICE P12 manager report scoped to A ok.
+begin;
+do $$
+declare
+  v_manager uuid;
+begin
+  select id into v_manager from public.profiles order by created_at, id offset 1 limit 1;
+  if v_manager is null then
+    raise exception 'P12 needs at least two profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_manager;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_manager, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_manager, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_manager, 'manager', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 1 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'manager A: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'manager A: gross_revenue %, expected 100.00',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 manager report scoped to A ok';
+end $$;
+rollback;
+
+-- (bb) Kitchen staff of A are rejected by the role check.
+-- Expected: NOTICE P12 kitchen not_authorised ok.
+begin;
+do $$
+declare
+  v_kitchen uuid;
+begin
+  select id into v_kitchen from public.profiles order by created_at, id offset 2 limit 1;
+  if v_kitchen is null then
+    raise exception 'P12 needs at least three profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_kitchen;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values ('c12a0000-0000-4000-8000-000000000001', v_kitchen, 'rls-p12-a',
+          'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_kitchen, 'kitchen', true);
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 2 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'kitchen executed get_sales_report';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'kitchen: expected not_authorised, got %', v_err;
+  end if;
+
+  raise notice 'P12 kitchen not_authorised ok';
+end $$;
+rollback;
+
+-- (bc) Owner of B gets B's numbers only. Restaurant A has a 100.00 order in
+--      the same window, so leaking A would show 1099.99.
+-- Expected: NOTICE P12 owner report scoped to B ok.
+begin;
+do $$
+declare
+  v_owner_b uuid;
+begin
+  select id into v_owner_b from public.profiles order by created_at, id offset 3 limit 1;
+  if v_owner_b is null then
+    raise exception 'P12 needs at least four profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner_b;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner_b, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner_b, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  -- Only B membership: the RPC must resolve B from restaurant_staff.
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12b0000-0000-4000-8000-000000000001', v_owner_b, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 3 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'owner B: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 999.99 then
+    raise exception 'owner B: gross_revenue %, expected 999.99 (A leak = 1099.99)',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 owner report scoped to B ok';
+end $$;
+rollback;
+
+-- (bd) A signed-in user with no active staff membership is rejected.
+-- Expected: NOTICE P12 customer not_authorised ok.
+begin;
+do $$
+declare
+  v_customer uuid;
+begin
+  select id into v_customer from public.profiles order by created_at, id offset 4 limit 1;
+  if v_customer is null then
+    raise exception 'P12 needs at least five profile rows';
+  end if;
+
+  -- Literally no staff row: this is the plain customer path.
+  delete from public.restaurant_staff where user_id = v_customer;
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 4 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'customer executed get_sales_report';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'customer: expected not_authorised, got %', v_err;
+  end if;
+
+  raise notice 'P12 customer not_authorised ok';
+end $$;
+rollback;
+
+-- (be) Anon has no EXECUTE grant, so the call fails before the body runs.
+-- Expected: anon_can_get_sales_report = false, then NOTICE
+--           P12 anon cannot execute get_sales_report ok.
+select has_function_privilege(
+  'anon',
+  'public.get_sales_report(timestamptz,timestamptz)',
+  'EXECUTE'
+) as anon_can_get_sales_report;
+
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+
+do $$
+declare
+  v_state text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'anon executed get_sales_report';
+  exception
+    when insufficient_privilege then
+      v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'anon: expected insufficient_privilege (42501), got %', v_state;
+  end if;
+
+  raise notice 'P12 anon cannot execute get_sales_report ok';
+end $$;
+rollback;
+
+-- (bf) Second-restaurant orders cannot alter A's report. The report is
+--      snapshotted, B receives another order, and the same A call must be
+--      byte-identical. Expected: NOTICE P12 cross-restaurant isolation ok.
+begin;
+do $$
+declare
+  v_owner uuid;
+begin
+  select id into v_owner from public.profiles order by created_at, id limit 1;
+  if v_owner is null then
+    raise exception 'P12 needs at least one profile row';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_owner, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+
+  create temp table p12_before (report jsonb);
+  grant select, insert on p12_before to authenticated;
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'cross-tenant: A report should start at 100.00, got %',
+      v_out->>'gross_revenue';
+  end if;
+
+  insert into p12_before (report) values (v_out);
+end $$;
+
+-- Add another B order while acting as the session owner, then return to the
+-- authenticated caller and compare the same fixed-window report.
+reset role;
+insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+values ('c12b0000-0000-4000-8000-000000000001', 'P12-B-2', 'confirmed',
+        500.00, 0, 500.00, '2026-01-16T12:00:00+00');
+set local role authenticated;
+
+do $$
+declare
+  v_before jsonb;
+  v_after  jsonb;
+begin
+  select report into v_before from p12_before;
+
+  v_after := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if v_after is distinct from v_before then
+    raise exception 'cross-tenant: A report changed after B got another order: before=% after=%',
+      v_before, v_after;
+  end if;
+
+  if (v_after->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'cross-tenant: A gross picked up B revenue: %',
+      v_after->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 cross-restaurant isolation ok';
+end $$;
+rollback;
+
+-- (bg) The RPC signature cannot accept a spoofed restaurant id: it has two
+--      timestamptz arguments and no restaurant/uuid parameter.
+-- Expected: NOTICE P12 get_sales_report has no spoofable restaurant argument ok.
+do $$
+declare
+  v_args  text;
+  v_nargs int;
+begin
+  select pg_get_function_arguments(p.oid), p.pronargs
+    into v_args, v_nargs
+  from pg_proc p
+  where p.oid = 'public.get_sales_report(timestamptz, timestamptz)'::regprocedure;
+
+  if v_nargs is distinct from 2 then
+    raise exception 'P12 signature: expected 2 arguments, got %', v_nargs;
+  end if;
+
+  if v_args ~* 'restaurant|uuid' then
+    raise exception 'P12 signature exposes a tenant argument: %', v_args;
+  end if;
+
+  raise notice 'P12 get_sales_report has no spoofable restaurant argument ok';
+end $$;

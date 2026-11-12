@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { act, renderHook } from "@testing-library/react"
 import type { MenuItem } from "../types"
-import { cartStorageKey, parseCart, useCart } from "./useCart"
+import { cartLineId, cartStorageKey, parseCart, useCart } from "./useCart"
 
 const coffee: MenuItem = {
   id: "item-1",
@@ -42,18 +42,18 @@ describe("useCart", () => {
     expect(result.current.count).toBe(2)
     expect(result.current.total).toBe(9.4)
 
-    act(() => result.current.increase("item-1"))
+    act(() => result.current.increase(cartLineId("item-1")))
     expect(result.current.items[0].quantity).toBe(3)
 
-    act(() => result.current.decrease("item-1"))
+    act(() => result.current.decrease(cartLineId("item-1")))
     expect(result.current.items[0].quantity).toBe(2)
 
-    act(() => result.current.decrease("item-1"))
-    act(() => result.current.decrease("item-1"))
+    act(() => result.current.decrease(cartLineId("item-1")))
+    act(() => result.current.decrease(cartLineId("item-1")))
     expect(result.current.items).toHaveLength(0)
 
     act(() => result.current.add(toast, 1))
-    act(() => result.current.remove("item-2"))
+    act(() => result.current.remove(cartLineId("item-2")))
     expect(result.current.items).toEqual([])
   })
 
