@@ -129,6 +129,19 @@ export function mapStaffOrder(row: StaffOrderRow): Order {
   }
 }
 
+const staffOrderErrorMessages: Record<string, string> = {
+  invalid_status_transition:
+    "That status change isn't allowed. Refresh the order and try again.",
+}
+
+/**
+ * Maps database error codes to staff-facing copy. Unknown codes fall back to
+ * the raw message so infrastructure/permission errors are still visible.
+ */
+export function mapStaffOrderError(message: string): string {
+  return staffOrderErrorMessages[message] ?? message
+}
+
 export async function updateStaffOrderStatus(
   restaurantId: string,
   orderNumber: string,
@@ -146,7 +159,7 @@ export async function updateStaffOrderStatus(
     .select("id")
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error(mapStaffOrderError(error.message))
   }
 
   if (!data || data.length !== 1) {

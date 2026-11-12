@@ -1059,3 +1059,90 @@ rollback;
 --      currency, from, to, order_count, gross_revenue, paid_revenue,
 --      refunded_amount, aov, top_items and busy_hours must be identical.
 --   4. rollback;
+
+-- =====================================================================
+-- P03 — order status transition guard (0022)
+-- =====================================================================
+-- <restaurant-uuid> and <manager-user-uuid> as above. Each check inserts a
+-- scratch order inside a transaction and rolls it back.
+
+-- (aj) Staff cannot skip pending -> ready. Expected: NOTICE
+--      "P03 illegal status transition rejected ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-ILLEGAL', 'pending');
+do $$
+declare
+  v_err text;
+begin
+  begin
+    update public.orders
+       set status = 'ready'
+     where restaurant_id = '<restaurant-uuid>'
+       and order_number = 'RLS-P03-ILLEGAL';
+    raise exception 'expected invalid_status_transition';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_status_transition' then
+    raise exception 'expected invalid_status_transition, got %', v_err;
+  end if;
+  raise notice 'P03 illegal status transition rejected ok';
+end $$;
+rollback;
+
+-- (ak) The legal pending -> confirmed transition is allowed, the rest of the
+--      matrix can be walked, and completing the order stamps completed_at.
+--      Expected: NOTICE "P03 legal status transition allowed ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-LEGAL', 'pending');
+update public.orders
+   set status = 'confirmed'
+ where restaurant_id = '<restaurant-uuid>'
+   and order_number = 'RLS-P03-LEGAL';
+do $$
+declare
+  v_completed_at timestamptz;
+begin
+  update public.orders
+     set status = 'preparing'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'confirmed';
+  update public.orders
+     set status = 'ready'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'preparing';
+  update public.orders
+     set status = 'completed'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'ready';
+
+  select completed_at into v_completed_at
+    from public.orders
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL';
+
+  if v_completed_at is null then
+    raise exception 'expected completed_at to be set on completion';
+  end if;
+  raise notice 'P03 legal status transition allowed ok';
+end $$;
+rollback;
