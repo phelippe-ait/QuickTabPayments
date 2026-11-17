@@ -596,6 +596,23 @@ The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
 mappers, and shared helpers. Playwright covers a customer smoke test and a
 gated payment lifecycle spec (`npm run test:e2e`).
 
+### End-to-end (Playwright)
+
+The E2E specs target a deterministic fixture instead of the demo data. Apply
+`supabase/e2e_seed.sql` to the project (it is idempotent and only touches the
+`e2e-bistro` restaurant), then run with:
+
+```bash
+E2E_TABLE_TOKEN=e2e-table-token-fixed npm run test:e2e
+```
+
+Optional coverage: `STRIPE_TEST=1` (plus the Stripe keys and webhook relay) adds
+the paid journey; `E2E_STAFF_EMAIL`/`E2E_STAFF_PASSWORD` add the kitchen-board
+advancement (that auth user must exist and is linked to `e2e-bistro` by the
+seed). Without the env values the specs skip, so an offline run stays green.
+CI (`.github/workflows/e2e.yml`) runs the same suite as a blocking check; see
+the seed header for the human steps.
+
 ## Build and Deployment
 
 A production build can be created locally with:

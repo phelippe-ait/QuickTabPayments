@@ -1,15 +1,16 @@
 import { test, expect } from "@playwright/test";
+import { restaurantSlug, tableToken } from "./support";
 
 /**
  * Mobile viewport audit (375px) for the customer menu.
  *
- * Requires a reachable Supabase project with the demo restaurant + an active
- * table. Set `E2E_TABLE_TOKEN` to that table's `qr_token`; without it the spec
- * skips rather than failing (CI may not have demo data). Runs in the
- * `mobile-chrome` project so the touch/tap emulation is already in place.
+ * Targets the same deterministic fixture as the other specs
+ * (`supabase/e2e_seed.sql`). Without `E2E_TABLE_TOKEN` it skips rather than
+ * failing. Runs in the `mobile-chrome` project so the touch/tap emulation is
+ * already in place.
  */
-const slug = process.env.E2E_RESTAURANT_SLUG ?? "quicktab-demo-cafe";
-const token = process.env.E2E_TABLE_TOKEN ?? "";
+const slug = restaurantSlug;
+const token = tableToken;
 
 test.describe("mobile viewport audit", () => {
   test.skip(!token, "Set E2E_TABLE_TOKEN to a demo table token to run this spec.");
