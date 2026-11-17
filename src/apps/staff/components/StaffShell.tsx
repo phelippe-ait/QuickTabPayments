@@ -64,8 +64,8 @@ export function StaffShell({
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-berry font-serif text-xl text-white">
             {restaurantName.charAt(0).toUpperCase() || "Q"}
           </div>
-          <div>
-            <p className="font-serif text-[21px] leading-5">{restaurantName}</p>
+          <div className="min-w-0">
+            <p className="truncate font-serif text-[21px] leading-5">{restaurantName}</p>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
               Dining room
             </p>

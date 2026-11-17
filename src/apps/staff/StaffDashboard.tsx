@@ -78,7 +78,15 @@ function StaffWorkspace() {
   const currency = restaurant?.currency ?? "AUD"
 
   const saveTable = (table: Table) => {
+    const statusChanged =
+      selectedTable !== null && table.status !== selectedTable.status
     workspace.updateTable(table)
+    // The editor's guest/occupant fields are local-only, but the operational
+    // status is real state: persist it through the same scoped mutation the
+    // one-tap card button uses so a reload doesn't undo the change.
+    if (statusChanged) {
+      void workspace.updateTableStatus(String(table.id), table.status)
+    }
     setSelectedTable(null)
   }
 
@@ -102,6 +110,8 @@ function StaffWorkspace() {
           selectedTable={selectedTable}
           onFilterChange={setFilter}
           onSelectTable={setSelectedTable}
+          onTableStatusChange={workspace.updateTableStatus}
+          updatingTableIds={workspace.tableStatusUpdating}
           currency={currency}
           isLoading={workspace.tablesLoading}
           error={workspace.tablesError}

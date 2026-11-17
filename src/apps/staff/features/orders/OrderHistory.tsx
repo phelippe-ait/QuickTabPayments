@@ -82,10 +82,10 @@ export function OrderHistory({
             onClick={() => onSelect(order)}
           >
             <span className="text-sm font-bold">{order.id}</span>
-            <span className="row-start-2 text-xs text-muted-2 md:row-auto md:text-sm md:text-ink">
+            <span className="row-start-2 truncate text-xs text-muted-2 md:row-auto md:text-sm md:text-ink">
               {order.table}
             </span>
-            <span className="text-sm font-bold md:font-normal">
+            <span className="min-w-0 truncate text-sm font-bold md:font-normal">
               {order.guest}
             </span>
             <span className="hidden text-sm text-muted-2 md:block">

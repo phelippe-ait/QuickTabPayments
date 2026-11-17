@@ -1,4 +1,5 @@
-export type TableStatus = "occupied" | "available"
+/** Mirrors the public.table_status enum added in migration 0025 (P06). */
+export type TableStatus = "available" | "occupied" | "needs_cleaning"
 export type KitchenStatus = "New" | "Preparing" | "Ready" | "Completed" | "Cancelled"
 export type View = "tables" | "kitchen" | "history" | "reservations"
 

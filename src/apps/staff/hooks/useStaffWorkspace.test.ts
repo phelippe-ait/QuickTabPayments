@@ -46,12 +46,20 @@ vi.mock("../services/staffOrders", () => ({
   canKitchenTransition: vi.fn(() => true),
 }))
 
+const tablesService = vi.hoisted(() => ({
+  fetchStaffTables: vi.fn(),
+  updateStaffTableStatus: vi.fn(),
+}))
+
 vi.mock("../services/staffTables", () => ({
-  fetchStaffTables: vi.fn().mockResolvedValue([]),
+  fetchStaffTables: tablesService.fetchStaffTables,
+  updateStaffTableStatus: tablesService.updateStaffTableStatus,
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  tablesService.fetchStaffTables.mockResolvedValue([])
+  tablesService.updateStaffTableStatus.mockResolvedValue(undefined)
 })
 
 describe("useStaffWorkspace realtime scoping", () => {
@@ -98,5 +106,91 @@ describe("useStaffWorkspace realtime scoping", () => {
     act(() => onStatus("SUBSCRIBED"))
 
     await waitFor(() => expect(fetchOrders).toHaveBeenCalledTimes(2))
+  })
+})
+
+function staffTable(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "table-1",
+    restaurant_id: "restaurant-1",
+    table_number: "1",
+    location_label: null,
+    is_active: true,
+    seats: 4,
+    status: "available",
+    ...overrides,
+  }
+}
+
+describe("useStaffWorkspace table status", () => {
+  it("hydrates each table with its stored operational status", async () => {
+    tablesService.fetchStaffTables.mockResolvedValue([
+      staffTable({ id: "table-1", status: "needs_cleaning" }),
+      staffTable({ id: "table-2", table_number: "2", status: "occupied" }),
+    ])
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+
+    await waitFor(() => expect(result.current.tableList).toHaveLength(2))
+    expect(result.current.tableList.map((table) => table.status)).toEqual([
+      "needs_cleaning",
+      "occupied",
+    ])
+  })
+
+  it("updates optimistically and keeps the new status once the write succeeds", async () => {
+    tablesService.fetchStaffTables.mockResolvedValue([staffTable()])
+    let resolveUpdate: (() => void) | undefined
+    tablesService.updateStaffTableStatus.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveUpdate = resolve
+        }),
+    )
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(result.current.tableList).toHaveLength(1))
+
+    let pending: Promise<void> | undefined
+    act(() => {
+      pending = result.current.updateTableStatus("table-1", "occupied")
+    })
+
+    expect(result.current.tableList[0].status).toBe("occupied")
+    expect(result.current.tableStatusUpdating.has("table-1")).toBe(true)
+    expect(tablesService.updateStaffTableStatus).toHaveBeenCalledWith(
+      "restaurant-1",
+      "table-1",
+      "occupied",
+    )
+
+    await act(async () => {
+      resolveUpdate?.()
+      await pending
+    })
+
+    expect(result.current.tableList[0].status).toBe("occupied")
+    expect(result.current.tableStatusUpdating.has("table-1")).toBe(false)
+    expect(result.current.tablesError).toBeNull()
+  })
+
+  it("rolls the status back and surfaces the error when the write fails", async () => {
+    tablesService.fetchStaffTables.mockResolvedValue([staffTable()])
+    tablesService.updateStaffTableStatus.mockRejectedValue(
+      new Error("permission denied for table tables"),
+    )
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(result.current.tableList).toHaveLength(1))
+
+    await act(async () => {
+      await result.current.updateTableStatus("table-1", "needs_cleaning")
+    })
+
+    expect(result.current.tableList[0].status).toBe("available")
+    expect(result.current.tableStatusUpdating.has("table-1")).toBe(false)
+    expect(result.current.tablesError).toBe(
+      "permission denied for table tables",
+    )
   })
 })

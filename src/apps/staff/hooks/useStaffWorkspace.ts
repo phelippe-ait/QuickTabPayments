@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { initialReservations } from "../data/fixtures"
-import type { KitchenStatus, Order, Reservation, Table } from "../types"
+import type { KitchenStatus, Order, Reservation, Table, TableStatus } from "../types"
 import { supabase } from "@shared/lib/supabase"
 import { toHistoryOrder } from "../data/orderHistory"
-import { fetchStaffTables } from "../services/staffTables"
+import {
+  fetchStaffTables,
+  updateStaffTableStatus,
+} from "../services/staffTables"
 import {
   canKitchenTransition,
   fetchStaffOrders,
@@ -42,6 +45,9 @@ export function useStaffWorkspace(restaurantId: string | null) {
   const [tableList, setTableList] = useState<Table[]>([])
   const [tablesLoading, setTablesLoading] = useState(true)
   const [tablesError, setTablesError] = useState<string | null>(null)
+  const [tableStatusUpdating, setTableStatusUpdating] = useState<
+    ReadonlySet<string>
+  >(new Set())
 
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
@@ -168,7 +174,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
             locationLabel: row.location_label,
             seats: row.seats ?? undefined,
             occupants: 0,
-            status: "available" as const,
+            status: row.status,
           })),
         )
         setTablesError(null)
@@ -342,6 +348,59 @@ export function useStaffWorkspace(restaurantId: string | null) {
     )
   }
 
+  /**
+   * One-tap table status cycle. The pill flips optimistically, then rolls back
+   * if the write fails (RLS, offline, stale id). Table status is fetch-on-demand:
+   * there is deliberately no `tables` Realtime subscription (P17 scoping), so
+   * other devices pick the new status up the next time they load the floor.
+   */
+  const updateTableStatus = async (tableId: string, status: TableStatus) => {
+    const table = tableList.find(
+      (candidate) => String(candidate.id) === tableId,
+    )
+    if (!table || table.status === status) return
+
+    if (!restaurantId) {
+      setTablesError("No active staff restaurant found")
+      return
+    }
+
+    const previousStatus = table.status
+    setTablesError(null)
+    setTableStatusUpdating((current) => new Set(current).add(tableId))
+    setTableList((current) =>
+      current.map((candidate) =>
+        String(candidate.id) === tableId
+          ? { ...candidate, status }
+          : candidate,
+      ),
+    )
+
+    try {
+      await updateStaffTableStatus(restaurantId, tableId, status)
+    } catch (error) {
+      console.error("Failed to update table status:", error)
+      setTableList((current) =>
+        current.map((candidate) =>
+          String(candidate.id) === tableId
+            ? { ...candidate, status: previousStatus }
+            : candidate,
+        ),
+      )
+      setTablesError(
+        error instanceof Error
+          ? error.message
+          : "Could not update the table. Please try again.",
+      )
+    } finally {
+      setTableStatusUpdating((current) => {
+        const next = new Set(current)
+        next.delete(tableId)
+        return next
+      })
+    }
+  }
+
   const createReservation = (
     reservation: Omit<Reservation, "id" | "status">,
   ) => {
@@ -437,6 +496,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     tableList,
     tablesLoading,
     tablesError,
+    tableStatusUpdating,
     orders,
     ordersLoading,
     ordersError,
@@ -451,6 +511,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     markOrderSeen,
     sound,
     updateTable,
+    updateTableStatus,
     createReservation,
     cancelReservation,
     updateKitchenStatus,

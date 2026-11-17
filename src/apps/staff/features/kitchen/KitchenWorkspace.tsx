@@ -114,7 +114,7 @@ export function KitchenWorkspace({
             Keep the kitchen moving and let the floor know what’s ready.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span aria-atomic="true" aria-live="polite" role="status">
             {unseenCount > 0 && (
               <Badge
@@ -216,7 +216,7 @@ export function KitchenWorkspace({
                       {order.time} · {order.server}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                  <div className="flex shrink-0 flex-col items-end gap-2 xl:flex-row xl:items-center">
                     <span
                       className={cn(
                         "rounded-full px-3 py-1.5 text-xs font-bold tabular-nums",
@@ -243,7 +243,7 @@ export function KitchenWorkspace({
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sand text-sm font-bold">
                         {item.qty}
                       </span>
-                      <span className="text-sm font-bold">
+                      <span className="min-w-0 break-words text-sm font-bold">
                         {item.name}
                         {(item.allergens?.length ?? 0) > 0 && (
                           <span
@@ -267,7 +267,7 @@ export function KitchenWorkspace({
                 <div className="flex flex-wrap gap-3 border-t border-line-soft bg-cream-3 p-4">
                   {isUnseen(order) && (
                     <button
-                      className="min-w-32 flex-1 rounded-xl border border-amber/40 bg-paper px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
+                      className="min-h-11 min-w-32 flex-1 rounded-xl border border-amber/40 bg-paper px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
                       onClick={() => onOrderSeen(order.id)}
                     >
                       Acknowledge
@@ -277,7 +277,7 @@ export function KitchenWorkspace({
                   {bumpStatus && (
                     <button
                       className={cn(
-                        "min-w-32 flex-1 rounded-xl border px-3 py-3 text-xs font-bold transition",
+                        "min-h-11 min-w-32 flex-1 rounded-xl border px-3 py-3 text-xs font-bold transition",
                         bumpButtonClasses[bumpStatus],
                       )}
                       onClick={() => requestStatusChange(order, bumpStatus)}
@@ -289,7 +289,7 @@ export function KitchenWorkspace({
 
                   {canCancel && (
                     <button
-                      className="min-w-32 flex-1 rounded-xl border border-danger/40 bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
+                      className="min-h-11 min-w-32 flex-1 rounded-xl border border-danger/40 bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
                       onClick={() => requestStatusChange(order, "Cancelled")}
                     >
                       Cancel
@@ -413,13 +413,13 @@ function KitchenStatusConfirmation({
         </p>
         <div className="mt-7 grid grid-cols-2 gap-3">
           <button
-            className="rounded-xl border border-line bg-white py-3 text-sm font-bold text-ink-soft transition hover:border-placeholder"
+            className="min-h-11 rounded-xl border border-line bg-white py-3 text-sm font-bold text-ink-soft transition hover:border-placeholder"
             onClick={onCancel}
           >
             Go back
           </button>
           <button
-            className={`rounded-xl py-3 text-sm font-bold text-white transition ${
+            className={`min-h-11 rounded-xl py-3 text-sm font-bold text-white transition ${
               cancelled
                 ? "bg-berry-strong hover:bg-[#9f354b]"
                 : "bg-sage-strong hover:bg-sage-strong"
