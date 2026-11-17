@@ -137,11 +137,31 @@ export function OrderConfirmation({
                 <dt>{inclusiveTaxLabel(order.taxRate ?? 0)}</dt>
                 <dd>{formatMoney(order.tax, order.currency)}</dd>
               </div>
-              <div className="flex justify-between text-[14px] font-bold text-ink">
-                <dt>Total</dt>
+              <div className="flex justify-between">
+                <dt>Items total</dt>
                 <dd>{formatMoney(order.total, order.currency)}</dd>
               </div>
+              {(order.tipAmount ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <dt>Tip</dt>
+                  <dd>{formatMoney(order.tipAmount ?? 0, order.currency)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between text-[14px] font-bold text-ink">
+                <dt>Amount due</dt>
+                <dd>
+                  {formatMoney(
+                    order.amountDue ?? order.total,
+                    order.currency,
+                  )}
+                </dd>
+              </div>
             </dl>
+            {(order.tipAmount ?? 0) > 0 && (
+              <p className="mt-2 text-[10px] text-muted">
+                GST is included in the items total. Tips carry no GST.
+              </p>
+            )}
 
             <div className="mt-3 rounded-lg bg-sage-soft p-3 text-center text-[12px] text-sage-strong">
               <strong>

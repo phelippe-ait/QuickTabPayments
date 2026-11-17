@@ -1,5 +1,6 @@
 import { requireSupabase } from "@shared/data/client"
 import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
+import type { TipSelection } from "@shared/lib/money"
 import type { CartItem, SimulatedPaymentMethod } from "../types"
 
 export type PlacedOrderItem = {
@@ -53,6 +54,7 @@ export type PlaceOrderErrorCode =
   | "customer_location_invalid"
   | "outside_ordering_radius"
   | "restaurant_location_not_configured"
+  | "invalid_tip"
   | "order_number_conflict"
   | "unknown"
 
@@ -80,6 +82,8 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "You need to be within 500 m of the restaurant to place an order.",
   restaurant_location_not_configured:
     "This restaurant hasn't set its ordering location yet. Please ask the restaurant team for help.",
+  invalid_tip:
+    "That tip isn't valid. Please choose up to 25% or a custom amount up to $500.",
   order_number_conflict:
     "We couldn't create an order number. Please try again in a moment.",
   unknown: "We couldn't place your order. Please try again.",
@@ -182,6 +186,8 @@ export async function placeOrder(input: {
   notes?: string
   items: CartItem[]
   location?: { latitude: number; longitude: number }
+  /** Optional tip; `null` means no tip. The RPC recomputes the amount. */
+  tip?: TipSelection | null
 }): Promise<PlacedOrder> {
   const client = requireSupabase()
 
@@ -204,6 +210,7 @@ export async function placeOrder(input: {
     p_customer_name: input.customerName.trim(),
     p_notes: input.notes?.trim() || null,
     p_items: items,
+    p_tip: input.tip ?? null,
     ...(input.location
       ? {
           p_customer_latitude: input.location.latitude,

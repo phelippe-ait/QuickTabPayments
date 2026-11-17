@@ -3,6 +3,7 @@ import type {
   MenuCategory,
   MenuItem as DbMenuItem,
 } from "@shared/lib/database.types"
+import { roundMoney } from "@shared/lib/money"
 import type { OpenTableOrder, OrderWithDetails } from "@shared/data/orders"
 import type { StaffDirectoryEntry } from "@shared/data/restaurants"
 import type { CategoryVM, MenuItemVM, OrderVM, StaffVM, TableVM } from "./viewModels"
@@ -69,6 +70,8 @@ export function toOrderVM(
   row: OrderWithDetails,
   restaurant: { currency: string; timezone: string },
 ): OrderVM {
+  const tipAmount = Number(row.tip_amount ?? 0)
+
   return {
     id: row.id,
     orderNumber: row.order_number,
@@ -76,6 +79,8 @@ export function toOrderVM(
     createdAt: row.created_at,
     createdAtLabel: formatOrderDate(row.created_at, restaurant.timezone),
     total: row.total,
+    tipAmount,
+    amountDue: roundMoney(row.total + tipAmount),
     subtotal: row.subtotal,
     tax: row.tax,
     currency: restaurant.currency,

@@ -20,6 +20,7 @@ const row = {
   subtotal: 4.27,
   tax: 0.43,
   total: 4.7,
+  tip_amount: 0.47,
   currency: "AUD",
   created_at: "2026-10-25T02:00:00Z",
   pickup_time_estimate: "2026-10-25T02:10:00Z",
@@ -36,6 +37,7 @@ describe("mapTracking", () => {
       status: "preparing",
       tableNumber: "T05",
       restaurantName: "QuickTab Demo Cafe",
+      tipAmount: 0.47,
       items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
     })
   })

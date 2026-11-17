@@ -97,4 +97,12 @@ describe("mapStaffOrder", () => {
 
     expect(mapped.items[0].allergens).toBeUndefined()
   })
+
+  it("maps the tip onto the amount due", () => {
+    const mapped = mapStaffOrder(row({ tip_amount: 2.5 }))
+
+    expect(mapped.total).toBe(12.5)
+    expect(mapped.tipAmount).toBe(2.5)
+    expect(mapped.amountDue).toBe(15)
+  })
 })

@@ -16,7 +16,7 @@ import { AuthScreen } from "./features/auth/AuthScreen"
 import type { MenuItem, QrContext, Screen } from "./types"
 import type { PlacedOrder } from "./data/placeOrder"
 import { PaymentSetupError } from "./data/payments"
-import { splitInclusiveTax } from "@shared/lib/money"
+import { splitInclusiveTax, roundMoney } from "@shared/lib/money"
 import { fetchMenu } from "./data/menuApi"
 import { claimGuestOrder } from "./data/orders"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
@@ -220,7 +220,11 @@ function CustomerShell() {
 
             setCheckoutError("")
             try {
-              const total = intent.amount
+              // `amount` is the server's `amount_due` (items total + tip).
+              const amountDue = intent.amountDue ?? intent.amount
+              const tipAmount = intent.tipAmount ?? 0
+              const total = intent.total ?? roundMoney(amountDue - tipAmount)
+              // Split GST on the items total only: tips carry no GST.
               const { subtotal, tax } = splitInclusiveTax(
                 total,
                 currentContext.taxRate,
@@ -233,6 +237,8 @@ function CustomerShell() {
                 subtotal,
                 tax,
                 total,
+                tipAmount,
+                amountDue,
                 currency: intent.currency,
                 taxRate: currentContext.taxRate,
                 restaurantName: currentContext.restaurantName,

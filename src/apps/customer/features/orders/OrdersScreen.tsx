@@ -115,9 +115,19 @@ export function OrdersScreen({ onClose, customerId }: { onClose: () => void; cus
                 {order.items.length === 0 && <li>Items unavailable</li>}
               </ul>
               <div className={styles["history-order-total"]}>
-                <span>Total</span>
-                <strong>{formatMoney(order.total, order.currency)}</strong>
+                <span>{order.amountPaid > 0 ? "Amount paid" : "Amount due"}</span>
+                <strong>
+                  {formatMoney(
+                    order.amountPaid > 0 ? order.amountPaid : order.amountDue,
+                    order.currency,
+                  )}
+                </strong>
               </div>
+              {order.tipAmount > 0 && (
+                <p className="mt-1 text-right text-[10px] text-muted">
+                  Includes {formatMoney(order.tipAmount, order.currency)} tip
+                </p>
+              )}
               {order.refundedTotal > 0 && (
                 <p className="mt-2 text-[11px] text-muted">
                   Refunded to date: {formatMoney(order.refundedTotal, order.currency)}

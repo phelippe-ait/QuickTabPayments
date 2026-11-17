@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router"
 import { useAuth } from "@shared/auth/AuthContext"
 import { supabase } from "@shared/lib/supabase"
 import { cn } from "@shared/lib/cn"
-import { formatMoney, inclusiveTaxLabel } from "@shared/lib/money"
+import { formatMoney, inclusiveTaxLabel, roundMoney } from "@shared/lib/money"
 import { orderStatusLabels, orderStatusTones } from "@shared/orders/status"
 import {
   paymentSummaryLabel,
@@ -402,9 +402,26 @@ export function OrderTrackingScreen() {
                     </dt>
                     <dd>{formatMoney(order.tax, order.currency)}</dd>
                   </div>
-                  <div className="flex justify-between text-[14px] font-bold text-ink">
-                    <dt>Total</dt>
+                  <div className="flex justify-between">
+                    <dt>Items total</dt>
                     <dd>{formatMoney(order.total, order.currency)}</dd>
+                  </div>
+                  {order.tipAmount > 0 && (
+                    <div className="flex justify-between">
+                      <dt>Tip</dt>
+                      <dd>{formatMoney(order.tipAmount, order.currency)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[14px] font-bold text-ink">
+                    <dt>{order.amountPaid > 0 ? "Paid" : "Amount due"}</dt>
+                    <dd>
+                      {formatMoney(
+                        order.amountPaid > 0
+                          ? order.amountPaid
+                          : roundMoney(order.total + order.tipAmount),
+                        order.currency,
+                      )}
+                    </dd>
                   </div>
                 </dl>
 

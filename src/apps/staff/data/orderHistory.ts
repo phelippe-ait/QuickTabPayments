@@ -1,5 +1,6 @@
 import type { Order } from "../types";
 import type { Database, PaymentStatus } from "@shared/lib/database.types";
+import { roundMoney } from "@shared/lib/money";
 import { paymentStatusLabel } from "@shared/orders/paymentLabels";
 
 type DatabaseOrder = Database["public"]["Tables"]["orders"]["Row"];
@@ -51,6 +52,7 @@ export function toHistoryOrder(row: HistoryRow): Order {
   }[row.status] as Order["kitchenStatus"];
 
   const latestPayment = row.payments?.[0];
+  const tipAmount = Number(row.tip_amount ?? 0);
 
   return {
     id: row.order_number,
@@ -60,6 +62,8 @@ export function toHistoryOrder(row: HistoryRow): Order {
     createdAt: row.created_at,
     time: formatOrderTime(row.created_at),
     total: Number(row.total),
+    tipAmount,
+    amountDue: roundMoney(Number(row.total) + tipAmount),
     subtotal: Number(row.subtotal),
     tax: Number(row.tax),
     status:

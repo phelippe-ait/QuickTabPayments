@@ -149,6 +149,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       orderNumber: placed.order_number,
       trackingToken: placed.tracking_token,
       amount,
+      total: Number(placed.total ?? amount),
+      tipAmount,
+      amountDue: amount,
       currency,
       status: "pending",
     });

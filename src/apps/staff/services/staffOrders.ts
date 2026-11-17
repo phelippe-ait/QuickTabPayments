@@ -1,4 +1,5 @@
 import { supabase } from "../../../shared/lib/supabase"
+import { roundMoney } from "@shared/lib/money"
 import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
 import { paymentStatusLabel } from "@shared/orders/paymentLabels"
 import {
@@ -12,6 +13,7 @@ export type StaffOrderRow = {
   order_number: string
   status: string
   total: number
+  tip_amount?: number | null
   created_at: string
   table_id: string | null
   restaurant_id: string
@@ -49,6 +51,7 @@ export async function fetchStaffOrders(restaurantId: string) {
       order_number,
       status,
       total,
+      tip_amount,
       created_at,
       table_id,
       restaurant_id,
@@ -144,6 +147,7 @@ export function canKitchenTransition(
 export function mapStaffOrder(row: StaffOrderRow): Order {
   const kitchenStatus = mapKitchenStatus(row.status)
   const latestPayment = row.payments?.[0]
+  const tipAmount = Number(row.tip_amount ?? 0)
 
   return {
     id: row.order_number,
@@ -159,6 +163,8 @@ export function mapStaffOrder(row: StaffOrderRow): Order {
       minute: "2-digit",
     }),
     total: row.total,
+    tipAmount,
+    amountDue: roundMoney(row.total + tipAmount),
     status:
       kitchenStatus === "Completed"
         ? "Completed"

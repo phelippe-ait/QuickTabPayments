@@ -1,4 +1,5 @@
 import { requireSupabase } from "@shared/data/client"
+import { roundMoney } from "@shared/lib/money"
 import type {
   OrderStatus,
   PaymentStatus,
@@ -19,7 +20,14 @@ export type CustomerOrder = {
   status: OrderStatus
   subtotal: number
   tax: number
+  /** GST-inclusive items total (before tip). */
   total: number
+  /** Tip added on top of the items total; no GST on the tip. */
+  tipAmount: number
+  /** `total + tipAmount` — what the order charges. */
+  amountDue: number
+  /** Sum of succeeded payments; 0 until the webhook confirms. */
+  amountPaid: number
   currency: string
   restaurantName: string
   tableNumber: string | null
@@ -38,6 +46,7 @@ type HistoryRow = {
   subtotal: number
   tax: number
   total: number
+  tip_amount?: number
   tracking_token: string
   created_at: string
   tables: { table_number: string } | null
@@ -71,6 +80,7 @@ const historySelect = `
   subtotal,
   tax,
   total,
+  tip_amount,
   tracking_token,
   created_at,
   tables(table_number),
@@ -90,6 +100,16 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
     const refundedTotal = (row.refunds ?? [])
       .filter((refund) => refund.status === "succeeded")
       .reduce((total, refund) => total + Number(refund.amount), 0)
+    const tipAmount = Number(row.tip_amount ?? 0)
+    const amountDue = roundMoney(Number(row.total) + tipAmount)
+    const amountPaid = roundMoney(
+      (row.payments ?? [])
+        .filter(
+          (entry) =>
+            entry.status === "succeeded" || entry.status === "refunded",
+        )
+        .reduce((total, entry) => total + Number(entry.amount), 0),
+    )
 
     return {
       id: row.id,
@@ -98,6 +118,9 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
       subtotal: Number(row.subtotal),
       tax: Number(row.tax),
       total: Number(row.total),
+      tipAmount,
+      amountDue,
+      amountPaid,
       currency: row.restaurants?.currency ?? "AUD",
       restaurantName: row.restaurants?.name ?? "",
       tableNumber: row.tables?.table_number ?? null,

@@ -1,5 +1,6 @@
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { supabase } from "@shared/lib/supabase";
+import type { TipSelection } from "@shared/lib/money";
 import type { CartItem } from "../types";
 import {
   placeOrderErrorMessage,
@@ -29,6 +30,8 @@ export type CreatePaymentIntentInput = {
   notes?: string;
   items: CartItem[];
   location?: CustomerLocation;
+  /** Optional tip; `null` means no tip. The RPC recomputes the amount. */
+  tip?: TipSelection | null;
 };
 
 export type PaymentIntentResponse = {
@@ -36,7 +39,13 @@ export type PaymentIntentResponse = {
   orderId: string;
   orderNumber: string;
   trackingToken: string;
+  /** Amount actually charged (items total + tip). */
   amount: number;
+  /** GST-inclusive items total, before the tip. */
+  total?: number;
+  tipAmount?: number;
+  /** Server-computed `amount_due`; mirrors `amount` when present. */
+  amountDue?: number;
   currency: string;
   status: "pending";
 };
@@ -59,6 +68,7 @@ const ERROR_CODES: PlaceOrderErrorCode[] = [
   "customer_location_invalid",
   "outside_ordering_radius",
   "restaurant_location_not_configured",
+  "invalid_tip",
 ];
 
 export class PaymentSetupError extends Error {
@@ -101,6 +111,7 @@ export async function createPaymentIntent(
             : {}),
         })),
       location: input.location,
+      tip: input.tip ?? null,
     }),
   });
 

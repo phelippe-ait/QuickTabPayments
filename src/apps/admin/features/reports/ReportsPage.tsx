@@ -129,12 +129,12 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
             <KpiCard
               label="Gross revenue"
               value={formatMoney(report.gross_revenue, report.currency)}
-              caption={periodLabel}
+              caption={`${periodLabel} · excludes tips`}
             />
             <KpiCard
               label="Paid revenue"
               value={formatMoney(report.paid_revenue, report.currency)}
-              caption={periodLabel}
+              caption={`${periodLabel} · includes tips`}
             />
             <KpiCard
               label="Orders"
@@ -144,7 +144,7 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
             <KpiCard
               label="Average order value"
               value={formatMoney(report.aov, report.currency)}
-              caption={periodLabel}
+              caption={`${periodLabel} · excludes tips`}
             />
             <KpiCard
               label="Refunded"

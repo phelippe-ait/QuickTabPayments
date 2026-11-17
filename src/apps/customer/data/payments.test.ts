@@ -101,6 +101,44 @@ describe("createPaymentIntent", () => {
     );
   });
 
+  it("sends a percentage tip payload", async () => {
+    await createPaymentIntent({ ...input, tip: { type: "percent", value: 10 } });
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tip: { type: "percent", value: 10 },
+    });
+  });
+
+  it("sends a fixed custom tip payload", async () => {
+    await createPaymentIntent({ ...input, tip: { type: "fixed", value: 5 } });
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tip: { type: "fixed", value: 5 },
+    });
+  });
+
+  it("sends an explicit null tip when none is selected", async () => {
+    await createPaymentIntent(input);
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).tip).toBeNull();
+  });
+
+  it("maps invalid_tip onto a friendly checkout error", async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "invalid_tip" }),
+    });
+
+    await expect(createPaymentIntent(input)).rejects.toMatchObject({
+      name: "PaymentSetupError",
+      code: "invalid_tip",
+      message: expect.stringMatching(/tip/i),
+    });
+  });
+
   it("maps API errors onto checkout codes", async () => {
     mocks.fetch.mockResolvedValue({
       ok: false,

@@ -81,4 +81,26 @@ describe("OrderConfirmation", () => {
 
     expect(screen.getByText("We couldn't find that order")).toBeInTheDocument()
   })
+
+  it("shows the tip and the amount due from the payment response", () => {
+    render(
+      <MemoryRouter>
+        <OrderConfirmation
+          order={{ ...order, tipAmount: 0.47, amountDue: 5.17 }}
+          isLoggedIn={false}
+          onClose={() => {}}
+          onLogin={() => {}}
+          onSignup={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText("Tip")).toBeInTheDocument()
+    expect(screen.getByText(/0\.47/)).toBeInTheDocument()
+    expect(screen.getByText("Amount due")).toBeInTheDocument()
+    expect(screen.getByText(/5\.17/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/GST is included in the items total/i),
+    ).toBeInTheDocument()
+  })
 })

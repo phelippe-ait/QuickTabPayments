@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Elements,
   PaymentElement,
@@ -6,7 +6,12 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { Button } from "@shared/ui/Button";
-import { formatMoney, roundMoney } from "@shared/lib/money";
+import {
+  computeTipPreview,
+  formatMoney,
+  roundMoney,
+  type TipSelection,
+} from "@shared/lib/money";
 import { trackingUrl } from "../../data/tracking";
 import {
   createPaymentIntent,
@@ -27,6 +32,10 @@ export type StripeCheckoutProps = {
   tableToken: string;
   customerName: string;
   notes: string;
+  /** Optional tip chosen on the checkout screen; the server recomputes it. */
+  tip?: TipSelection | null;
+  /** Explains why Pay is disabled when the tip input is invalid. */
+  disabledReason?: string;
   canPay: boolean;
   onRequestLocation?: () => Promise<CustomerLocation>;
   onPaid: (intent: PaymentIntentResponse) => Promise<void> | void;
@@ -39,7 +48,7 @@ export type StripeCheckoutProps = {
  * so abandoning checkout never creates a phantom order.
  */
 export function StripeCheckout(props: StripeCheckoutProps) {
-  const { items, currency } = props;
+  const { items, currency, tip } = props;
   const stripePromise = getStripePromise();
   const total = useMemo(
     () =>
@@ -51,11 +60,14 @@ export function StripeCheckout(props: StripeCheckoutProps) {
       ),
     [items],
   );
+  // Preview only — `/api/create-payment-intent` charges the server's
+  // `amount_due`, and the webhook remains the source of truth.
+  const amountDue = roundMoney(total + computeTipPreview(total, tip ?? null));
 
   const options = useMemo(
     () => ({
       mode: "payment" as const,
-      amount: Math.max(1, Math.round(total * 100)),
+      amount: Math.max(1, Math.round(amountDue * 100)),
       currency: currency.toLowerCase(),
       paymentMethodCreation: "manual" as const,
       appearance: {
@@ -63,7 +75,7 @@ export function StripeCheckout(props: StripeCheckoutProps) {
         variables: { colorPrimary: "#ba4f60" },
       },
     }),
-    [currency, total],
+    [currency, amountDue],
   );
 
   if (!stripePromise) {
@@ -72,7 +84,7 @@ export function StripeCheckout(props: StripeCheckoutProps) {
 
   return (
     <Elements stripe={stripePromise} options={options}>
-      <PaymentForm {...props} total={total} />
+      <PaymentForm {...props} amountDue={amountDue} />
     </Elements>
   );
 }
@@ -104,17 +116,28 @@ function PaymentForm({
   tableToken,
   customerName,
   notes,
+  tip,
+  disabledReason,
   canPay,
   onRequestLocation,
   onPaid,
   onSetupError,
-  total,
-}: StripeCheckoutProps & { total: number }) {
+  amountDue,
+}: StripeCheckoutProps & { amountDue: number }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
+
+  // The tip changes the charge after the PaymentElement has mounted; keep the
+  // element's amount (used by wallet buttons) in sync with the amount due.
+  useEffect(() => {
+    if (!elements) return;
+    void elements.update({
+      amount: Math.max(1, Math.round(amountDue * 100)),
+    });
+  }, [elements, amountDue]);
 
   const pay = async () => {
     if (!stripe || !elements || !canPay || submitting) return;
@@ -138,6 +161,7 @@ function PaymentForm({
         notes,
         items,
         location,
+        tip: tip ?? null,
       });
 
       const returnUrl = new URL(
@@ -181,7 +205,7 @@ function PaymentForm({
         Payment
       </h2>
       <p className="mb-3 text-[11px] text-muted">
-        Pay {formatMoney(total, currency)} securely with card, Apple Pay or
+        Pay {formatMoney(amountDue, currency)} securely with card, Apple Pay or
         Google Pay.
       </p>
       {onRequestLocation && (
@@ -209,12 +233,14 @@ function PaymentForm({
         onClick={() => void pay()}
         disabled={!canPay || !ready || submitting}
       >
-        {submitting ? "Confirming payment…" : `Pay ${formatMoney(total, currency)}`}
+        {submitting
+          ? "Confirming payment…"
+          : `Pay ${formatMoney(amountDue, currency)}`}
       </Button>
 
       {!canPay && (
         <p className="mt-2 text-center text-[11px] text-muted" role="status">
-          Enter a name for the order to enable payment.
+          {disabledReason ?? "Enter a name for the order to enable payment."}
         </p>
       )}
 

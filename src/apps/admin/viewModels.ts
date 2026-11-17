@@ -83,7 +83,12 @@ export type OrderVM = {
   status: OrderStatus;
   createdAt: string;
   createdAtLabel: string;
+  /** GST-inclusive items total (before tip). */
   total: number;
+  /** Customer tip added on top of `total`; no GST on the tip. */
+  tipAmount: number;
+  /** `total + tipAmount` — what the customer is charged. */
+  amountDue: number;
   subtotal: number;
   tax: number;
   currency: string;

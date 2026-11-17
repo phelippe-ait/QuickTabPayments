@@ -11,6 +11,7 @@ describe("mapCustomerOrders", () => {
         subtotal: 4.27,
         tax: 0.43,
         total: 4.7,
+        tip_amount: 1.2,
         tracking_token: "token-1",
         created_at: "2026-10-25T02:00:00Z",
         tables: { table_number: "T05" },
@@ -27,7 +28,7 @@ describe("mapCustomerOrders", () => {
           {
             status: "succeeded",
             payment_method_type: "card",
-            amount: 4.7,
+            amount: 5.9,
             receipt_url: "https://receipt",
           },
         ],
@@ -44,6 +45,9 @@ describe("mapCustomerOrders", () => {
       paymentStatus: "succeeded",
       receiptUrl: "https://receipt",
       refundedTotal: 1.2,
+      tipAmount: 1.2,
+      amountDue: 5.9,
+      amountPaid: 5.9,
       items: [
         { name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 },
       ],
@@ -74,5 +78,8 @@ describe("mapCustomerOrders", () => {
     expect(orders[0].items).toEqual([])
     expect(orders[0].paymentStatus).toBeNull()
     expect(orders[0].refundedTotal).toBe(0)
+    expect(orders[0].tipAmount).toBe(0)
+    expect(orders[0].amountDue).toBe(0)
+    expect(orders[0].amountPaid).toBe(0)
   })
 })

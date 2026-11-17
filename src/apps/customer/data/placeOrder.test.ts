@@ -107,6 +107,7 @@ describe("placeOrder", () => {
       p_customer_name: "Olivia",
       p_notes: "extra hot",
       p_items: [{ menu_item_id: "item-1", quantity: 2 }],
+      p_tip: null,
     })
     const payload = mocks.rpc.mock.calls[0][1]
     expect(JSON.stringify(payload.p_items)).not.toContain("999")
@@ -169,6 +170,49 @@ describe("placeOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "empty_cart" })
     expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it("forwards the tip payload to the server", async () => {
+    mocks.rpc.mockResolvedValue({ data: rpcResult, error: null })
+
+    await placeOrder({
+      restaurantSlug: "quicktab-demo-cafe",
+      tableToken: "table-token",
+      customerName: "Olivia",
+      items: [
+        { menuItemId: "item-1", name: "Flat White", unitPrice: 4.7, quantity: 1 },
+      ],
+      tip: { type: "fixed", value: 5 },
+    })
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_tip: { type: "fixed", value: 5 },
+      }),
+    )
+  })
+
+  it("maps invalid_tip onto a friendly message", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "invalid_tip", details: null, hint: null },
+    })
+
+    await expect(
+      placeOrder({
+        restaurantSlug: "cafe",
+        tableToken: "token",
+        customerName: "Olivia",
+        items: [
+          { menuItemId: "item-1", name: "Coffee", unitPrice: 4.7, quantity: 1 },
+        ],
+        tip: { type: "percent", value: 50 },
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_tip",
+      message: expect.stringMatching(/tip/i),
+    })
   })
 
   it("maps RPC validation errors", async () => {

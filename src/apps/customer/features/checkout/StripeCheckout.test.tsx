@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import type { TipSelection } from "@shared/lib/money";
 import { StripeCheckout } from "./StripeCheckout";
 
 const mocks = vi.hoisted(() => {
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => {
       calls.push("submit");
       return { error: null as null | { message: string; code?: string } };
     }),
+    update: vi.fn(async () => {}),
     createPaymentIntent: vi.fn(async () => {
       calls.push("intent");
       return {
@@ -42,7 +44,7 @@ vi.mock("@stripe/react-stripe-js", async () => {
       return <div data-testid="payment-element" />;
     },
     useStripe: () => ({ confirmPayment: mocks.confirmPayment }),
-    useElements: () => ({ submit: mocks.submit }),
+    useElements: () => ({ submit: mocks.submit, update: mocks.update }),
   };
 });
 
@@ -55,7 +57,11 @@ const items = [
   { menuItemId: "item-1", name: "Flat White", unitPrice: 4.7, quantity: 1 },
 ];
 
-function setup(canPay = true) {
+function setup(
+  canPay = true,
+  tip: TipSelection | null = null,
+  disabledReason?: string,
+) {
   render(
     <StripeCheckout
       items={items}
@@ -67,6 +73,8 @@ function setup(canPay = true) {
       tableToken="table"
       customerName="Olivia"
       notes=""
+      tip={tip}
+      disabledReason={disabledReason}
       canPay={canPay}
       onPaid={mocks.onPaid}
     />,
@@ -144,5 +152,52 @@ describe("StripeCheckout", () => {
     expect(
       screen.getByText(/enter a name for the order/i),
     ).toBeInTheDocument();
+  });
+
+  it("charges the items total plus the tip and forwards the tip payload", async () => {
+    setup(true, { type: "percent", value: 10 });
+    expect(
+      screen.getByRole("button", { name: /pay a\$5\.17/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$5\.17/i }));
+
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+    expect(mocks.createPaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tip: { type: "percent", value: 10 },
+      }),
+    );
+  });
+
+  it("sends a fixed custom tip", async () => {
+    setup(true, { type: "fixed", value: 5 });
+    expect(
+      screen.getByRole("button", { name: /pay a\$9\.70/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$9\.70/i }));
+
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+    expect(mocks.createPaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tip: { type: "fixed", value: 5 },
+      }),
+    );
+  });
+
+  it("sends an explicit null tip when none is selected", async () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+    expect(mocks.createPaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ tip: null }),
+    );
+  });
+
+  it("explains why payment is disabled for an invalid tip", () => {
+    setup(false, null, "Tip can't be more than $500.");
+    expect(screen.getByText("Tip can't be more than $500.")).toBeInTheDocument();
   });
 });

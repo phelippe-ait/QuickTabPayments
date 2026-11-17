@@ -27,6 +27,10 @@ export type Order = {
   total: number
   subtotal?: number
   tax?: number
+  /** Tip added on top of the items total; no GST on the tip. */
+  tipAmount?: number
+  /** `total + tipAmount` — the amount charged. */
+  amountDue?: number
   status: "In progress" | "Completed" | "Cancelled"
   kitchenStatus: KitchenStatus
   server: string

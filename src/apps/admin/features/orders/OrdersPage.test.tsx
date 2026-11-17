@@ -11,6 +11,8 @@ const order: OrderVM = {
   createdAt: new Date(Date.now() - 18 * 60_000).toISOString(),
   createdAtLabel: "21 Oct 2026, 9:42 am",
   total: 13.64,
+  tipAmount: 1.2,
+  amountDue: 14.84,
   subtotal: 12.4,
   tax: 1.24,
   currency: "AUD",
@@ -121,6 +123,8 @@ describe("OrdersPage", () => {
     expect(link).toHaveAttribute("href", "/admin/orders/order-1")
     expect(screen.getByText("Olivia Moore")).toBeInTheDocument()
     expect(screen.getAllByText("Preparing").length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/14\.84/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/incl\. .*1\.20 tip/i)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /order history/i })).toBeNull()
   })
 

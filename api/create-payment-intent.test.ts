@@ -160,7 +160,12 @@ describe("POST /api/create-payment-intent", () => {
       expect.objectContaining({ p_amount: 46.2 }),
     );
     expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ amount: 46.2 });
+    expect(res.body).toMatchObject({
+      amount: 46.2,
+      total: 42,
+      tipAmount: 4.2,
+      amountDue: 46.2,
+    });
   });
 
   it("forwards whitelisted modifier ids to the RPC", async () => {
