@@ -65,6 +65,9 @@ describe("mapPlaceOrderError", () => {
     ["empty_cart", "empty_cart"],
     ["customer_name_required", "customer_name_required"],
     ["order_number_conflict", "order_number_conflict"],
+    ["invalid_modifier", "invalid_modifier"],
+    ["modifier_selection_invalid", "modifier_selection_invalid"],
+    ["modifier_required", "modifier_required"],
   ])("maps %s from the Postgres message", (message, code) => {
     const error = mapPlaceOrderError({ message })
     expect(error).toBeInstanceOf(PlaceOrderError)
@@ -109,6 +112,51 @@ describe("placeOrder", () => {
     expect(JSON.stringify(payload.p_items)).not.toContain("999")
     expect(JSON.stringify(payload.p_items)).not.toContain("Flat White")
     expect(order.customerName).toBe("Olivia")
+  })
+
+  it("sends modifier ids per line and never client prices or names", async () => {
+    mocks.rpc.mockResolvedValue({ data: rpcResult, error: null })
+
+    await placeOrder({
+      restaurantSlug: "quicktab-demo-cafe",
+      tableToken: "table-token",
+      customerName: "Olivia",
+      items: [
+        {
+          menuItemId: "item-1",
+          name: "Flat White",
+          unitPrice: 999,
+          quantity: 1,
+          modifiers: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Oat milk",
+              priceAdjustment: 0.5,
+              groupName: "Milk",
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [
+          {
+            menu_item_id: "item-1",
+            quantity: 1,
+            modifiers: ["11111111-1111-4111-8111-111111111111"],
+          },
+        ],
+      }),
+    )
+
+    const payload = mocks.rpc.mock.calls[0][1]
+    const serialized = JSON.stringify(payload.p_items)
+    expect(serialized).not.toContain("999")
+    expect(serialized).not.toContain("Oat milk")
+    expect(serialized).not.toContain("priceAdjustment")
   })
 
   it("rejects an empty cart without calling the RPC", async () => {

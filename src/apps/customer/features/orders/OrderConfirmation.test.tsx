@@ -20,7 +20,15 @@ const order: PlacedOrder = {
   taxRate: 0.1,
   paymentStatus: "succeeded" as const,
   receiptUrl: "https://receipt.example",
-  items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
+  items: [
+    {
+      name: "Flat White",
+      quantity: 1,
+      unitPrice: 4.7,
+      subtotal: 4.7,
+      modifiers: [{ name: "Oat milk", priceAdjustment: 0.5 }],
+    },
+  ],
 }
 
 function renderConfirmation() {
@@ -44,6 +52,7 @@ describe("OrderConfirmation", () => {
     expect(screen.getByText("QT-261025-0001")).toBeInTheDocument()
     expect(screen.getByText("Table T05")).toBeInTheDocument()
     expect(screen.getByText(/Flat White/)).toBeInTheDocument()
+    expect(screen.getByText("Oat milk")).toBeInTheDocument()
     expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
     expect(screen.getByText("Payment received")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "View receipt" })).toHaveAttribute(

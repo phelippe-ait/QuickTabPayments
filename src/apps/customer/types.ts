@@ -21,6 +21,8 @@ export type MenuItem = {
   dietaryTags: string[];
   categoryId: string;
   displayOrder: number;
+  /** Customer-selectable groups loaded with the menu, in display order. */
+  modifierGroups?: ModifierGroup[];
 };
 
 /** Customer selectable options configured for a menu item. */
@@ -56,7 +58,7 @@ export type MenuCategory = {
   items: MenuItem[];
 };
 
-/** Cart lines are keyed by `menu_item_id`; the price is display-only. */
+/** Cart lines are keyed by menu item id + the selected modifier ids. */
 export type CartItem = {
   /** Stable key for a menu item + its selected modifier set. */
   lineId?: string;

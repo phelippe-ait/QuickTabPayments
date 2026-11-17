@@ -1,7 +1,10 @@
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { supabase } from "@shared/lib/supabase";
 import type { CartItem } from "../types";
-import type { PlaceOrderErrorCode } from "./placeOrder";
+import {
+  placeOrderErrorMessage,
+  type PlaceOrderErrorCode,
+} from "./placeOrder";
 import type { CustomerLocation } from "./geolocation";
 
 const publishableKey = (
@@ -108,7 +111,10 @@ export async function createPaymentIntent(
   if (!res.ok) {
     const message = payload.error ?? "payment_setup_failed";
     const code = ERROR_CODES.find((candidate) => message.includes(candidate));
-    throw new PaymentSetupError(code ?? "unknown", message);
+    throw new PaymentSetupError(
+      code ?? "unknown",
+      code ? placeOrderErrorMessage(code) : message,
+    );
   }
 
   return payload as PaymentIntentResponse;

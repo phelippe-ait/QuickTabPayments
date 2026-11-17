@@ -55,6 +55,21 @@ describe("OrderTrackingScreen", () => {
     expect(mocks.fetchOrderTracking).toHaveBeenCalledWith("token-1")
   })
 
+  it("shows modifier names under each ordered line", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      items: [
+        {
+          ...trackedOrder.items[0],
+          modifiers: [{ name: "Oat milk", priceAdjustment: 0.5 }],
+        },
+      ],
+    })
+    renderTracking()
+
+    expect(await screen.findByText("Oat milk")).toBeInTheDocument()
+  })
+
   it("renders the pending payment-confirmation state", async () => {
     mocks.fetchOrderTracking.mockResolvedValue({
       ...trackedOrder,

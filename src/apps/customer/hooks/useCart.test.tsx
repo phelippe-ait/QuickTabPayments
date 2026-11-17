@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { act, renderHook } from "@testing-library/react"
-import type { MenuItem } from "../types"
+import type { MenuItem, ModifierChoice } from "../types"
 import { cartLineId, cartStorageKey, parseCart, useCart } from "./useCart"
 
 const coffee: MenuItem = {
@@ -30,6 +30,20 @@ const toast: MenuItem = {
 const tableA = { slug: "quicktab-demo-cafe", tableToken: "table-a" }
 const tableB = { slug: "quicktab-demo-cafe", tableToken: "table-b" }
 
+const oatMilk: ModifierChoice = {
+  id: "mod-oat-milk",
+  name: "Oat milk",
+  priceAdjustment: 0.5,
+  groupName: "Milk",
+}
+
+const syrup: ModifierChoice = {
+  id: "mod-syrup",
+  name: "Vanilla syrup",
+  priceAdjustment: 0.5,
+  groupName: "Extras",
+}
+
 describe("useCart", () => {
   beforeEach(() => {
     window.sessionStorage.clear()
@@ -55,6 +69,51 @@ describe("useCart", () => {
     act(() => result.current.add(toast, 1))
     act(() => result.current.remove(cartLineId("item-2")))
     expect(result.current.items).toEqual([])
+  })
+
+  it("keeps different modifier sets separate and merges identical ones", () => {
+    const { result } = renderHook(() => useCart(tableA))
+
+    act(() => result.current.add(coffee, 1, [oatMilk]))
+    act(() => result.current.add(coffee, 1, [oatMilk]))
+    act(() => result.current.add(coffee, 1, [oatMilk, syrup]))
+
+    expect(result.current.items).toHaveLength(2)
+
+    const plain = result.current.items.find(
+      (line) => line.lineId === cartLineId("item-1", [oatMilk]),
+    )
+    const loaded = result.current.items.find(
+      (line) => line.lineId === cartLineId("item-1", [oatMilk, syrup]),
+    )
+
+    expect(plain).toMatchObject({ quantity: 2, unitPrice: 5.2 })
+    expect(loaded).toMatchObject({ quantity: 1, unitPrice: 5.7 })
+    expect(result.current.total).toBe(16.1)
+  })
+
+  it("ignores modifier id ordering when merging the same combination", () => {
+    const { result } = renderHook(() => useCart(tableA))
+
+    act(() => result.current.add(coffee, 1, [oatMilk, syrup]))
+    act(() => result.current.add(coffee, 1, [syrup, oatMilk]))
+
+    expect(result.current.items).toHaveLength(1)
+    expect(result.current.items[0]).toMatchObject({ quantity: 2, unitPrice: 5.7 })
+  })
+
+  it("persists the selected modifiers with the line", () => {
+    const { result } = renderHook(() => useCart(tableA))
+    act(() => result.current.add(coffee, 2, [oatMilk]))
+
+    const stored = parseCart(window.sessionStorage.getItem(cartStorageKey(tableA)))
+    expect(stored[0]).toMatchObject({
+      lineId: cartLineId("item-1", [oatMilk]),
+      baseUnitPrice: 4.7,
+      unitPrice: 5.2,
+      quantity: 2,
+      modifiers: [oatMilk],
+    })
   })
 
   it("persists per restaurant + table and survives a remount", () => {

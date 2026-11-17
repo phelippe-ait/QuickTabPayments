@@ -87,6 +87,11 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
 
 const ERROR_CODES = Object.keys(ERROR_MESSAGES) as PlaceOrderErrorCode[]
 
+/** Friendly copy for a known RPC validation code. */
+export function placeOrderErrorMessage(code: PlaceOrderErrorCode): string {
+  return ERROR_MESSAGES[code]
+}
+
 export class PlaceOrderError extends Error {
   readonly code: PlaceOrderErrorCode
 

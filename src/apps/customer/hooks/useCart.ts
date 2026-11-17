@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { roundMoney } from "@shared/lib/money"
 import type { CartItem, MenuItem, ModifierChoice } from "../types"
 import type { QrSource } from "../data/qrContext"
+import { buildOrderItemKey } from "../data/orderItemKey"
 
 export const CART_STORAGE_PREFIX = "quicktab:cart"
 
@@ -14,8 +15,11 @@ export function serializeCart(items: CartItem[]): string {
 }
 
 export function cartLineId(menuItemId: string, modifiers: ModifierChoice[] = []): string {
-  const modifierKey = modifiers.map((modifier) => modifier.id).sort().join(",")
-  return `${menuItemId}::${modifierKey}`
+  // Shared with P05 so the client's grouping key matches `place_order` exactly.
+  return buildOrderItemKey(
+    menuItemId,
+    modifiers.map((modifier) => modifier.id),
+  )
 }
 
 /** Tolerant parser: malformed/old storage must never break ordering. */
