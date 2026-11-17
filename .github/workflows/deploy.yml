@@ -1,0 +1,155 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One deployment per ref. A new push to a PR cancels the previous preview run,
+# but production deploys on main are queued instead of being cancelled midway.
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Vercel deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+      url: ${{ steps.deploy.outputs.deployment_url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      IS_PRODUCTION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      DEPLOYMENT_TYPE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'Production' || 'Preview' }}
+    steps:
+      - name: Check Vercel credentials
+        id: guard
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ] || [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            if [ "${IS_PRODUCTION}" = "true" ]; then
+              echo "::error::VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID must be configured to deploy production from main."
+              exit 1
+            fi
+            echo "::notice::Vercel secrets are not configured; skipping this preview deploy. Add VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID to enable deploys."
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Install Vercel CLI
+        if: steps.guard.outputs.skip != 'true'
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel environment
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if [ "${IS_PRODUCTION}" = "true" ]; then
+            vercel pull --yes --environment=production --token="${VERCEL_TOKEN}"
+          else
+            vercel pull --yes --environment=preview --token="${VERCEL_TOKEN}"
+          fi
+
+      - name: Build
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if [ "${IS_PRODUCTION}" = "true" ]; then
+            vercel build --yes --prod --token="${VERCEL_TOKEN}"
+          else
+            vercel build --yes --token="${VERCEL_TOKEN}"
+          fi
+
+      - name: Deploy
+        id: deploy
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if [ "${IS_PRODUCTION}" = "true" ]; then
+            vercel deploy --prebuilt --prod --token="${VERCEL_TOKEN}" | tee vercel-deploy.log
+          else
+            vercel deploy --prebuilt --token="${VERCEL_TOKEN}" | tee vercel-deploy.log
+          fi
+          DEPLOYMENT_URL="$(grep -Eo 'https://[^[:space:]]+\.vercel\.app' vercel-deploy.log | tail -n 1 || true)"
+          if [ -z "${DEPLOYMENT_URL}" ]; then
+            echo "::error::Could not read the deployment URL from the Vercel CLI output."
+            exit 1
+          fi
+          {
+            echo "deployment_url=${DEPLOYMENT_URL}"
+            echo "deployment_type=${DEPLOYMENT_TYPE}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "### ${DEPLOYMENT_TYPE} deployment: ${DEPLOYMENT_URL}" >> "${GITHUB_STEP_SUMMARY}"
+
+  comment:
+    name: Comment preview URL
+    needs: deploy
+    if: github.event_name == 'pull_request' && needs.deploy.outputs.deployment_url != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Upsert sticky preview comment
+        uses: actions/github-script@v7
+        env:
+          DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment_url }}
+          DEPLOYMENT_TYPE: ${{ needs.deploy.outputs.deployment_type }}
+        with:
+          script: |
+            const marker = '<!-- vercel-preview -->';
+            const url = process.env.DEPLOYMENT_URL;
+            const type = process.env.DEPLOYMENT_TYPE || 'Preview';
+            const sha = context.payload.pull_request?.head?.sha ?? context.sha;
+            const shortSha = sha.substring(0, 7);
+            const body = [
+              marker,
+              `### ${type} deployment`,
+              '',
+              '| Field | Value |',
+              '| --- | --- |',
+              `| Deployment | ${type} |`,
+              `| URL | ${url} |`,
+              `| Commit | \`${shortSha}\` |`,
+              '',
+              '_This comment is updated automatically by the deploy workflow._',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

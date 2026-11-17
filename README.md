@@ -617,6 +617,29 @@ deployed origin and add both `https://<domain>/**` and
 keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh while
 letting `/api/*` reach the serverless functions.
 
+### Automated deploys (GitHub Actions)
+
+`.github/workflows/deploy.yml` deploys with the Vercel CLI:
+
+- **Push to `main`** → Production deployment (`vercel build --prod` then
+  `vercel deploy --prebuilt --prod`), recorded in the `production` GitHub
+  environment.
+- **Pull request** → Preview deployment, recorded in the `preview` environment.
+  Its URL is posted in a single **sticky PR comment** (`<!-- vercel-preview -->`
+  marker) and updated on every new push instead of adding another comment.
+
+Required repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Where to get it |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `vercel link` / `vercel inspect`, or the Vercel project settings |
+| `VERCEL_PROJECT_ID` | `vercel link` / `vercel inspect`, or the Vercel project settings |
+
+Until those secrets exist, preview runs skip with a workflow notice and pushes
+to `main` fail loudly. `ci.yml` remains the quality gate; the deploy workflow
+only builds what Vercel needs (no duplicated lint/test run).
+
 The `/staff` route is auth-gated: signed-out visitors get a staff sign-in
 screen, and signed-in users without an active membership see a no-access state.
 Reservations are hidden behind `RESERVATIONS_ENABLED` until they have a backing
