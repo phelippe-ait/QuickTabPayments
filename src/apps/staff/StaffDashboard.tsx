@@ -46,6 +46,18 @@ function StaffWorkspace() {
   const restaurantId = membership?.restaurantId ?? null
   const workspace = useStaffWorkspace(restaurantId)
 
+  // Keep an open history drawer live: payment/status updates replace the
+  // snapshot captured when the row was clicked.
+  const liveSelectedOrder = useMemo(
+    () =>
+      selectedOrder
+        ? (workspace.historyOrders.find(
+            (order) => order.databaseId === selectedOrder.databaseId,
+          ) ?? selectedOrder)
+        : null,
+    [selectedOrder, workspace.historyOrders],
+  )
+
   const userName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
     user?.user_metadata?.full_name ||
@@ -156,9 +168,9 @@ function StaffWorkspace() {
           onSave={saveTable}
         />
       )}
-      {selectedOrder && view === "history" && (
+      {liveSelectedOrder && view === "history" && (
         <HistoryOrderDrawer
-          order={selectedOrder}
+          order={liveSelectedOrder}
           onClose={() => setSelectedOrder(null)}
           currency={currency}
         />

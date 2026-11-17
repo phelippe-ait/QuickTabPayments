@@ -235,7 +235,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       const { data, error } = await client
         .from("orders")
         .select(
-          "id, restaurant_id, table_id, customer_id, customer_name_snapshot, order_number, status, subtotal, tax, total, tip_amount, notes, pickup_time_estimate, tracking_token, created_at, updated_at, completed_at, tables(table_number), order_items(item_name_snapshot, quantity, unit_price_snapshot, notes, order_item_modifiers(modifier_name_snapshot), menu_items(allergens)), payments(status, payment_method_type)",
+          "id, restaurant_id, table_id, customer_id, customer_name_snapshot, order_number, status, subtotal, tax, total, tip_amount, notes, pickup_time_estimate, tracking_token, created_at, updated_at, completed_at, tables(table_number), order_items(item_name_snapshot, quantity, unit_price_snapshot, notes, order_item_modifiers(modifier_name_snapshot), menu_items(allergens)), payments(status, payment_method_type, created_at)",
         )
         .eq("restaurant_id", restaurantId)
         .order("created_at", { ascending: false })
@@ -265,9 +265,10 @@ export function useStaffWorkspace(restaurantId: string | null) {
       setHistoryLoading(false)
     })
 
-    // Scoping guarantee (C7): every staff subscription is filtered to this
-    // restaurant on the server, so Realtime never streams another tenant's
-    // orders. Do not remove this filter or create an unscoped `orders` channel.
+    // Scoping guarantee (C7): the orders stream is filtered to this restaurant
+    // server-side; the payments stream has no restaurant_id column and is
+    // scoped by the staff RLS select policy. Do not remove the orders filter or
+    // create an unscoped `orders` channel.
     const channel = client
       .channel(`staff-order-history-${restaurantId}`)
       .on(
@@ -301,6 +302,22 @@ export function useStaffWorkspace(restaurantId: string | null) {
           // tabs converge on the database without cross-tab messaging.
           void loadHistory()
           void refreshOrdersRef.current?.()
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "payments",
+        },
+        () => {
+          // `payments` has no restaurant_id column, so Realtime scoping comes
+          // from the staff RLS select policy on the server. Even if an event
+          // arrived late, loadHistory() is restaurant-scoped, so no other
+          // tenant's data can enter state. This keeps webhook transitions
+          // ("Payment confirming" → "Paid"/"Failed") live in the drawer.
+          void loadHistory()
         },
       )
       .subscribe((status) => {

@@ -2,6 +2,7 @@ import type { Order } from "../types";
 import type { Database, PaymentStatus } from "@shared/lib/database.types";
 import { roundMoney } from "@shared/lib/money";
 import { paymentStatusLabel } from "@shared/orders/paymentLabels";
+import { selectLatestPayment } from "./latestPayment";
 
 type DatabaseOrder = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -16,7 +17,10 @@ type HistoryItemRow = {
 
 type HistoryRow = DatabaseOrder & {
   tables: { table_number: string } | null;
-  payments: { status: PaymentStatus }[];
+  payments: {
+    status: PaymentStatus;
+    created_at?: string | null;
+  }[];
   order_items?: HistoryItemRow[];
 };
 
@@ -61,7 +65,7 @@ export function toHistoryOrder(row: HistoryRow): Order {
     cancelled: "Cancelled",
   }[row.status] as Order["kitchenStatus"];
 
-  const latestPayment = row.payments?.[0];
+  const latestPayment = selectLatestPayment(row.payments);
   const tipAmount = Number(row.tip_amount ?? 0);
 
   // `order_items` is authoritative (migration 0015+). The notes JSON is only a

@@ -64,4 +64,23 @@ describe("toHistoryOrder", () => {
 
     expect(order.items).toEqual([])
   })
+
+  it("labels the payment from the settled row, not a newer retry", () => {
+    const order = toHistoryOrder(
+      row({
+        payments: [
+          {
+            status: "pending",
+            created_at: "2026-11-17T09:05:00.000Z",
+          },
+          {
+            status: "succeeded",
+            created_at: "2026-11-17T09:03:43.000Z",
+          },
+        ],
+      }),
+    )
+
+    expect(order.payment).toBe("Paid")
+  })
 })

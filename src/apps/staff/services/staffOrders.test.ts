@@ -105,4 +105,25 @@ describe("mapStaffOrder", () => {
     expect(mapped.tipAmount).toBe(2.5)
     expect(mapped.amountDue).toBe(15)
   })
+
+  it("labels payment from the settled row, not a newer retry", () => {
+    const mapped = mapStaffOrder(
+      row({
+        payments: [
+          {
+            status: "pending",
+            payment_method_type: null,
+            created_at: "2026-11-17T10:05:00.000Z",
+          },
+          {
+            status: "succeeded",
+            payment_method_type: "card",
+            created_at: "2026-11-17T10:02:00.000Z",
+          },
+        ],
+      }),
+    )
+
+    expect(mapped.payment).toBe("Paid")
+  })
 })
