@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   adminRpc: vi.fn(),
   createIntent: vi.fn(),
   cancelIntent: vi.fn(),
+  userClient: vi.fn(),
 }));
 
 vi.mock("./_lib/stripe", () => ({
@@ -19,7 +20,10 @@ vi.mock("./_lib/stripe", () => ({
 }));
 
 vi.mock("./_lib/supabaseAdmin", () => ({
-  userClient: () => ({ rpc: mocks.userRpc }),
+  userClient: (accessToken: string | null) => {
+    mocks.userClient(accessToken);
+    return { rpc: mocks.userRpc };
+  },
   adminClient: () => ({ rpc: mocks.adminRpc }),
 }));
 
@@ -46,11 +50,15 @@ function makeRes(): FakeRes {
   return res;
 }
 
-function makeReq(body: unknown, method = "POST") {
+function makeReq(
+  body: unknown,
+  method = "POST",
+  headers: Record<string, string> = { authorization: "Bearer token" },
+) {
   return {
     method,
     body,
-    headers: { authorization: "Bearer token" },
+    headers,
   } as never;
 }
 
@@ -111,6 +119,7 @@ describe("POST /api/create-payment-intent", () => {
       p_customer_latitude: null,
       p_customer_longitude: null,
     });
+    expect(mocks.userClient).toHaveBeenCalledWith("token");
     expect(mocks.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4200, currency: "aud" }),
     );
@@ -122,6 +131,47 @@ describe("POST /api/create-payment-intent", () => {
     expect(res.body).toMatchObject({
       clientSecret: "pi_1_secret",
       orderNumber: "QT-1",
+      status: "pending",
+    });
+  });
+
+  it("creates a guest order + intent when there is no Authorization header", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq(
+        {
+          restaurantSlug: "cafe",
+          tableToken: "table",
+          customerName: "Guest",
+          items: [{ menu_item_id: "item-1", quantity: 1 }],
+        },
+        "POST",
+        {},
+      ),
+      res as never,
+    );
+
+    // No Bearer token: the handler still calls place_order as anon, so
+    // auth.uid() stays null and the order is a guest order.
+    expect(mocks.userClient).toHaveBeenCalledWith(null);
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_restaurant_slug: "cafe",
+        p_table_token: "table",
+        p_customer_name: "Guest",
+      }),
+    );
+    expect(mocks.createIntent).toHaveBeenCalledTimes(1);
+    expect(mocks.adminRpc).toHaveBeenCalledWith(
+      "record_payment_intent",
+      expect.objectContaining({ p_stripe_payment_intent_id: "pi_1" }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      clientSecret: "pi_1_secret",
+      orderNumber: "QT-1",
+      trackingToken: "tok",
       status: "pending",
     });
   });

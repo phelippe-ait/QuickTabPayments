@@ -307,10 +307,14 @@ rollback;
 -- (t) Function grants. Expected: all five columns true.
 select
   has_function_privilege(
-    'anon', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+    'anon',
+    'public.place_order(text,text,text,text,jsonb,double precision,double precision,jsonb)',
+    'execute'
   ) as anon_can_place_order,
   has_function_privilege(
-    'authenticated', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+    'authenticated',
+    'public.place_order(text,text,text,text,jsonb,double precision,double precision,jsonb)',
+    'execute'
   ) as authenticated_can_place_order,
   has_function_privilege(
     'anon', 'public.get_order_tracking(text)', 'execute'
@@ -388,8 +392,9 @@ begin
     )
   );
 
-  if v_placed->>'status' <> 'confirmed' then
-    raise exception 'expected status confirmed, got %', v_placed->>'status';
+  -- Orders are unpaid until the Stripe webhook confirms them (0016 / 0027).
+  if v_placed->>'status' <> 'pending' then
+    raise exception 'expected status pending, got %', v_placed->>'status';
   end if;
 
   if (v_placed->>'total')::numeric <> round(v_expected_price * 2, 2) then
@@ -802,6 +807,96 @@ begin
     raise exception 'expected pending order, got %', v_out->>'status';
   end if;
   raise notice 'phase6 place_order creates pending orders ok';
+end $$;
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P26 — guest order starts `pending`, so a failed payment can cancel it
+-- (regression fixed in 0027_place_order_pending_status.sql).
+-- ---------------------------------------------------------------------
+-- Self-contained; the transaction rolls back. Expected:
+--   NOTICE  p26 pending order cancelled on payment failure ok
+begin;
+
+do $$
+declare
+  v_slug     text;
+  v_token    text;
+  v_item     uuid;
+  v_placed   jsonb;
+  v_order_id uuid;
+  v_status   public.order_status;
+  v_tracked  jsonb;
+  v_pi       text :=
+    'pi_p26_' || replace(gen_random_uuid()::text, '-', '');
+begin
+  select r.slug into v_slug
+    from public.restaurants r
+   where r.is_active and r.slug <> 'rls-test-other'
+   order by r.created_at limit 1;
+
+  select t.qr_token into v_token
+    from public.tables t
+    join public.restaurants r on r.id = t.restaurant_id
+   where r.slug = v_slug and t.is_active
+   order by t.table_number limit 1;
+
+  select mi.id into v_item
+    from public.menu_items mi
+    join public.restaurants r on r.id = mi.restaurant_id
+   where r.slug = v_slug and mi.is_available
+   limit 1;
+
+  if v_slug is null or v_token is null or v_item is null then
+    raise notice 'p26 check skipped (no demo data)';
+    return;
+  end if;
+
+  v_placed := public.place_order(
+    v_slug,
+    v_token,
+    'P26 pending check',
+    null,
+    jsonb_build_array(jsonb_build_object(
+      'menu_item_id', v_item,
+      'quantity', 1
+    ))
+  );
+
+  v_order_id := (v_placed->>'order_id')::uuid;
+
+  -- The row the kitchen sees, not just the RPC's JSON response.
+  select o.status into v_status
+    from public.orders o
+   where o.id = v_order_id;
+  if v_status is distinct from 'pending' then
+    raise exception 'place_order inserted %, expected pending', v_status;
+  end if;
+
+  -- The guest tracking page must also say "Payment confirming" first.
+  v_tracked := public.get_order_tracking(v_placed->>'tracking_token');
+  if v_tracked->>'status' is distinct from 'pending' then
+    raise exception 'tracking showed %, expected pending', v_tracked->>'status';
+  end if;
+
+  -- Simulate the Stripe webhook reporting a failed payment.
+  perform public.record_payment_intent(
+    v_order_id,
+    (v_placed->>'amount_due')::numeric,
+    v_placed->>'currency',
+    v_pi,
+    null
+  );
+  perform public.apply_payment_failed(v_pi, 'P26 verification');
+
+  select o.status into v_status
+    from public.orders o
+   where o.id = v_order_id;
+  if v_status is distinct from 'cancelled' then
+    raise exception 'apply_payment_failed left order %, expected cancelled', v_status;
+  end if;
+
+  raise notice 'p26 pending order cancelled on payment failure ok';
 end $$;
 rollback;
 
