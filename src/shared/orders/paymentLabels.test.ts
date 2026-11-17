@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { paymentSummaryLabel, paymentSummaryTone } from "./paymentLabels";
+import type { PaymentStatus } from "@shared/lib/database.types";
+import {
+  paymentFlowLabel,
+  paymentFlowLabels,
+  paymentStatusLabels,
+  paymentSummaryLabel,
+  paymentSummaryTone,
+} from "./paymentLabels";
+
+describe("payment labels", () => {
+  it("labels every stored payment status", () => {
+    const statuses = Object.keys(paymentStatusLabels) as PaymentStatus[];
+    expect(statuses.length).toBeGreaterThan(0);
+    for (const status of statuses) {
+      expect(paymentStatusLabels[status].trim()).not.toBe("");
+    }
+  });
+
+  it("labels every checkout progress state", () => {
+    for (const label of Object.values(paymentFlowLabels)) {
+      expect(label.trim()).not.toBe("");
+    }
+  });
+
+  it("adds the reason to a failed payment announcement", () => {
+    expect(paymentFlowLabel("failed")).toBe("Payment failed");
+    expect(paymentFlowLabel("failed", "Your card was declined.")).toBe(
+      "Payment failed — Your card was declined.",
+    );
+  });
+});
 
 describe("paymentSummaryLabel", () => {
   it("returns null when there is no payment", () => {

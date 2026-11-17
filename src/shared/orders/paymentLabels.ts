@@ -31,6 +31,34 @@ export const refundStatusTones: Record<RefundStatus, StatusTone> = {
   failed: "danger",
 };
 
+/**
+ * Checkout progress states, separate from the stored `payments.status` enum.
+ * Labels live next to the status labels so the customer copy has one home.
+ */
+export type PaymentFlowStatus =
+  | "processing"
+  | "confirming"
+  | "succeeded"
+  | "failed";
+
+export const paymentFlowLabels: Record<PaymentFlowStatus, string> = {
+  processing: "Processing payment…",
+  confirming: "Confirming your order…",
+  succeeded: "Payment successful",
+  failed: paymentStatusLabels.failed,
+};
+
+/** Announcement text for the live region; failures carry the reason. */
+export function paymentFlowLabel(
+  status: PaymentFlowStatus,
+  reason?: string,
+): string {
+  if (status === "failed" && reason) {
+    return `${paymentFlowLabels.failed} — ${reason}`;
+  }
+  return paymentFlowLabels[status];
+}
+
 export const paymentMethodLabels: Record<PaymentMethodType, string> = {
   card: "Card",
   apple_pay: "Apple Pay",

@@ -12,6 +12,10 @@ import {
   roundMoney,
   type TipSelection,
 } from "@shared/lib/money";
+import {
+  paymentFlowLabel,
+  type PaymentFlowStatus,
+} from "@shared/orders/paymentLabels";
 import { trackingUrl } from "../../data/tracking";
 import {
   createPaymentIntent,
@@ -128,6 +132,9 @@ function PaymentForm({
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [flowStatus, setFlowStatus] = useState<"idle" | PaymentFlowStatus>(
+    "idle",
+  );
   const [ready, setReady] = useState(false);
 
   // The tip changes the charge after the PaymentElement has mounted; keep the
@@ -142,6 +149,7 @@ function PaymentForm({
   const pay = async () => {
     if (!stripe || !elements || !canPay || submitting) return;
     setError("");
+    setFlowStatus("processing");
     setSubmitting(true);
 
     try {
@@ -150,6 +158,7 @@ function PaymentForm({
       // BEFORE any async work. Stripe requires elements.submit() first.
       const { error: submitError } = await elements.submit();
       if (submitError) {
+        setFlowStatus("failed");
         setError(mapStripeError(submitError).message);
         return;
       }
@@ -169,6 +178,7 @@ function PaymentForm({
         window.location.origin,
       ).toString();
 
+      setFlowStatus("confirming");
       const result = await stripe.confirmPayment({
         clientSecret: intent.clientSecret,
         elements,
@@ -177,13 +187,18 @@ function PaymentForm({
       });
 
       if (result.error) {
+        setFlowStatus("failed");
         setError(mapStripeError(result.error).message);
         return;
       }
 
+      // Announce success before handing off; the confirmation screen may mount
+      // immediately afterwards.
+      setFlowStatus("succeeded");
       await onPaid(intent);
     } catch (caught) {
       onSetupError?.(caught);
+      setFlowStatus("failed");
       setError(
         caught instanceof Error && caught.message
           ? caught.message === "payment_setup_failed"
@@ -220,11 +235,33 @@ function PaymentForm({
         options={{ layout: "tabs" }}
       />
 
-      {error && (
-        <p className="mt-3 text-[12px] text-danger" role="alert">
-          {error}
-        </p>
-      )}
+      {/* Mounted from the first render so assistive tech announces the text
+          changes instead of missing a newly inserted live region. */}
+      <p
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+        data-testid="payment-status"
+      >
+        {flowStatus === "processing" ||
+        flowStatus === "confirming" ||
+        flowStatus === "succeeded"
+          ? paymentFlowLabel(flowStatus)
+          : ""}
+      </p>
+      <p
+        role="alert"
+        aria-live="assertive"
+        data-testid="payment-error"
+        className={error ? "mt-3 text-[12px] text-danger" : "sr-only"}
+      >
+        {error && (
+          <>
+            <span className="sr-only">{paymentFlowLabel("failed")} — </span>
+            <span>{error}</span>
+          </>
+        )}
+      </p>
 
       <Button
         className="mt-4"

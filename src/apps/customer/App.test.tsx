@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import CustomerApp from "./CustomerDashboard";
@@ -69,5 +69,24 @@ describe("Customer app", () => {
     expect(
       screen.getByText("Developed by QuickTab Payments Team"),
     ).toBeInTheDocument();
+  });
+
+  it("returns focus to the cart button after the cart closes", async () => {
+    render(<CustomerApp />, { wrapper });
+
+    const cartButton = await screen.findByRole("button", { name: /cart/i });
+    cartButton.focus();
+    fireEvent.click(cartButton);
+
+    expect(
+      await screen.findByRole("dialog", { name: /review your order/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /close cart/i }));
+
+    const reopenedTrigger = await screen.findByRole("button", {
+      name: /cart/i,
+    });
+    expect(reopenedTrigger).toHaveFocus();
   });
 });

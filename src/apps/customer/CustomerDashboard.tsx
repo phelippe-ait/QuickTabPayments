@@ -56,6 +56,16 @@ function CustomerShell() {
     useState<"menu" | "confirmation">("menu")
   const restoredLastOrder = useRef(false)
   const claimedOrder = useRef<string | null>(null)
+  const cartTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const restoreCartFocus = useRef(false)
+
+  // The menu unmounts while the cart is open, so its trigger is a fresh node
+  // when we return. Restore focus to it after the menu is back on screen.
+  useEffect(() => {
+    if (screen !== "menu" || !restoreCartFocus.current) return
+    restoreCartFocus.current = false
+    cartTriggerRef.current?.focus()
+  }, [screen])
 
   // A reload (or an OAuth redirect) restores the confirmation screen for the
   // guest's last order at this table.
@@ -150,6 +160,11 @@ function CustomerShell() {
     setScreen("menu")
   }
 
+  const closeCart = () => {
+    restoreCartFocus.current = true
+    setScreen("menu")
+  }
+
   return (
     <div
       className={`${styles["app-shell"]} ${screen === "menu" ? styles["with-sidebar"] : ""}`}
@@ -164,6 +179,7 @@ function CustomerShell() {
           onSelect={setSelected}
           onAuth={(authScreen) => openAuth(authScreen, "menu")}
           onReconcile={cart.reconcile}
+          cartTriggerRef={cartTriggerRef}
         />
       )}
       {screen === "cart" && (
@@ -171,7 +187,7 @@ function CustomerShell() {
           items={cart.items}
           total={cart.total}
           currency={currentContext.currency}
-          onClose={() => setScreen("menu")}
+          onClose={closeCart}
           onRemove={cart.remove}
           onDecrease={cart.decrease}
           onIncrease={cart.increase}

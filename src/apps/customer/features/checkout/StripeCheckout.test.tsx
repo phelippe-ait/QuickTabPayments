@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { TipSelection } from "@shared/lib/money";
 import { StripeCheckout } from "./StripeCheckout";
@@ -199,5 +199,87 @@ describe("StripeCheckout", () => {
   it("explains why payment is disabled for an invalid tip", () => {
     setup(false, null, "Tip can't be more than $500.");
     expect(screen.getByText("Tip can't be more than $500.")).toBeInTheDocument();
+  });
+
+  it("mounts an empty polite status region before payment starts", () => {
+    setup();
+
+    const status = screen.getByTestId("payment-status");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it("announces processing, confirmation and success", async () => {
+    type IntentResult = Awaited<
+      ReturnType<typeof mocks.createPaymentIntent>
+    >;
+    type ConfirmResult = Awaited<ReturnType<typeof mocks.confirmPayment>>;
+    let resolveIntent!: (value: IntentResult) => void;
+    let resolveConfirm!: (value: ConfirmResult) => void;
+
+    mocks.createPaymentIntent.mockImplementationOnce(
+      () =>
+        new Promise<IntentResult>((resolve) => {
+          resolveIntent = resolve;
+        }),
+    );
+    mocks.confirmPayment.mockImplementationOnce(
+      () =>
+        new Promise<ConfirmResult>((resolve) => {
+          resolveConfirm = resolve;
+        }),
+    );
+
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+
+    const status = screen.getByTestId("payment-status");
+    await waitFor(() =>
+      expect(status).toHaveTextContent("Processing payment…"),
+    );
+
+    await act(async () => {
+      resolveIntent({
+        clientSecret: "pi_1_secret",
+        orderId: "order-1",
+        orderNumber: "QT-1",
+        trackingToken: "tok",
+        amount: 4.7,
+        currency: "AUD",
+        status: "pending",
+      });
+    });
+
+    await waitFor(() =>
+      expect(status).toHaveTextContent("Confirming your order…"),
+    );
+
+    await act(async () => {
+      resolveConfirm({ error: null });
+    });
+
+    await waitFor(() =>
+      expect(status).toHaveTextContent("Payment successful"),
+    );
+  });
+
+  it("announces a failure assertively with its reason", async () => {
+    mocks.confirmPayment.mockImplementationOnce(async () => {
+      mocks.calls.push("confirm");
+      return { error: { code: "card_declined", message: "Declined" } };
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+
+    const alert = screen.getByTestId("payment-error");
+    await waitFor(() =>
+      expect(alert).toHaveTextContent(
+        "Payment failed — Your card was declined. Please try another payment method.",
+      ),
+    );
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveAttribute("aria-live", "assertive");
+    expect(screen.getByTestId("payment-status")).toBeEmptyDOMElement();
   });
 });

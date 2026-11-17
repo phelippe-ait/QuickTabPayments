@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useQuery } from "@tanstack/react-query"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
@@ -22,6 +22,7 @@ export function MenuScreen({
   onSelect,
   onAuth,
   onReconcile,
+  cartTriggerRef,
 }: {
   qr: QrContext;
   cartCount: number;
@@ -31,6 +32,8 @@ export function MenuScreen({
   onSelect: (item: MenuItem) => void;
   onAuth: (screen: "login" | "signup") => void;
   onReconcile: (items: MenuItem[]) => void;
+  /** Lets the shell return focus here after the cart closes. */
+  cartTriggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const { user, profile, signOut } = useAuth();
   const [search, setSearch] = useState("");
@@ -361,7 +364,11 @@ export function MenuScreen({
           </>
         )}
 
-        <button className={`${styles["cart-dock"]}`} onClick={onOpenCart}>
+        <button
+          ref={cartTriggerRef}
+          className={`${styles["cart-dock"]}`}
+          onClick={onOpenCart}
+        >
           <span aria-live="polite">
             <strong>Cart</strong>
             <small>
