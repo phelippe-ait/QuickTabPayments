@@ -115,6 +115,8 @@ function StaffWorkspace() {
           ordersLoading={workspace.ordersLoading}
           ordersError={workspace.ordersError}
           sound={workspace.sound}
+          unseenOrderIds={workspace.unseenOrderIds}
+          onOrderSeen={workspace.markOrderSeen}
         />
       )}
       {view === "history" && (

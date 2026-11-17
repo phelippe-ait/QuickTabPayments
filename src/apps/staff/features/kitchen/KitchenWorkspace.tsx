@@ -1,7 +1,9 @@
 import { useState } from "react"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
+import { cn } from "@shared/lib/cn"
 import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
+import { Badge } from "@shared/ui/shadcn/badge"
 import { Stat } from "../../components/StaffUi"
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
@@ -15,6 +17,8 @@ export function KitchenWorkspace({
   ordersLoading,
   ordersError,
   sound,
+  unseenOrderIds,
+  onOrderSeen,
 }: {
   orders: Order[]
   previousOrders: Order[]
@@ -22,6 +26,8 @@ export function KitchenWorkspace({
   ordersLoading: boolean
   ordersError: string | null
   sound: OrderSoundControls
+  unseenOrderIds: ReadonlySet<string>
+  onOrderSeen: (orderId: string) => void
 }) {
   const [pendingAction, setPendingAction] = useState<{
     order: Order
@@ -31,11 +37,21 @@ export function KitchenWorkspace({
     (order) => order.kitchenStatus === "Preparing",
   ).length
   const ready = orders.filter((order) => order.kitchenStatus === "Ready").length
+  const unseenCount = orders.filter((order) =>
+    unseenOrderIds.has(order.id),
+  ).length
+  const isUnseen = (order: Order) => unseenOrderIds.has(order.id)
 
   function confirmStatusChange() {
     if (!pendingAction) return
     onStatusChange(pendingAction.order.id, pendingAction.status)
     setPendingAction(null)
+  }
+
+  // Opening an order's confirmation counts as acknowledging it.
+  function requestStatusChange(order: Order, status: KitchenStatus) {
+    onOrderSeen(order.id)
+    setPendingAction({ order, status })
   }
 
   return (
@@ -55,6 +71,19 @@ export function KitchenWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <span aria-atomic="true" aria-live="polite" role="status">
+            {unseenCount > 0 && (
+              <Badge
+                aria-label={
+                  unseenCount === 1 ? "1 new order" : `${unseenCount} new orders`
+                }
+                className="animate-pulse motion-reduce:animate-none"
+                variant="warning"
+              >
+                {unseenCount} new
+              </Badge>
+            )}
+          </span>
           <button
             type="button"
             aria-label={
@@ -105,7 +134,12 @@ export function KitchenWorkspace({
         <div className="grid gap-5 lg:grid-cols-2">
           {orders.map((order) => (
             <article
-              className="overflow-hidden rounded-[22px] border border-line bg-paper"
+              className={cn(
+                "overflow-hidden rounded-[22px] border bg-paper",
+                isUnseen(order)
+                  ? "border-amber/60 ring-2 ring-amber/30"
+                  : "border-line",
+              )}
               key={order.id}
             >
               <div className="flex items-start justify-between border-b border-line-soft px-5 py-5 sm:px-6">
@@ -113,6 +147,15 @@ export function KitchenWorkspace({
                   <div className="flex items-center gap-3">
                     <h2 className="font-serif text-3xl">{order.id}</h2>
                     <KitchenStatusPill status={order.kitchenStatus} />
+                    {isUnseen(order) && (
+                      <Badge
+                        aria-label="New order"
+                        className="animate-pulse motion-reduce:animate-none"
+                        variant="warning"
+                      >
+                        New
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-1.5 text-sm font-bold">{order.table}</p>
                   <p className="mt-1 text-xs text-muted">
@@ -148,9 +191,7 @@ export function KitchenWorkspace({
   {order.kitchenStatus === "New" && (
     <button
       className="rounded-xl border border-[#e5c89f] bg-cream-3 px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
-      onClick={() =>
-        setPendingAction({ order, status: "Preparing" })
-      }
+      onClick={() => requestStatusChange(order, "Preparing")}
     >
       Prepare
     </button>
@@ -159,9 +200,7 @@ export function KitchenWorkspace({
   {order.kitchenStatus === "Preparing" && (
     <button
       className="rounded-xl border border-[#bfd0bb] bg-paper px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage-soft"
-      onClick={() =>
-        setPendingAction({ order, status: "Ready" })
-      }
+      onClick={() => requestStatusChange(order, "Ready")}
     >
       Ready
     </button>
@@ -170,9 +209,7 @@ export function KitchenWorkspace({
   {order.kitchenStatus === "Ready" && (
     <button
       className="rounded-xl border border-sage bg-sage-soft px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage"
-      onClick={() =>
-        setPendingAction({ order, status: "Completed" })
-      }
+      onClick={() => requestStatusChange(order, "Completed")}
     >
       Complete
     </button>
@@ -180,9 +217,7 @@ export function KitchenWorkspace({
 
   <button
     className="rounded-xl border border-[#dfb9b9] bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
-    onClick={() =>
-      setPendingAction({ order, status: "Cancelled" })
-    }
+    onClick={() => requestStatusChange(order, "Cancelled")}
   >
     Cancel
   </button>

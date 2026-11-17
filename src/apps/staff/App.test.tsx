@@ -61,6 +61,8 @@ vi.mock("./hooks/useStaffWorkspace", () => ({
     reservations: [],
     activeKitchenOrders: [],
     previousKitchenOrders: [],
+    unseenOrderIds: new Set<string>(),
+    markOrderSeen: vi.fn(),
     sound: {
       enabled: true,
       unlocked: false,

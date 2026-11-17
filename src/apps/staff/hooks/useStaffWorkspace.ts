@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { initialReservations } from "../data/fixtures"
 import type { KitchenStatus, Order, Reservation, Table } from "../types"
 import { supabase } from "@shared/lib/supabase"
@@ -9,7 +9,7 @@ import {
   mapStaffOrder,
   updateStaffOrderStatus,
 } from "../services/staffOrders"
-import { findNewOrderIds } from "./findNewOrderIds"
+import { useNewOrders } from "./useNewOrders"
 import { useOrderSound } from "./useOrderSound"
 
 /**
@@ -20,10 +20,13 @@ import { useOrderSound } from "./useOrderSound"
 export function useStaffWorkspace(restaurantId: string | null) {
   const sound = useOrderSound()
   const { play: playOrderSound } = sound
-
-  // Kitchen order numbers already seen. `null` means the board has not been
-  // hydrated yet, so the first fetch must not chime for existing orders.
-  const knownOrderIdsRef = useRef<Set<string> | null>(null)
+  const newOrders = useNewOrders()
+  const {
+    observe: observeOrders,
+    register: registerNewOrder,
+    markSeen: markOrderSeen,
+    reset: resetNewOrders,
+  } = newOrders
 
   const [tableList, setTableList] = useState<Table[]>([])
   const [tablesLoading, setTablesLoading] = useState(true)
@@ -44,7 +47,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
   // Live kitchen board: poll every 5s. Unpaid (`pending`) orders are filtered
   // out by the query, so the kitchen only ever acts on paid orders.
   useEffect(() => {
-    knownOrderIdsRef.current = null
+    resetNewOrders()
 
     if (!restaurantId) {
       setOrdersLoading(false)
@@ -64,8 +67,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
         const rows = await fetchStaffOrders(id)
         if (!cancelled) {
           const mapped = rows.map(mapStaffOrder)
-          const additions = findNewOrderIds(knownOrderIdsRef.current, mapped)
-          knownOrderIdsRef.current = new Set(mapped.map((order) => order.id))
+          const additions = observeOrders(mapped)
           if (additions.length > 0) playOrderSound()
           setOrders(mapped)
           setOrdersError(null)
@@ -122,7 +124,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       cancelled = true
       if (interval !== undefined) clearInterval(interval)
     }
-  }, [restaurantId, playOrderSound])
+  }, [restaurantId, playOrderSound, observeOrders, resetNewOrders])
 
   // Order history + Realtime. Assigning the channel synchronously means the
   // cleanup always removes it, even under React StrictMode double-mounting.
@@ -191,17 +193,14 @@ export function useStaffWorkspace(restaurantId: string | null) {
             order_number?: string
             status?: string
           }
-          const knownIds = knownOrderIdsRef.current
           if (
             (payload.eventType === "INSERT" ||
               payload.eventType === "UPDATE") &&
-            knownIds &&
             row.order_number &&
             row.status &&
             row.status !== "pending" &&
-            !knownIds.has(row.order_number)
+            registerNewOrder(row.order_number)
           ) {
-            knownIds.add(row.order_number)
             playOrderSound()
           }
           void loadOrders()
@@ -213,7 +212,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       active = false
       void client.removeChannel(channel)
     }
-  }, [restaurantId, playOrderSound])
+  }, [restaurantId, playOrderSound, registerNewOrder])
 
   const activeKitchenOrders = useMemo(
     () =>
@@ -283,6 +282,10 @@ export function useStaffWorkspace(restaurantId: string | null) {
       return
     }
 
+    // Advancing an order is the acknowledgement: its "New" highlight is no
+    // longer needed once the kitchen has acted on it.
+    markOrderSeen(id)
+
     try {
       if (!restaurantId) throw new Error("No active staff restaurant found")
 
@@ -331,6 +334,8 @@ export function useStaffWorkspace(restaurantId: string | null) {
     reservations,
     activeKitchenOrders,
     previousKitchenOrders,
+    unseenOrderIds: newOrders.unseenOrderIds,
+    markOrderSeen,
     sound,
     updateTable,
     createReservation,
