@@ -96,7 +96,7 @@ export function StripeCheckout(props: StripeCheckoutProps) {
 export function PaymentsNotConfigured() {
   return (
     <section
-      className="mb-5 rounded-lg border border-line-2 bg-paper p-4"
+      className="mb-5 min-w-0 rounded-lg border border-line-2 bg-paper p-4"
       aria-labelledby="payments-unavailable-title"
     >
       <h2 id="payments-unavailable-title" className="text-[13px] font-bold text-berry">
@@ -213,7 +213,7 @@ function PaymentForm({
 
   return (
     <section
-      className="mb-5 rounded-lg border border-line-2 bg-paper p-4"
+      className="mb-5 min-w-0 rounded-lg border border-line-2 bg-paper p-4"
       aria-labelledby="payment-method-title"
     >
       <h2 id="payment-method-title" className="mb-1 text-[13px] font-bold text-berry">
@@ -230,10 +230,12 @@ function PaymentForm({
         </p>
       )}
 
-      <PaymentElement
-        onReady={() => setReady(true)}
-        options={{ layout: "tabs" }}
-      />
+      <div className="min-w-0">
+        <PaymentElement
+          onReady={() => setReady(true)}
+          options={{ layout: "tabs" }}
+        />
+      </div>
 
       {/* Mounted from the first render so assistive tech announces the text
           changes instead of missing a newly inserted live region. */}

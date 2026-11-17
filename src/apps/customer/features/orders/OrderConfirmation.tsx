@@ -113,7 +113,7 @@ export function OrderConfirmation({
             <ul className="mt-5 flex flex-col gap-2 text-[12px] text-ink-mid">
               {order.items.map((item, index) => (
                 <li key={`${item.name}-${index}`} className="flex justify-between gap-3">
-                  <span>
+                  <span className="min-w-0 break-words">
                     {item.quantity} × {item.name}
                     {(item.modifiers?.length ?? 0) > 0 && (
                       <small className="mt-1 block text-[10px] text-muted">
@@ -121,7 +121,7 @@ export function OrderConfirmation({
                       </small>
                     )}
                   </span>
-                  <span>{formatMoney(item.subtotal, order.currency)}</span>
+                  <span className="shrink-0">{formatMoney(item.subtotal, order.currency)}</span>
                 </li>
               ))}
             </ul>
@@ -178,7 +178,7 @@ export function OrderConfirmation({
               </span>
               {order.receiptUrl && (
                 <a
-                  className="mt-1 inline-block text-[11px] font-bold underline"
+                  className="mt-1 inline-flex min-h-11 items-center text-[11px] font-bold underline"
                   href={order.receiptUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -193,7 +193,7 @@ export function OrderConfirmation({
                 to={trackHref}
                 target="_blank"
                 rel="noreferrer"
-                className={buttonVariants({ className: "w-full" })}
+                className={buttonVariants({ className: "min-h-11 w-full" })}
               >
                 Track order
               </Link>

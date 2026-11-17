@@ -10,6 +10,7 @@ import { HeaderButton } from "../../components/CustomerUi"
 import { useBodyScrollLock } from "@shared/ui/useDialogFocus"
 import { EditNameDialog } from "../profile/EditNameDialog"
 import { ProductPhoto } from "./ProductPhoto"
+import { StaffAssistNotice } from "./StaffAssistNotice"
 import { fetchMenu } from "../../data/menuApi"
 import type { MenuItem, QrContext } from "../../types"
 
@@ -69,7 +70,7 @@ export function MenuScreen({
           setActiveCategory((visible.target as HTMLElement).dataset.category ?? "");
         }
       },
-      { rootMargin: "-105px 0px -65% 0px" },
+      { rootMargin: "-121px 0px -60% 0px" },
     );
 
     sections.forEach((section) => observer.observe(section));
@@ -193,7 +194,7 @@ export function MenuScreen({
             <Button
               variant="primary"
               fullWidth
-              className="h-[43px] text-[11px]"
+              className="h-11 text-[11px]"
               onClick={() => onAuth("signup")}
             >
               Sign up
@@ -201,7 +202,7 @@ export function MenuScreen({
             <Button
               variant="outline"
               fullWidth
-              className="h-[43px] text-[11px]"
+              className="h-11 text-[11px]"
               onClick={() => onAuth("login")}
             >
               Log in
@@ -243,6 +244,8 @@ export function MenuScreen({
             />
           </label>
         </div>
+
+        <StaffAssistNotice />
 
         {menuQuery.isPending ? (
           <section aria-label="Loading menu" role="status" className="space-y-3 pb-10">

@@ -214,7 +214,7 @@ export function OrderTrackingScreen() {
         <header className="flex items-center justify-between">
           <Link
             to="/"
-            className="text-[11px] font-bold uppercase tracking-[0.12em] text-berry-deep hover:underline"
+            className="inline-flex min-h-11 items-center text-[11px] font-bold uppercase tracking-[0.12em] text-berry-deep hover:underline"
           >
             ← Back to menu
           </Link>
@@ -247,7 +247,7 @@ export function OrderTrackingScreen() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link to="/" className={buttonVariants({ variant: "outline", className: "w-full" })}>
+              <Link to="/" className={buttonVariants({ variant: "outline", className: "min-h-11 w-full" })}>
                 Back to menu
               </Link>
             </CardContent>
@@ -263,7 +263,7 @@ export function OrderTrackingScreen() {
             <CardContent>
               <button
                 type="button"
-                className={buttonVariants({ variant: "outline", className: "w-full" })}
+                className={buttonVariants({ variant: "outline", className: "min-h-11 w-full" })}
                 onClick={() => void refresh()}
               >
                 Try again
@@ -371,7 +371,7 @@ export function OrderTrackingScreen() {
                 <ul className="flex flex-col gap-2 text-[12px] text-ink-mid">
                   {order.items.map((item, index) => (
                     <li key={`${item.name}-${index}`} className="flex justify-between gap-3">
-                      <span>
+                      <span className="min-w-0 break-words">
                         {item.quantity} × {item.name}
                         {(item.modifiers?.length ?? 0) > 0 && (
                           <small className="mt-1 block text-[10px] text-muted">
@@ -379,7 +379,7 @@ export function OrderTrackingScreen() {
                           </small>
                         )}
                       </span>
-                      <span>{formatMoney(item.subtotal, order.currency)}</span>
+                      <span className="shrink-0">{formatMoney(item.subtotal, order.currency)}</span>
                     </li>
                   ))}
                   {order.items.length === 0 && (
@@ -449,7 +449,7 @@ export function OrderTrackingScreen() {
 
                 {order.receiptUrl && (
                   <a
-                    className="mt-3 inline-block text-[11px] font-bold text-berry underline underline-offset-2"
+                    className="mt-2 inline-flex min-h-11 items-center text-[11px] font-bold text-berry underline underline-offset-2"
                     href={order.receiptUrl}
                     target="_blank"
                     rel="noreferrer"

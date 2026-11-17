@@ -158,7 +158,7 @@ export function CheckoutScreen({
                   <label
                     key={percent}
                     className={cn(
-                      "flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
+                      "flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
                       checked
                         ? "border-berry bg-berry-soft text-berry-deep"
                         : "border-line-2 bg-white text-ink-mid hover:border-berry",
@@ -182,7 +182,7 @@ export function CheckoutScreen({
 
             <label
               className={cn(
-                "flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
+                "flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
                 tip.mode === "custom"
                   ? "border-berry bg-berry-soft text-berry-deep"
                   : "border-line-2 bg-white text-ink-mid hover:border-berry",
@@ -226,7 +226,7 @@ export function CheckoutScreen({
                   aria-describedby={
                     tipError ? "tip-custom-amount-error" : undefined
                   }
-                  className="h-10 w-28 rounded-[7px] border border-line bg-white px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:bg-cream disabled:text-muted"
+                  className="h-11 w-28 rounded-[7px] border border-line bg-white px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:bg-cream disabled:text-muted"
                 />
               </div>
               {tipError && (
@@ -259,7 +259,7 @@ export function CheckoutScreen({
           <ul className="flex flex-col gap-2 text-[12px] text-ink-mid">
             {items.map((item) => (
               <li key={item.lineId ?? cartLineId(item.menuItemId, item.modifiers)} className="flex justify-between gap-3">
-                <span>
+                <span className="min-w-0 break-words">
                   {item.quantity} × {item.name}
                   {(item.modifiers?.length ?? 0) > 0 && (
                     <small className="mt-1 block text-[10px] text-muted">
@@ -267,7 +267,7 @@ export function CheckoutScreen({
                     </small>
                   )}
                 </span>
-                <span>{formatMoney(item.unitPrice * item.quantity, currency)}</span>
+                <span className="shrink-0">{formatMoney(item.unitPrice * item.quantity, currency)}</span>
               </li>
             ))}
           </ul>
