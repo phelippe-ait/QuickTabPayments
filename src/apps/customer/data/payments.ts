@@ -1,4 +1,4 @@
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import type { Stripe } from "@stripe/stripe-js";
 import { supabase } from "@shared/lib/supabase";
 import type { TipSelection } from "@shared/lib/money";
 import type { CartItem } from "../types";
@@ -19,7 +19,12 @@ let stripePromise: Promise<Stripe | null> | null = null;
 
 export function getStripePromise(): Promise<Stripe | null> | null {
   if (!publishableKey) return null;
-  if (!stripePromise) stripePromise = loadStripe(publishableKey);
+  if (!stripePromise) {
+    // Loaded on demand: the SDK belongs to the checkout chunk, not the menu.
+    stripePromise = import("@stripe/stripe-js").then(({ loadStripe }) =>
+      loadStripe(publishableKey),
+    );
+  }
   return stripePromise;
 }
 

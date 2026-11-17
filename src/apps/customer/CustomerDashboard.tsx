@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import styles from "./App.module.css"
 import { useAuth } from "@shared/auth/AuthContext"
@@ -9,7 +9,6 @@ import { QrErrorScreen } from "./features/qr/QrErrorScreen"
 import { MenuScreen } from "./features/menu/MenuScreen"
 import { ProductModal } from "./features/menu/ProductModal"
 import { CartScreen } from "./features/cart/CartScreen"
-import { CheckoutScreen } from "./features/checkout/CheckoutScreen"
 import { OrderConfirmation } from "./features/orders/OrderConfirmation"
 import { OrdersScreen } from "./features/orders/OrdersScreen"
 import { AuthScreen } from "./features/auth/AuthScreen"
@@ -21,6 +20,14 @@ import { fetchMenu } from "./data/menuApi"
 import { claimGuestOrder } from "./data/orders"
 import { clearLastOrder, readLastOrder, saveLastOrder } from "./data/lastOrder"
 import { requestCustomerLocation } from "./data/geolocation"
+
+// Checkout (and with it the Stripe SDK) is only fetched once the customer
+// reaches the payment step, keeping it out of the menu's initial chunk.
+const CheckoutScreen = lazy(() =>
+  import("./features/checkout/CheckoutScreen").then((module) => ({
+    default: module.CheckoutScreen,
+  })),
+)
 
 export default function App() {
   return (
@@ -198,94 +205,111 @@ function CustomerShell() {
         />
       )}
       {screen === "checkout" && (
-        <CheckoutScreen
-          items={cart.items}
-          currency={currentContext.currency}
-          taxRate={currentContext.taxRate}
-          restaurantName={currentContext.restaurantName}
-          restaurantSlug={currentContext.restaurantSlug}
-          tableToken={currentContext.tableToken}
-          tableNumber={currentContext.tableNumber}
-          canCheckout={cart.canCheckout}
-          defaultName={profileName}
-          onClose={() => {
-            setCheckoutError("")
-            setScreen("cart")
-          }}
-          error={checkoutError}
-          onRequestLocation={
-            currentContext.geofenceEnabled ? requestCustomerLocation : undefined
+        <Suspense
+          fallback={
+            <div className="flex min-h-dvh items-center justify-center bg-cream px-5">
+              <div
+                className="w-full max-w-md space-y-3"
+                role="status"
+                aria-label="Loading checkout"
+              >
+                <div className="mx-auto h-8 w-48 animate-pulse rounded-lg bg-line-soft" />
+                <div className="h-40 w-full animate-pulse rounded-card bg-line-soft" />
+                <div className="h-12 w-full animate-pulse rounded-lg bg-line-soft" />
+                <span className="sr-only">Loading checkout…</span>
+              </div>
+            </div>
           }
-          onSetupError={async (setupError) => {
-            if (
-              setupError instanceof PaymentSetupError &&
-              setupError.code === "menu_item_unavailable"
-            ) {
-              // The menu changed mid-session: refresh it and drop sold-out lines.
-              const menu = await fetchMenu(currentContext.restaurantId).catch(
-                () => null,
-              )
-              if (menu)
-                cart.reconcile(menu.flatMap((category) => category.items))
-              void queryClient.invalidateQueries({
-                queryKey: ["customer-menu", currentContext.restaurantId],
-              })
+        >
+          <CheckoutScreen
+            items={cart.items}
+            currency={currentContext.currency}
+            taxRate={currentContext.taxRate}
+            restaurantName={currentContext.restaurantName}
+            restaurantSlug={currentContext.restaurantSlug}
+            tableToken={currentContext.tableToken}
+            tableNumber={currentContext.tableNumber}
+            canCheckout={cart.canCheckout}
+            defaultName={profileName}
+            onClose={() => {
+              setCheckoutError("")
+              setScreen("cart")
+            }}
+            error={checkoutError}
+            onRequestLocation={
+              currentContext.geofenceEnabled ? requestCustomerLocation : undefined
             }
-          }}
-          onPlaceOrder={async ({ customerName, intent }) => {
-
-            setCheckoutError("")
-            try {
-              // `amount` is the server's `amount_due` (items total + tip).
-              const amountDue = intent.amountDue ?? intent.amount
-              const tipAmount = intent.tipAmount ?? 0
-              const total = intent.total ?? roundMoney(amountDue - tipAmount)
-              // Split GST on the items total only: tips carry no GST.
-              const { subtotal, tax } = splitInclusiveTax(
-                total,
-                currentContext.taxRate,
-              )
-              const placedOrder: PlacedOrder = {
-                orderId: intent.orderId,
-                orderNumber: intent.orderNumber,
-                trackingToken: intent.trackingToken,
-                status: "pending",
-                subtotal,
-                tax,
-                total,
-                tipAmount,
-                amountDue,
-                currency: intent.currency,
-                taxRate: currentContext.taxRate,
-                restaurantName: currentContext.restaurantName,
-                tableNumber: currentContext.tableNumber,
-                customerName,
-                createdAt: new Date().toISOString(),
-                items: cart.items.map((item) => ({
-                  name: item.name,
-                  quantity: item.quantity,
-                  unitPrice: item.unitPrice,
-                  subtotal: item.unitPrice * item.quantity,
-                  modifiers: (item.modifiers ?? []).map((modifier) => ({
-                    name: modifier.name,
-                    priceAdjustment: modifier.priceAdjustment,
-                  })),
-                })),
+            onSetupError={async (setupError) => {
+              if (
+                setupError instanceof PaymentSetupError &&
+                setupError.code === "menu_item_unavailable"
+              ) {
+                // The menu changed mid-session: refresh it and drop sold-out lines.
+                const menu = await fetchMenu(currentContext.restaurantId).catch(
+                  () => null,
+                )
+                if (menu)
+                  cart.reconcile(menu.flatMap((category) => category.items))
+                void queryClient.invalidateQueries({
+                  queryKey: ["customer-menu", currentContext.restaurantId],
+                })
               }
-
-              if (source) saveLastOrder(source, placedOrder)
-              cart.clear()
-              setCreatedOrder(placedOrder)
-              setScreen("confirmation")
-            } catch (error) {
-              setCheckoutError(
-                error instanceof Error
-                  ? error.message
-                  : "Could not place your order.",
-              )
-            }
-          }}
-        />
+            }}
+            onPlaceOrder={async ({ customerName, intent }) => {
+  
+              setCheckoutError("")
+              try {
+                // `amount` is the server's `amount_due` (items total + tip).
+                const amountDue = intent.amountDue ?? intent.amount
+                const tipAmount = intent.tipAmount ?? 0
+                const total = intent.total ?? roundMoney(amountDue - tipAmount)
+                // Split GST on the items total only: tips carry no GST.
+                const { subtotal, tax } = splitInclusiveTax(
+                  total,
+                  currentContext.taxRate,
+                )
+                const placedOrder: PlacedOrder = {
+                  orderId: intent.orderId,
+                  orderNumber: intent.orderNumber,
+                  trackingToken: intent.trackingToken,
+                  status: "pending",
+                  subtotal,
+                  tax,
+                  total,
+                  tipAmount,
+                  amountDue,
+                  currency: intent.currency,
+                  taxRate: currentContext.taxRate,
+                  restaurantName: currentContext.restaurantName,
+                  tableNumber: currentContext.tableNumber,
+                  customerName,
+                  createdAt: new Date().toISOString(),
+                  items: cart.items.map((item) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    subtotal: item.unitPrice * item.quantity,
+                    modifiers: (item.modifiers ?? []).map((modifier) => ({
+                      name: modifier.name,
+                      priceAdjustment: modifier.priceAdjustment,
+                    })),
+                  })),
+                }
+  
+                if (source) saveLastOrder(source, placedOrder)
+                cart.clear()
+                setCreatedOrder(placedOrder)
+                setScreen("confirmation")
+              } catch (error) {
+                setCheckoutError(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not place your order.",
+                )
+              }
+            }}
+          />
+        </Suspense>
       )}
       {screen === "confirmation" && (
         <OrderConfirmation
