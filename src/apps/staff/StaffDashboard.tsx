@@ -90,7 +90,7 @@ function StaffWorkspace() {
       restaurantName={restaurant?.name ?? "Your restaurant"}
       roleLabel={role ? roleLabels[role] : ""}
       onSignOut={() => void signOut()}
-      serviceHealthy={!workspace.ordersError}
+      connectionState={workspace.connectionState}
     >
       {view === "tables" && (
         <TablesWorkspace

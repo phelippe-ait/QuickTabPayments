@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { initialReservations } from "../data/fixtures"
 import type { KitchenStatus, Order, Reservation, Table } from "../types"
 import { supabase } from "@shared/lib/supabase"
@@ -10,8 +10,18 @@ import {
   mapStaffOrder,
   updateStaffOrderStatus,
 } from "../services/staffOrders"
+import {
+  deriveConnectionState,
+  type ConnectionSignal,
+  type ConnectionState,
+} from "./connectionState"
+import { mergeOrders } from "./mergeOrders"
+import { useConnectionPolling } from "./useConnectionPolling"
 import { useNewOrders } from "./useNewOrders"
 import { useOrderSound } from "./useOrderSound"
+
+/** REST refresh cadence while the Realtime socket is down. */
+export const STAFF_POLL_INTERVAL_MS = 10_000
 
 /**
  * Staff workspace data. The signed-in member's restaurant id comes from the
@@ -45,10 +55,67 @@ export function useStaffWorkspace(restaurantId: string | null) {
     initialReservations,
   )
 
-  // Live kitchen board: poll every 5s. Unpaid (`pending`) orders are filtered
-  // out by the query, so the kitchen only ever acts on paid orders.
+  const [connectionState, setConnectionState] = useState<ConnectionState>(() =>
+    typeof navigator !== "undefined" && navigator.onLine === false
+      ? "offline"
+      : "connecting",
+  )
+  const connectionStateRef = useRef<ConnectionState>(connectionState)
+  const hasConnectedRef = useRef(false)
+  // The board/history fetches are the single source of truth for both Realtime
+  // and the polling fallback. Keeping them in refs lets the channel handler
+  // re-sync without duplicating query logic (or the new-order dedupe).
+  const refreshOrdersRef = useRef<(() => Promise<void>) | null>(null)
+  const refreshHistoryRef = useRef<(() => Promise<void>) | null>(null)
+
+  const applyConnectionSignal = useCallback((signal: ConnectionSignal) => {
+    const current = connectionStateRef.current
+    const next = deriveConnectionState(current, signal)
+    if (next === current) return
+
+    connectionStateRef.current = next
+    setConnectionState(next)
+
+    if (next !== "online") return
+
+    // Re-sync after a reconnect: the stream may have dropped events while the
+    // socket was down. Decision: re-fetch the full open-orders slice instead of
+    // an `updated_at` cursor — the board is small, and a full fetch also heals
+    // updates/deletes we never saw. Both paths are idempotent, and
+    // `useNewOrders` dedupes by order id, so rows that merely re-appear never
+    // chime or badge twice.
+    if (hasConnectedRef.current) {
+      void refreshOrdersRef.current?.()
+      void refreshHistoryRef.current?.()
+    }
+    hasConnectedRef.current = true
+  }, [])
+
+  // Browser connectivity is a second signal: the websocket can take a while to
+  // notice a dropped network, and coming back online means "connecting" until
+  // the channel actually rejoins.
+  useEffect(() => {
+    const onOnline = () =>
+      applyConnectionSignal({ type: "browser", online: true })
+    const onOffline = () =>
+      applyConnectionSignal({ type: "browser", online: false })
+
+    window.addEventListener("online", onOnline)
+    window.addEventListener("offline", onOffline)
+
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("offline", onOffline)
+    }
+  }, [applyConnectionSignal])
+
+  // Live kitchen board. The initial fetch hydrates the board; afterwards
+  // Realtime drives updates and `useConnectionPolling` falls back to REST while
+  // the socket is offline. Unpaid (`pending`) orders are filtered out by the
+  // query, so the kitchen only ever acts on paid orders.
   useEffect(() => {
     resetNewOrders()
+    refreshOrdersRef.current = null
 
     if (!restaurantId) {
       setOrdersLoading(false)
@@ -59,7 +126,9 @@ export function useStaffWorkspace(restaurantId: string | null) {
 
     let cancelled = false
     let loading = false
-    let interval: ReturnType<typeof setInterval> | undefined
+
+    // A restaurant switch must not merge the previous tenant's board in.
+    setOrders([])
 
     async function loadOrders(id: string) {
       if (cancelled || loading) return
@@ -70,7 +139,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
           const mapped = rows.map(mapStaffOrder)
           const additions = observeOrders(mapped)
           if (additions.length > 0) playOrderSound()
-          setOrders(mapped)
+          setOrders((current) => mergeOrders(current, mapped))
           setOrdersError(null)
         }
       } catch (error) {
@@ -85,6 +154,8 @@ export function useStaffWorkspace(restaurantId: string | null) {
         if (!cancelled) setOrdersLoading(false)
       }
     }
+
+    refreshOrdersRef.current = () => loadOrders(restaurantId)
 
     async function loadTables(id: string) {
       try {
@@ -115,21 +186,31 @@ export function useStaffWorkspace(restaurantId: string | null) {
 
     void (async () => {
       await Promise.all([loadOrders(restaurantId), loadTables(restaurantId)])
-      if (cancelled) return
-      interval = setInterval(() => {
-        void loadOrders(restaurantId)
-      }, 5000)
     })()
 
     return () => {
       cancelled = true
-      if (interval !== undefined) clearInterval(interval)
+      refreshOrdersRef.current = null
     }
   }, [restaurantId, playOrderSound, observeOrders, resetNewOrders])
+
+  // While Realtime is offline, poll the board over REST so a dropped socket
+  // never freezes the kitchen. Reconnecting flips `enabled` back to false and
+  // cancels the interval; `applyConnectionSignal` then performs the re-sync
+  // fetch once.
+  useConnectionPolling({
+    enabled: connectionState === "offline" && restaurantId !== null,
+    intervalMs: STAFF_POLL_INTERVAL_MS,
+    onPoll: () => {
+      void refreshOrdersRef.current?.()
+    },
+  })
 
   // Order history + Realtime. Assigning the channel synchronously means the
   // cleanup always removes it, even under React StrictMode double-mounting.
   useEffect(() => {
+    refreshHistoryRef.current = null
+
     if (!restaurantId) {
       setHistoryLoading(false)
       setHistoryError("No active staff restaurant found")
@@ -144,7 +225,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     const client = supabase
     let active = true
 
-    const loadOrders = async () => {
+    const loadHistory = async () => {
       const { data, error } = await client
         .from("orders")
         .select(
@@ -167,7 +248,9 @@ export function useStaffWorkspace(restaurantId: string | null) {
       setHistoryLoading(false)
     }
 
-    void loadOrders().catch((error: unknown) => {
+    refreshHistoryRef.current = () => loadHistory()
+
+    void loadHistory().catch((error: unknown) => {
       if (!active) return
       console.error("Could not load order history", error)
       setHistoryError(
@@ -176,6 +259,9 @@ export function useStaffWorkspace(restaurantId: string | null) {
       setHistoryLoading(false)
     })
 
+    // Scoping guarantee (C7): every staff subscription is filtered to this
+    // restaurant on the server, so Realtime never streams another tenant's
+    // orders. Do not remove this filter or create an unscoped `orders` channel.
     const channel = client
       .channel(`staff-order-history-${restaurantId}`)
       .on(
@@ -204,16 +290,28 @@ export function useStaffWorkspace(restaurantId: string | null) {
           ) {
             playOrderSound()
           }
-          void loadOrders()
+          // Both fetches are the same path used for hydration, polling and
+          // re-sync. Each tab owns its own channel + fetch, so two open staff
+          // tabs converge on the database without cross-tab messaging.
+          void loadHistory()
+          void refreshOrdersRef.current?.()
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (active) applyConnectionSignal({ type: "realtime", status })
+      })
 
     return () => {
       active = false
+      refreshHistoryRef.current = null
       void client.removeChannel(channel)
     }
-  }, [restaurantId, playOrderSound, registerNewOrder])
+  }, [
+    restaurantId,
+    playOrderSound,
+    registerNewOrder,
+    applyConnectionSignal,
+  ])
 
   const activeKitchenOrders = useMemo(
     () =>
@@ -346,6 +444,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     historyLoading,
     historyError,
     reservations,
+    connectionState,
     activeKitchenOrders,
     previousKitchenOrders,
     unseenOrderIds: newOrders.unseenOrderIds,

@@ -156,6 +156,10 @@ export function OrderTrackingScreen() {
 
   // Signed-in owners/staff may receive Realtime updates; polling is the
   // fallback for them and the primary mechanism for guests.
+  //
+  // Scoping guarantee (C7): guests are RLS-filtered out of Realtime, and this
+  // channel listens to one specific order id — never the whole `orders` table.
+  // Keep the `id` filter if this subscription is ever changed.
   useEffect(() => {
     if (!supabase || !user || !order?.orderId) return
     const channel = supabase

@@ -59,6 +59,7 @@ vi.mock("./hooks/useStaffWorkspace", () => ({
     historyLoading: false,
     historyError: null,
     reservations: [],
+    connectionState: "online",
     activeKitchenOrders: [],
     previousKitchenOrders: [],
     unseenOrderIds: new Set<string>(),
