@@ -21,6 +21,8 @@ export type Order = {
   table: string
   guest: string
   time: string
+  /** ISO timestamp used by the kitchen board for SLA elapsed time + sorting. */
+  createdAt?: string
   total: number
   subtotal?: number
   tax?: number
@@ -29,7 +31,14 @@ export type Order = {
   server: string
   guests: number
   payment: string
-  items: { name: string; qty: number; price: number; modifiers?: string[] }[]
+  items: {
+    name: string
+    qty: number
+    price: number
+    modifiers?: string[]
+    /** Menu-item allergens snapshotted from the menu at read time. */
+    allergens?: string[]
+  }[]
 }
 
 export type Reservation = {

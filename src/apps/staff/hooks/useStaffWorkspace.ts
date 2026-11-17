@@ -5,6 +5,7 @@ import { supabase } from "@shared/lib/supabase"
 import { toHistoryOrder } from "../data/orderHistory"
 import { fetchStaffTables } from "../services/staffTables"
 import {
+  canKitchenTransition,
   fetchStaffOrders,
   mapStaffOrder,
   updateStaffOrderStatus,
@@ -282,37 +283,50 @@ export function useStaffWorkspace(restaurantId: string | null) {
       return
     }
 
+    const previousOrder = orders.find((order) => order.id === id)
+    if (!previousOrder) return
+
+    // The board only renders legal actions, but a stale poll or a second tab
+    // can still race us. Refuse locally too — the P03 trigger is the final
+    // guard, and this keeps the optimistic state honest.
+    if (!canKitchenTransition(previousOrder.kitchenStatus, kitchenStatus)) {
+      setOrdersError(
+        "That status change isn't allowed. Refresh the order and try again.",
+      )
+      return
+    }
+
     // Advancing an order is the acknowledgement: its "New" highlight is no
     // longer needed once the kitchen has acted on it.
     markOrderSeen(id)
+    setOrdersError(null)
+
+    setOrders((current) =>
+      current.map((order) =>
+        order.id === id
+          ? {
+              ...order,
+              kitchenStatus,
+              status:
+                kitchenStatus === "Cancelled"
+                  ? "Cancelled"
+                  : kitchenStatus === "Completed"
+                    ? "Completed"
+                    : "In progress",
+            }
+          : order,
+      ),
+    )
 
     try {
       if (!restaurantId) throw new Error("No active staff restaurant found")
 
-      await updateStaffOrderStatus(
-        restaurantId,
-        id,
-        statusMap[kitchenStatus],
-      )
-
-      setOrders((current) =>
-        current.map((order) =>
-          order.id === id
-            ? {
-                ...order,
-                kitchenStatus,
-                status:
-                  kitchenStatus === "Cancelled"
-                    ? "Cancelled"
-                    : kitchenStatus === "Completed"
-                      ? "Completed"
-                      : "In progress",
-              }
-            : order,
-        ),
-      )
+      await updateStaffOrderStatus(restaurantId, id, statusMap[kitchenStatus])
     } catch (error) {
       console.error("Failed to update order status:", error)
+      setOrders((current) =>
+        current.map((order) => (order.id === id ? previousOrder : order)),
+      )
       setOrdersError(
         error instanceof Error
           ? error.message

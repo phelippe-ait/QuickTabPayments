@@ -57,6 +57,7 @@ export function toHistoryOrder(row: HistoryRow): Order {
     databaseId: row.id,
     table: row.tables ? `Table ${row.tables.table_number}` : "—",
     guest: row.customer_name_snapshot || notes.customerName || "Guest",
+    createdAt: row.created_at,
     time: formatOrderTime(row.created_at),
     total: Number(row.total),
     subtotal: Number(row.subtotal),
