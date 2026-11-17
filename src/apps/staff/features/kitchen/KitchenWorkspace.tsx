@@ -6,6 +6,7 @@ import { Stat } from "../../components/StaffUi"
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { KitchenStatus, Order } from "../../types"
+import type { OrderSoundControls } from "../../hooks/useOrderSound"
 
 export function KitchenWorkspace({
   orders,
@@ -13,12 +14,14 @@ export function KitchenWorkspace({
   onStatusChange,
   ordersLoading,
   ordersError,
+  sound,
 }: {
   orders: Order[]
   previousOrders: Order[]
   onStatusChange: (id: string, status: KitchenStatus) => void
   ordersLoading: boolean
   ordersError: string | null
+  sound: OrderSoundControls
 }) {
   const [pendingAction, setPendingAction] = useState<{
     order: Order
@@ -51,7 +54,32 @@ export function KitchenWorkspace({
             Keep the kitchen moving and let the floor know what’s ready.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            aria-label={
+              sound.enabled
+                ? "Mute new order sound"
+                : "Unmute new order sound"
+            }
+            aria-pressed={sound.enabled}
+            className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-line transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry ${
+              sound.enabled
+                ? "bg-paper text-ink-soft hover:bg-cream-3"
+                : "bg-cream-3 text-muted hover:bg-cream-2"
+            }`}
+            onClick={() => {
+              if (!sound.unlocked) sound.prime()
+              sound.toggle()
+            }}
+            title={
+              sound.enabled
+                ? "Sound on for new orders"
+                : "Sound muted for new orders"
+            }
+          >
+            <Icon name={sound.enabled ? "volume" : "volume-off"} size={18} />
+          </button>
           <Stat value={preparing.toString().padStart(2, "0")} label="Preparing" tone="rose" />
           <Stat value={ready.toString().padStart(2, "0")} label="Ready" tone="green" />
         </div>

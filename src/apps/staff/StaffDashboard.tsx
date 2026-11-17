@@ -114,6 +114,7 @@ function StaffWorkspace() {
           onStatusChange={workspace.updateKitchenStatus}
           ordersLoading={workspace.ordersLoading}
           ordersError={workspace.ordersError}
+          sound={workspace.sound}
         />
       )}
       {view === "history" && (

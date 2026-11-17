@@ -23,6 +23,8 @@ export type IconName =
   | "calendar"
   | "settings"
   | "bell"
+  | "volume"
+  | "volume-off"
   | "users"
   | "clock"
   | "arrow"
@@ -108,6 +110,18 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
       <path d="M10 21h4" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  "volume-off": (
+    <>
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="m16 9 6 6M22 9l-6 6" />
     </>
   ),
   users: (

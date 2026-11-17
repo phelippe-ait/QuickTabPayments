@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { initialReservations } from "../data/fixtures"
 import type { KitchenStatus, Order, Reservation, Table } from "../types"
 import { supabase } from "@shared/lib/supabase"
@@ -9,6 +9,8 @@ import {
   mapStaffOrder,
   updateStaffOrderStatus,
 } from "../services/staffOrders"
+import { findNewOrderIds } from "./findNewOrderIds"
+import { useOrderSound } from "./useOrderSound"
 
 /**
  * Staff workspace data. The signed-in member's restaurant id comes from the
@@ -16,6 +18,13 @@ import {
  * restaurant — no ad-hoc slug lookups.
  */
 export function useStaffWorkspace(restaurantId: string | null) {
+  const sound = useOrderSound()
+  const { play: playOrderSound } = sound
+
+  // Kitchen order numbers already seen. `null` means the board has not been
+  // hydrated yet, so the first fetch must not chime for existing orders.
+  const knownOrderIdsRef = useRef<Set<string> | null>(null)
+
   const [tableList, setTableList] = useState<Table[]>([])
   const [tablesLoading, setTablesLoading] = useState(true)
   const [tablesError, setTablesError] = useState<string | null>(null)
@@ -35,6 +44,8 @@ export function useStaffWorkspace(restaurantId: string | null) {
   // Live kitchen board: poll every 5s. Unpaid (`pending`) orders are filtered
   // out by the query, so the kitchen only ever acts on paid orders.
   useEffect(() => {
+    knownOrderIdsRef.current = null
+
     if (!restaurantId) {
       setOrdersLoading(false)
       setTablesLoading(false)
@@ -52,7 +63,11 @@ export function useStaffWorkspace(restaurantId: string | null) {
       try {
         const rows = await fetchStaffOrders(id)
         if (!cancelled) {
-          setOrders(rows.map(mapStaffOrder))
+          const mapped = rows.map(mapStaffOrder)
+          const additions = findNewOrderIds(knownOrderIdsRef.current, mapped)
+          knownOrderIdsRef.current = new Set(mapped.map((order) => order.id))
+          if (additions.length > 0) playOrderSound()
+          setOrders(mapped)
           setOrdersError(null)
         }
       } catch (error) {
@@ -107,7 +122,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       cancelled = true
       if (interval !== undefined) clearInterval(interval)
     }
-  }, [restaurantId])
+  }, [restaurantId, playOrderSound])
 
   // Order history + Realtime. Assigning the channel synchronously means the
   // cleanup always removes it, even under React StrictMode double-mounting.
@@ -168,7 +183,27 @@ export function useStaffWorkspace(restaurantId: string | null) {
           table: "orders",
           filter: `restaurant_id=eq.${restaurantId}`,
         },
-        () => {
+        (payload) => {
+          // A paid order becomes a kitchen order when it is inserted as
+          // non-pending or updated from `pending` to `confirmed`. Chime only
+          // for order numbers the board has not already seen.
+          const row = payload.new as {
+            order_number?: string
+            status?: string
+          }
+          const knownIds = knownOrderIdsRef.current
+          if (
+            (payload.eventType === "INSERT" ||
+              payload.eventType === "UPDATE") &&
+            knownIds &&
+            row.order_number &&
+            row.status &&
+            row.status !== "pending" &&
+            !knownIds.has(row.order_number)
+          ) {
+            knownIds.add(row.order_number)
+            playOrderSound()
+          }
           void loadOrders()
         },
       )
@@ -178,7 +213,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
       active = false
       void client.removeChannel(channel)
     }
-  }, [restaurantId])
+  }, [restaurantId, playOrderSound])
 
   const activeKitchenOrders = useMemo(
     () =>
@@ -296,6 +331,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     reservations,
     activeKitchenOrders,
     previousKitchenOrders,
+    sound,
     updateTable,
     createReservation,
     cancelReservation,

@@ -61,6 +61,13 @@ vi.mock("./hooks/useStaffWorkspace", () => ({
     reservations: [],
     activeKitchenOrders: [],
     previousKitchenOrders: [],
+    sound: {
+      enabled: true,
+      unlocked: false,
+      toggle: vi.fn(),
+      prime: vi.fn(),
+      play: vi.fn(),
+    },
     updateTable: vi.fn(),
     createReservation: vi.fn(),
     cancelReservation: vi.fn(),
