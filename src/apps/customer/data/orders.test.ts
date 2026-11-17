@@ -54,6 +54,48 @@ describe("mapCustomerOrders", () => {
     })
   })
 
+  it("keeps the menu item and modifier ids needed to order again", () => {
+    const orders = mapCustomerOrders([
+      {
+        id: "order-1",
+        order_number: "QT-261025-0001",
+        status: "completed",
+        subtotal: 5.2,
+        tax: 0.47,
+        total: 5.7,
+        tracking_token: "token-1",
+        created_at: "2026-10-25T02:00:00Z",
+        tables: null,
+        restaurants: { name: "QuickTab Demo Cafe", currency: "AUD" },
+        order_items: [
+          {
+            menu_item_id: "item-1",
+            item_name_snapshot: "Flat White",
+            quantity: 1,
+            unit_price_snapshot: 5.2,
+            subtotal: 5.2,
+            order_item_modifiers: [
+              {
+                modifier_id: "mod-oat",
+                modifier_name_snapshot: "Oat milk",
+                price_adjustment_snapshot: 0.5,
+              },
+            ],
+          },
+        ],
+        payments: [],
+        refunds: [],
+      },
+    ])
+
+    expect(orders[0].items[0]).toMatchObject({
+      menuItemId: "item-1",
+      modifiers: [
+        { id: "mod-oat", name: "Oat milk", priceAdjustment: 0.5 },
+      ],
+    })
+  })
+
   it("tolerates missing joins without inventing data", () => {
     const orders = mapCustomerOrders([
       {

@@ -102,6 +102,37 @@ describe("useCart", () => {
     expect(result.current.items[0]).toMatchObject({ quantity: 2, unitPrice: 5.7 })
   })
 
+  it("merges reordered lines into the existing cart", () => {
+    const { result } = renderHook(() => useCart(tableA))
+    act(() => result.current.add(coffee, 1, [oatMilk]))
+
+    act(() =>
+      result.current.addLines([
+        {
+          menuItemId: "item-1",
+          name: "Flat White",
+          baseUnitPrice: 4.7,
+          unitPrice: 5.2,
+          quantity: 2,
+          lineId: cartLineId("item-1", [oatMilk]),
+          modifiers: [oatMilk],
+        },
+        {
+          menuItemId: "item-2",
+          name: "Toast",
+          unitPrice: 11.5,
+          quantity: 1,
+        },
+      ]),
+    )
+
+    expect(result.current.items).toHaveLength(2)
+    expect(
+      result.current.items.find((line) => line.menuItemId === "item-1"),
+    ).toMatchObject({ quantity: 3, unitPrice: 5.2 })
+    expect(result.current.total).toBe(27.1)
+  })
+
   it("persists the selected modifiers with the line", () => {
     const { result } = renderHook(() => useCart(tableA))
     act(() => result.current.add(coffee, 2, [oatMilk]))

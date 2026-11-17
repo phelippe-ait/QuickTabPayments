@@ -7,11 +7,13 @@ import type {
 } from "@shared/lib/database.types"
 
 export type CustomerOrderItem = {
+  /** Current menu item id, used to rebuild the cart ("Order again"). */
+  menuItemId: string
   name: string
   quantity: number
   unitPrice: number
   subtotal: number
-  modifiers?: { name: string; priceAdjustment: number }[]
+  modifiers?: { id: string; name: string; priceAdjustment: number }[]
 }
 
 export type CustomerOrder = {
@@ -52,11 +54,13 @@ type HistoryRow = {
   tables: { table_number: string } | null
   restaurants: { name: string; currency: string } | null
   order_items: Array<{
+    menu_item_id?: string
     item_name_snapshot: string
     quantity: number
     unit_price_snapshot: number
     subtotal: number
     order_item_modifiers?: Array<{
+      modifier_id?: string
       modifier_name_snapshot: string
       price_adjustment_snapshot: number
     }>
@@ -85,7 +89,7 @@ const historySelect = `
   created_at,
   tables(table_number),
   restaurants(name, currency),
-  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal, order_item_modifiers(modifier_name_snapshot, price_adjustment_snapshot)),
+  order_items(menu_item_id, item_name_snapshot, quantity, unit_price_snapshot, subtotal, order_item_modifiers(modifier_id, modifier_name_snapshot, price_adjustment_snapshot)),
   payments(status, payment_method_type, amount, receipt_url),
   refunds(amount, status)
 `
@@ -130,12 +134,14 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
       receiptUrl: payment?.receipt_url ?? null,
       refundedTotal,
       items: (row.order_items ?? []).map((item) => ({
+        menuItemId: item.menu_item_id ?? "",
         name: item.item_name_snapshot,
         quantity: item.quantity,
         unitPrice: Number(item.unit_price_snapshot),
         subtotal: Number(item.subtotal),
         ...((item.order_item_modifiers?.length ?? 0) > 0
           ? { modifiers: item.order_item_modifiers!.map((modifier) => ({
+              id: modifier.modifier_id ?? "",
               name: modifier.modifier_name_snapshot,
               priceAdjustment: Number(modifier.price_adjustment_snapshot),
             })) }

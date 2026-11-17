@@ -281,7 +281,13 @@ function CustomerShell() {
         />
       )}
       {screen === "orders" && user && (
-        <OrdersScreen customerId={user.id} onClose={() => setScreen("menu")} />
+        <OrdersScreen
+          customerId={user.id}
+          restaurantId={currentContext.restaurantId}
+          onAddToCart={cart.addLines}
+          onOpenCart={() => setScreen("cart")}
+          onClose={() => setScreen("menu")}
+        />
       )}
       {(screen === "login" || screen === "signup") && (
         <AuthScreen

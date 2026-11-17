@@ -180,6 +180,56 @@ export function useCart(source: QrSource | null) {
     [update],
   )
 
+  /**
+   * Merge fully-built cart lines (e.g. "Order again") into the current cart.
+   * Lines with the same item + modifier set increase the existing quantity.
+   */
+  const addLines = useCallback(
+    (lines: CartItem[]) => {
+      if (lines.length === 0) return
+      update((items) => {
+        let next = items
+        for (const line of lines) {
+          const lineId =
+            line.lineId ?? cartLineId(line.menuItemId, line.modifiers ?? [])
+          const index = next.findIndex(
+            (entry) =>
+              (entry.lineId ??
+                cartLineId(entry.menuItemId, entry.modifiers ?? [])) === lineId,
+          )
+          if (index === -1) {
+            next = [
+              ...next,
+              line.modifiers?.length
+                ? { ...line, lineId }
+                : line,
+            ]
+            continue
+          }
+          next = next.map((entry, entryIndex) =>
+            entryIndex === index
+              ? {
+                  ...entry,
+                  ...(line.modifiers?.length
+                    ? {
+                        lineId,
+                        name: line.name,
+                        baseUnitPrice: line.baseUnitPrice,
+                        modifiers: line.modifiers,
+                        unitPrice: line.unitPrice,
+                      }
+                    : { name: line.name, unitPrice: line.unitPrice }),
+                  quantity: entry.quantity + line.quantity,
+                }
+              : entry,
+          )
+        }
+        return next
+      })
+    },
+    [update],
+  )
+
   const increase = useCallback(
     (lineId: string) =>
       update((items) =>
@@ -267,6 +317,7 @@ export function useCart(source: QrSource | null) {
     total,
     canCheckout: Boolean(source) && items.length > 0,
     add,
+    addLines,
     increase,
     decrease,
     remove,

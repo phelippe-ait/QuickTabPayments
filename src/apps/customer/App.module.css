@@ -203,6 +203,9 @@
 .history-order-total { margin-top: 12px !important; color: var(--color-muted-2); font-weight: 700; }
 .history-order-total strong { color: var(--berry); }
 .history-track-link { display: inline-block; margin-top: 12px; color: var(--berry); font-size: 10px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.order-card .history-reorder-button { min-height: 32px; margin-top: 12px; padding: 0 13px; border: 1px solid var(--berry); border-radius: 7px; background: var(--color-paper); color: var(--berry); font-size: 11px; font-weight: 700; cursor: pointer; transition: background .18s ease, opacity .18s ease; }
+.order-card .history-reorder-button:hover:not(:disabled) { background: var(--berry-soft); }
+.order-card .history-reorder-button:disabled { opacity: .55; cursor: wait; }
 .large-cart { width: 70px; height: 70px; border-radius: 50%; display: grid; place-items: center; margin: auto; background: var(--color-danger-soft); color: var(--berry); }
 .empty-cart h2 { color: var(--color-muted-2); font-size: 17px; margin: 18px 0 7px; }
 .empty-cart p { font-size: 12px; margin: 0 0 22px; }
