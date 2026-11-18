@@ -1,6 +1,6 @@
 import { requireSupabase } from "./client";
 import { supabase } from "@shared/lib/supabase";
-import type { Refund, TablesInsert } from "@shared/lib/database.types";
+import type { Refund } from "@shared/lib/database.types";
 
 export type StripeRefundInput = {
   orderId: string;
@@ -59,26 +59,6 @@ export async function fetchRefundsForOrder(orderId: string): Promise<Refund[]> {
 
   if (error) throw new Error(error.message);
   return data ?? [];
-}
-
-export async function createRefund(
-  input: TablesInsert<"refunds">,
-): Promise<Refund> {
-  const client = requireSupabase();
-  const { data, error } = await client
-    .from("refunds")
-    .insert(input)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw new Error(
-      error.code === "23505"
-        ? "This refund looks like it was already recorded."
-        : error.message,
-    );
-  }
-  return data;
 }
 
 export const refundKeys = {
