@@ -307,10 +307,14 @@ rollback;
 -- (t) Function grants. Expected: all five columns true.
 select
   has_function_privilege(
-    'anon', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+    'anon',
+    'public.place_order(text,text,text,text,jsonb,double precision,double precision,jsonb)',
+    'execute'
   ) as anon_can_place_order,
   has_function_privilege(
-    'authenticated', 'public.place_order(text,text,text,text,jsonb)', 'execute'
+    'authenticated',
+    'public.place_order(text,text,text,text,jsonb,double precision,double precision,jsonb)',
+    'execute'
   ) as authenticated_can_place_order,
   has_function_privilege(
     'anon', 'public.get_order_tracking(text)', 'execute'
@@ -388,8 +392,9 @@ begin
     )
   );
 
-  if v_placed->>'status' <> 'confirmed' then
-    raise exception 'expected status confirmed, got %', v_placed->>'status';
+  -- Orders are unpaid until the Stripe webhook confirms them (0016 / 0027).
+  if v_placed->>'status' <> 'pending' then
+    raise exception 'expected status pending, got %', v_placed->>'status';
   end if;
 
   if (v_placed->>'total')::numeric <> round(v_expected_price * 2, 2) then
@@ -805,6 +810,96 @@ begin
 end $$;
 rollback;
 
+-- ---------------------------------------------------------------------
+-- P26 — guest order starts `pending`, so a failed payment can cancel it
+-- (regression fixed in 0027_place_order_pending_status.sql).
+-- ---------------------------------------------------------------------
+-- Self-contained; the transaction rolls back. Expected:
+--   NOTICE  p26 pending order cancelled on payment failure ok
+begin;
+
+do $$
+declare
+  v_slug     text;
+  v_token    text;
+  v_item     uuid;
+  v_placed   jsonb;
+  v_order_id uuid;
+  v_status   public.order_status;
+  v_tracked  jsonb;
+  v_pi       text :=
+    'pi_p26_' || replace(gen_random_uuid()::text, '-', '');
+begin
+  select r.slug into v_slug
+    from public.restaurants r
+   where r.is_active and r.slug <> 'rls-test-other'
+   order by r.created_at limit 1;
+
+  select t.qr_token into v_token
+    from public.tables t
+    join public.restaurants r on r.id = t.restaurant_id
+   where r.slug = v_slug and t.is_active
+   order by t.table_number limit 1;
+
+  select mi.id into v_item
+    from public.menu_items mi
+    join public.restaurants r on r.id = mi.restaurant_id
+   where r.slug = v_slug and mi.is_available
+   limit 1;
+
+  if v_slug is null or v_token is null or v_item is null then
+    raise notice 'p26 check skipped (no demo data)';
+    return;
+  end if;
+
+  v_placed := public.place_order(
+    v_slug,
+    v_token,
+    'P26 pending check',
+    null,
+    jsonb_build_array(jsonb_build_object(
+      'menu_item_id', v_item,
+      'quantity', 1
+    ))
+  );
+
+  v_order_id := (v_placed->>'order_id')::uuid;
+
+  -- The row the kitchen sees, not just the RPC's JSON response.
+  select o.status into v_status
+    from public.orders o
+   where o.id = v_order_id;
+  if v_status is distinct from 'pending' then
+    raise exception 'place_order inserted %, expected pending', v_status;
+  end if;
+
+  -- The guest tracking page must also say "Payment confirming" first.
+  v_tracked := public.get_order_tracking(v_placed->>'tracking_token');
+  if v_tracked->>'status' is distinct from 'pending' then
+    raise exception 'tracking showed %, expected pending', v_tracked->>'status';
+  end if;
+
+  -- Simulate the Stripe webhook reporting a failed payment.
+  perform public.record_payment_intent(
+    v_order_id,
+    (v_placed->>'amount_due')::numeric,
+    v_placed->>'currency',
+    v_pi,
+    null
+  );
+  perform public.apply_payment_failed(v_pi, 'P26 verification');
+
+  select o.status into v_status
+    from public.orders o
+   where o.id = v_order_id;
+  if v_status is distinct from 'cancelled' then
+    raise exception 'apply_payment_failed left order %, expected cancelled', v_status;
+  end if;
+
+  raise notice 'p26 pending order cancelled on payment failure ok';
+end $$;
+rollback;
+
 -- Phase 7 — guest order claiming. Only signed-in users may claim.
 -- Expected: anon=false, authenticated=true.
 select
@@ -818,3 +913,1527 @@ select
     'public.claim_guest_order(text)',
     'EXECUTE'
   ) as auth_can_claim_guest_order;
+
+-- ---------------------------------------------------------------------
+-- P01 — subscription plan column (0020)
+-- ---------------------------------------------------------------------
+-- `plan` has no column-level policy: Postgres has no column-level RLS, and
+-- it is covered by the existing `restaurants` row policies. These checks
+-- document that reads keep working for anon/customers while cross-tenant
+-- writes stay blocked.
+--
+-- <restaurant-slug>       demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <customer-user-uuid>    a signed-in user with no staff role
+-- <manager-user-uuid>     an active manager of the demo restaurant
+-- <other-restaurant-uuid> a different restaurant's id
+
+-- (ab) Anonymous customers can read the plan of an active restaurant.
+-- Expected: one row with plan = basic/standard/premium.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+select slug, plan
+from public.restaurants
+where slug = '<restaurant-slug>';
+rollback;
+
+-- (ac) A signed-in customer (not staff) can read the plan as well.
+-- Expected: one row with plan = basic/standard/premium.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+select slug, plan
+from public.restaurants
+where slug = '<restaurant-slug>';
+rollback;
+
+-- (ad) A manager of restaurant A cannot change restaurant B's plan.
+-- Expected: UPDATE 0 (the row is invisible under `restaurants_staff_update`).
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.restaurants
+   set plan = 'premium'
+ where id = '<other-restaurant-uuid>';
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P02 — sales reporting RPC (0021)
+-- ---------------------------------------------------------------------
+-- get_sales_report() resolves the restaurant from the caller's active
+-- restaurant_staff row (owner|manager) and rejects everyone else. The
+-- report is aggregated server-side, so these checks only need to prove
+-- the caller gate and restaurant scoping.
+--
+-- <restaurant-uuid>        demo restaurant A id
+-- <restaurant-slug>        demo restaurant A slug
+-- <manager-user-uuid>      active manager of A
+-- <kitchen-user-uuid>      active kitchen staff of A
+-- <customer-user-uuid>     signed-in user with no staff role
+-- <other-restaurant-uuid>  a different restaurant B id
+-- <other-staff-user-uuid>  owner/manager of restaurant B
+
+-- Execute privilege: anon=false, authenticated=true.
+select
+  has_function_privilege(
+    'anon',
+    'public.get_sales_report(timestamptz,timestamptz)',
+    'EXECUTE'
+  ) as anon_can_get_sales_report,
+  has_function_privilege(
+    'authenticated',
+    'public.get_sales_report(timestamptz,timestamptz)',
+    'EXECUTE'
+  ) as auth_can_get_sales_report;
+
+-- (ae) A manager of A gets a report scoped to A.
+-- Expected: NOTICE P02 get_sales_report manager scope ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_out      jsonb;
+  v_expected numeric;
+  v_top      jsonb;
+  v_hours    jsonb;
+begin
+  v_out := public.get_sales_report(now() - interval '7 days', now());
+
+  if v_out->>'currency' is null
+     or v_out->>'from' is null
+     or v_out->>'to' is null then
+    raise exception 'report is missing header fields: %', v_out;
+  end if;
+
+  -- Money is text with exactly 2 decimals.
+  if (v_out->>'gross_revenue')     !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'paid_revenue')   !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'refunded_amount') !~ '^-?[0-9]+\.[0-9]{2}$'
+     or (v_out->>'aov')            !~ '^-?[0-9]+\.[0-9]{2}$' then
+    raise exception 'report money is not 2-dp text: %', v_out;
+  end if;
+
+  -- Exactly 24 zero-filled hours.
+  v_hours := v_out->'busy_hours';
+  if jsonb_typeof(v_hours) <> 'array' or jsonb_array_length(v_hours) <> 24 then
+    raise exception 'busy_hours is not 24 entries: %', v_hours;
+  end if;
+
+  if jsonb_typeof(v_out->'top_items') <> 'array' then
+    raise exception 'top_items is not an array: %', v_out->'top_items';
+  end if;
+
+  -- Manager is staff of A, so RLS lets the comparison query see A's orders.
+  select round(coalesce(sum(o.total), 0), 2)
+    into v_expected
+  from public.orders o
+  where o.restaurant_id = '<restaurant-uuid>'
+    and o.created_at >= now() - interval '7 days'
+    and o.created_at <  now()
+    and o.status <> 'cancelled';
+
+  if (v_out->>'gross_revenue')::numeric is distinct from v_expected then
+    raise exception 'gross_revenue % <> direct aggregate %',
+      v_out->>'gross_revenue', v_expected;
+  end if;
+
+  raise notice 'P02 get_sales_report manager scope ok';
+end $$;
+rollback;
+
+-- (af) Kitchen staff of A are rejected.
+-- Expected: NOTICE P02 get_sales_report kitchen not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for kitchen';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P02 get_sales_report kitchen not_authorised ok';
+end $$;
+rollback;
+
+-- (ag) A signed-in customer (no staff row) is rejected.
+-- Expected: NOTICE P02 get_sales_report customer not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for customer';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P02 get_sales_report customer not_authorised ok';
+end $$;
+rollback;
+
+-- (ah) Owner/manager of a different restaurant B gets B's report, resolved
+--      from B's membership, and never A's numbers. (The RPC has no restaurant
+--      argument, so a B caller can only ever resolve B.)
+-- Expected: NOTICE P02 get_sales_report other restaurant scoped to B ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<other-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_out      jsonb;
+  v_expected numeric;
+begin
+  v_out := public.get_sales_report(now() - interval '7 days', now());
+
+  -- B's staff can read B's orders under RLS, so direct aggregation is a fair
+  -- oracle for the RPC's scoped result.
+  select round(coalesce(sum(o.total), 0), 2)
+    into v_expected
+  from public.orders o
+  where o.restaurant_id = '<other-restaurant-uuid>'
+    and o.created_at >= now() - interval '7 days'
+    and o.created_at <  now()
+    and o.status <> 'cancelled';
+
+  if (v_out->>'gross_revenue')::numeric is distinct from v_expected then
+    raise exception 'B gross_revenue % <> direct aggregate %',
+      v_out->>'gross_revenue', v_expected;
+  end if;
+
+  raise notice 'P02 get_sales_report other restaurant scoped to B ok';
+end $$;
+rollback;
+
+-- (ai) Cross-restaurant leakage (manual procedure, seeds nothing here).
+-- The function scopes every aggregate to the resolved restaurant id, so
+-- restaurant B's orders can never appear in A's report. To verify by hand:
+--   1. As manager of A, record the report for a known window:
+--        select public.get_sales_report(now() - interval '1 day', now());
+--   2. In a scratch transaction (rolled back afterwards), insert an order
+--      for restaurant B with a distinctive total:
+--        insert into public.orders (restaurant_id, order_number, status, total)
+--        values ('<other-restaurant-uuid>', 'RLS-B-LEAK', 'confirmed', 999.99);
+--   3. Call get_sales_report again for A in the same window and compare:
+--      currency, from, to, order_count, gross_revenue, paid_revenue,
+--      refunded_amount, aov, top_items and busy_hours must be identical.
+--   4. rollback;
+
+-- =====================================================================
+-- P03 — order status transition guard (0022)
+-- =====================================================================
+-- <restaurant-uuid> and <manager-user-uuid> as above. Each check inserts a
+-- scratch order inside a transaction and rolls it back.
+
+-- (aj) Staff cannot skip pending -> ready. Expected: NOTICE
+--      "P03 illegal status transition rejected ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-ILLEGAL', 'pending');
+do $$
+declare
+  v_err text;
+begin
+  begin
+    update public.orders
+       set status = 'ready'
+     where restaurant_id = '<restaurant-uuid>'
+       and order_number = 'RLS-P03-ILLEGAL';
+    raise exception 'expected invalid_status_transition';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_status_transition' then
+    raise exception 'expected invalid_status_transition, got %', v_err;
+  end if;
+  raise notice 'P03 illegal status transition rejected ok';
+end $$;
+rollback;
+
+-- (ak) The legal pending -> confirmed transition is allowed, the rest of the
+--      matrix can be walked, and completing the order stamps completed_at.
+--      Expected: NOTICE "P03 legal status transition allowed ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-LEGAL', 'pending');
+update public.orders
+   set status = 'confirmed'
+ where restaurant_id = '<restaurant-uuid>'
+   and order_number = 'RLS-P03-LEGAL';
+do $$
+declare
+  v_completed_at timestamptz;
+begin
+  update public.orders
+     set status = 'preparing'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'confirmed';
+  update public.orders
+     set status = 'ready'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'preparing';
+  update public.orders
+     set status = 'completed'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL'
+     and status = 'ready';
+
+  select completed_at into v_completed_at
+    from public.orders
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P03-LEGAL';
+
+  if v_completed_at is null then
+    raise exception 'expected completed_at to be set on completion';
+  end if;
+  raise notice 'P03 legal status transition allowed ok';
+end $$;
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P04 — tips
+-- ---------------------------------------------------------------------
+-- <restaurant-slug>  demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <table-token>      an active table's qr_token for <restaurant-uuid>
+-- <menu-item-uuid>   an available menu item for <restaurant-uuid>
+-- <customer-user-uuid> signed-in customer's auth user id
+
+-- (al) Anon places an order with a 10% tip. Expected: NOTICE
+--      "P04 percent tip computed ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_result     jsonb;
+  v_total      numeric;
+  v_tip        numeric;
+  v_amount_due numeric;
+  v_expected   numeric;
+begin
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P04 Tip',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+    ),
+    null,
+    null,
+    jsonb_build_object('type', 'percent', 'value', 10)
+  );
+
+  v_total      := (v_result->>'total')::numeric;
+  v_tip        := (v_result->>'tip_amount')::numeric;
+  v_amount_due := (v_result->>'amount_due')::numeric;
+  v_expected   := round(v_total * 10 / 100, 2);
+
+  if v_tip is distinct from v_expected then
+    raise exception 'expected tip %, got %', v_expected, v_tip;
+  end if;
+
+  if v_amount_due is distinct from round(v_total + v_tip, 2) then
+    raise exception 'expected amount_due %, got %', round(v_total + v_tip, 2), v_amount_due;
+  end if;
+
+  raise notice 'P04 percent tip computed ok';
+end $$;
+rollback;
+
+-- (am) Tampered tips are rejected by the RPC. Expected: NOTICE
+--      "P04 invalid tips rejected ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P04 Bad Tip',
+      null,
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+      ),
+      null,
+      null,
+      jsonb_build_object('type', 'percent', 'value', -5)
+    );
+    raise exception 'expected invalid_tip';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_tip' then
+    raise exception 'expected invalid_tip, got %', v_err;
+  end if;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P04 Bad Tip',
+      null,
+      jsonb_build_array(
+        jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+      ),
+      null,
+      null,
+      jsonb_build_object('type', 'fixed', 'value', 999)
+    );
+    raise exception 'expected invalid_tip';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_tip' then
+    raise exception 'expected invalid_tip, got %', v_err;
+  end if;
+
+  raise notice 'P04 invalid tips rejected ok';
+end $$;
+rollback;
+
+-- (an) A customer cannot update orders.tip_amount directly. Expected: NOTICE
+--      "P04 customer cannot update tip_amount ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_result  jsonb;
+  v_order_id uuid;
+  v_updated int;
+begin
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P04 Customer Tip',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1)
+    ),
+    null,
+    null,
+    jsonb_build_object('type', 'fixed', 'value', 1)
+  );
+
+  v_order_id := (v_result->>'order_id')::uuid;
+
+  update public.orders
+     set tip_amount = 99.99
+   where id = v_order_id;
+  get diagnostics v_updated = row_count;
+
+  if v_updated <> 0 then
+    raise exception 'customer updated tip_amount directly';
+  end if;
+
+  raise notice 'P04 customer cannot update tip_amount ok';
+end $$;
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P05 — modifier validation + pricing inside place_order
+-- ---------------------------------------------------------------------
+-- <restaurant-uuid>    demo restaurant id
+-- <restaurant-slug>    demo restaurant slug (e.g. quicktab-demo-cafe)
+-- <table-token>        an active table's qr_token for <restaurant-uuid>
+-- <menu-item-uuid>     an available menu item for <restaurant-uuid> that has
+--                      at least one modifier group linked to it
+
+-- (ao) A valid modifier set is priced from live DB values, folded into one
+--      line and snapshotted. Extra pricing hints in the payload are ignored.
+--      Expected: NOTICE "P05 valid modifiers priced + snapshotted ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_ids             jsonb;
+  v_base            numeric;
+  v_adjustment      numeric;
+  v_expected_price  numeric;
+  v_result          jsonb;
+  v_tracking        jsonb;
+  v_expected_count  int;
+begin
+  -- Pick the minimum required modifiers from each linked group (one from
+  -- each required/minimum group, respecting single-selection limits).
+  select coalesce(jsonb_agg(chosen.id order by chosen.group_id, chosen.display_order), '[]'::jsonb)
+    into v_ids
+  from (
+    select
+      m.id,
+      g.id as group_id,
+      m.display_order,
+      row_number() over (partition by g.id order by m.display_order, m.name) as rn,
+      greatest(g.min_selections, case when g.is_required then 1 else 0 end) as need
+    from public.menu_item_modifier_groups img
+    join public.modifier_groups g on g.id = img.modifier_group_id
+    join public.modifiers m
+      on m.modifier_group_id = g.id
+     and m.is_available
+    where img.menu_item_id = '<menu-item-uuid>'
+  ) as chosen
+  where chosen.rn <= chosen.need;
+
+  select mi.price
+    into v_base
+  from public.menu_items mi
+  where mi.id = '<menu-item-uuid>';
+
+  select coalesce(sum(m.price_adjustment), 0)
+    into v_adjustment
+  from jsonb_array_elements_text(v_ids) as selected(value)
+  join public.modifiers m on m.id = selected.value::uuid;
+
+  v_expected_price := round(v_base + v_adjustment, 2);
+  v_expected_count := jsonb_array_length(v_ids);
+
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P05 Modifiers',
+    null,
+    jsonb_build_array(
+      jsonb_build_object(
+        'menu_item_id', '<menu-item-uuid>',
+        'quantity', 1,
+        'modifiers', v_ids,
+        -- Tampered pricing hints: the server must ignore these and read the
+        -- live menu/modifier values instead.
+        'unit_price', 0.01,
+        'price_adjustment', 9999
+      )
+    )
+  );
+
+  if (v_result->'items'->0->>'unit_price')::numeric is distinct from v_expected_price then
+    raise exception 'expected unit_price %, got %',
+      v_expected_price, v_result->'items'->0->>'unit_price';
+  end if;
+
+  -- get_order_tracking is security definer and returns the snapshots that
+  -- were written to order_item_modifiers.
+  v_tracking := public.get_order_tracking(v_result->>'tracking_token');
+
+  if jsonb_array_length(v_tracking->'items'->0->'modifiers') <> v_expected_count then
+    raise exception 'expected % modifier snapshots, got %',
+      v_expected_count, jsonb_array_length(v_tracking->'items'->0->'modifiers');
+  end if;
+
+  raise notice 'P05 valid modifiers priced + snapshotted ok';
+end $$;
+rollback;
+
+-- (ap) A modifier that belongs to another restaurant's item is rejected. A
+--      throwaway second restaurant is created inside the transaction and
+--      rolled back with it. Expected: NOTICE
+--      "P05 foreign modifier rejected ok".
+begin;
+do $$
+declare
+  v_owner   uuid;
+  v_foreign_restaurant uuid;
+  v_group   uuid;
+  v_modifier uuid;
+begin
+  select id into v_owner from public.profiles limit 1;
+
+  if v_owner is null then
+    raise notice 'P05 foreign modifier check skipped (no profiles)';
+    return;
+  end if;
+
+  insert into public.restaurants (owner_id, slug, name, is_active)
+  values (
+    v_owner,
+    'rls-p05-foreign-' || gen_random_uuid(),
+    'RLS P05 Foreign Restaurant',
+    true
+  )
+  returning id into v_foreign_restaurant;
+
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (v_foreign_restaurant, 'Foreign extras', 'multiple', 0, 5, false, 0)
+  returning id into v_group;
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment)
+  values (v_group, 'Foreign choice', 1.00)
+  returning id into v_modifier;
+
+  create temp table p05_foreign_fixture as select v_modifier as modifier_id;
+  grant select on p05_foreign_fixture to anon;
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_foreign uuid;
+  v_err     text;
+begin
+  select modifier_id into v_foreign from p05_foreign_fixture;
+
+  if v_foreign is null then
+    raise notice 'P05 foreign modifier check skipped (no fixture)';
+    return;
+  end if;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Foreign',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', jsonb_build_array(v_foreign)
+        )
+      )
+    );
+    raise exception 'expected invalid_modifier';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'invalid_modifier' then
+    raise exception 'expected invalid_modifier, got %', v_err;
+  end if;
+
+  raise notice 'P05 foreign modifier rejected ok';
+end $$;
+rollback;
+
+-- (aq) Exceeding a multiple group's max_selections is rejected. A temporary
+--      max-2 group with three modifiers is created inside the transaction and
+--      rolled back with it. Expected: NOTICE
+--      "P05 max selections rejected ok".
+begin;
+do $$
+declare
+  v_group uuid;
+begin
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (
+    '<restaurant-uuid>', 'RLS P05 Max', 'multiple', 0, 2, false, 9999
+  )
+  returning id into v_group;
+
+  insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id)
+  values ('<menu-item-uuid>', v_group);
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment, display_order)
+  values
+    (v_group, 'Max A', 0, 0),
+    (v_group, 'Max B', 0, 1),
+    (v_group, 'Max C', 0, 2);
+
+  create temp table p05_max_fixture as
+    select jsonb_agg(id order by display_order) as modifier_ids
+    from public.modifiers
+    where modifier_group_id = v_group;
+
+  grant select on p05_max_fixture to anon;
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_ids jsonb;
+  v_err text;
+begin
+  select modifier_ids into v_ids from p05_max_fixture;
+
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Max',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', v_ids
+        )
+      )
+    );
+    raise exception 'expected modifier_selection_invalid';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'modifier_selection_invalid' then
+    raise exception 'expected modifier_selection_invalid, got %', v_err;
+  end if;
+
+  raise notice 'P05 max selections rejected ok';
+end $$;
+rollback;
+
+-- (ar) Skipping a required group is rejected. A temporary required group is
+--      created inside the transaction and rolled back with it. Expected:
+--      NOTICE "P05 required group enforced ok".
+begin;
+do $$
+declare
+  v_group uuid;
+begin
+  insert into public.modifier_groups (
+    restaurant_id, name, selection_type, min_selections, max_selections,
+    is_required, display_order
+  )
+  values (
+    '<restaurant-uuid>', 'RLS P05 Required', 'single', 0, 1, true, 10000
+  )
+  returning id into v_group;
+
+  insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id)
+  values ('<menu-item-uuid>', v_group);
+
+  insert into public.modifiers (modifier_group_id, name, price_adjustment, display_order)
+  values (v_group, 'Required choice', 0, 0);
+end $$;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.place_order(
+      '<restaurant-slug>',
+      '<table-token>',
+      'RLS P05 Required',
+      null,
+      jsonb_build_array(
+        jsonb_build_object(
+          'menu_item_id', '<menu-item-uuid>',
+          'quantity', 1,
+          'modifiers', '[]'::jsonb
+        )
+      )
+    );
+    raise exception 'expected modifier_required';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'modifier_required' then
+    raise exception 'expected modifier_required, got %', v_err;
+  end if;
+
+  raise notice 'P05 required group enforced ok';
+end $$;
+rollback;
+
+-- (as) Identical item + modifier lines fold into one order line while a
+--      different modifier selection stays separate. Expected: NOTICE
+--      "P05 identical lines fold ok".
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_a       uuid;
+  v_b       uuid;
+  v_result  jsonb;
+begin
+  -- Two available modifiers from the same optional group: one variant each.
+  select m.id
+    into v_a
+  from public.menu_item_modifier_groups img
+  join public.modifiers m on m.modifier_group_id = img.modifier_group_id and m.is_available
+  where img.menu_item_id = '<menu-item-uuid>'
+  order by m.display_order, m.name
+  limit 1;
+
+  if v_a is null then
+    raise notice 'P05 folding check skipped (item has no available modifiers)';
+    return;
+  end if;
+
+  v_result := public.place_order(
+    '<restaurant-slug>',
+    '<table-token>',
+    'RLS P05 Fold',
+    null,
+    jsonb_build_array(
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', jsonb_build_array(v_a)),
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', jsonb_build_array(v_a)),
+      jsonb_build_object('menu_item_id', '<menu-item-uuid>', 'quantity', 1, 'modifiers', '[]'::jsonb)
+    )
+  );
+
+  if jsonb_array_length(v_result->'items') <> 2 then
+    raise exception 'expected 2 folded lines, got %', jsonb_array_length(v_result->'items');
+  end if;
+
+  raise notice 'P05 identical lines fold ok';
+end $$;
+rollback;
+
+-- ---------------------------------------------------------------------
+-- P06 — table operational status (0025)
+-- ---------------------------------------------------------------------
+-- <restaurant-uuid>       restaurant A id
+-- <table-uuid>            an active table belonging to restaurant A
+-- <kitchen-user-uuid>     active kitchen staff of restaurant A
+-- <customer-user-uuid>    signed-in user with no staff role
+-- <other-staff-user-uuid> owner/manager of a different restaurant B
+--
+-- No new policy is added: `tables_staff_manage` already scopes writes with
+-- is_staff_of(restaurant_id), and `tables_public_read` is SELECT-only.
+-- These checks prove the new `status` column inherits that behaviour.
+
+-- (at) Kitchen staff of A can update A's table status. Expected: UPDATE 1.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'needs_cleaning'
+ where id = '<table-uuid>';
+rollback;
+
+-- (au) A signed-in customer cannot update a table. Expected: UPDATE 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'available'
+ where id = '<table-uuid>';
+rollback;
+
+-- (av) Anon cannot update a table at all. Expected: UPDATE 0.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+update public.tables
+   set status = 'available'
+ where id = '<table-uuid>';
+rollback;
+
+-- (aw) Staff of restaurant B cannot update A's table status. Expected:
+--      UPDATE 0 (the row is invisible under `tables_staff_manage`).
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<other-staff-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+update public.tables
+   set status = 'occupied'
+ where id = '<table-uuid>';
+rollback;
+
+-- =====================================================================
+-- P10 — popular-items report (0026)
+-- =====================================================================
+-- The replacement `get_sales_report` keeps the same caller gate and adds a
+-- `popular_items` array (top 10 by quantity). No new policy or grant is
+-- introduced, so this section proves the payload shape and ordering.
+--
+-- Reuse the P02 placeholders: <manager-user-uuid>, <kitchen-user-uuid>,
+-- <customer-user-uuid>, <other-staff-user-uuid>.
+
+-- (ax) Manager payload includes a quantity-ordered popular-items array and
+--      the existing revenue-led top-items array.
+-- Expected: NOTICE P10 get_sales_report popular_items ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_out     jsonb;
+  v_pop     jsonb;
+  v_top     jsonb;
+  v_entry   jsonb;
+  v_prev    int;
+begin
+  v_out := public.get_sales_report(now() - interval '7 days', now());
+  v_pop := v_out->'popular_items';
+  v_top := v_out->'top_items';
+
+  if jsonb_typeof(v_pop) <> 'array' then
+    raise exception 'popular_items is not an array: %', v_pop;
+  end if;
+
+  if jsonb_typeof(v_top) <> 'array' then
+    raise exception 'top_items is not an array: %', v_top;
+  end if;
+
+  if jsonb_array_length(v_pop) > 10 then
+    raise exception 'popular_items has more than 10 entries: %',
+      jsonb_array_length(v_pop);
+  end if;
+
+  v_prev := null;
+  for v_entry in select * from jsonb_array_elements(v_pop) loop
+    if v_entry->>'name' is null or (v_entry->>'quantity') is null then
+      raise exception 'popular item is missing name/quantity: %', v_entry;
+    end if;
+
+    if (v_entry->>'revenue') !~ '^-?[0-9]+\.[0-9]{2}$' then
+      raise exception 'popular item revenue is not 2-dp text: %', v_entry;
+    end if;
+
+    if v_prev is not null and (v_entry->>'quantity')::int > v_prev then
+      raise exception 'popular_items is not quantity-descending: %', v_pop;
+    end if;
+
+    v_prev := (v_entry->>'quantity')::int;
+  end loop;
+
+  raise notice 'P10 get_sales_report popular_items ok';
+end $$;
+rollback;
+
+-- (ay) Kitchen staff still cannot call the report after the replacement.
+-- Expected: NOTICE P10 get_sales_report kitchen not_authorised ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(now() - interval '7 days', now());
+    raise exception 'expected not_authorised for kitchen';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'expected not_authorised, got %', v_err;
+  end if;
+  raise notice 'P10 get_sales_report kitchen not_authorised ok';
+end $$;
+rollback;
+
+-- =====================================================================
+-- P12 — reporting RLS verification (hard gate)
+-- =====================================================================
+-- Maps to B2.7. `get_sales_report(p_from timestamptz, p_to timestamptz)`
+-- takes no restaurant argument: the tenant is always resolved from the
+-- caller's active `restaurant_staff` row, so a caller cannot spoof it.
+--
+-- Every check below is self-contained. It builds throwaway restaurants A
+-- and B (fixed `c12…` ids, created_at in 2000 so they sort before any demo
+-- restaurant), picks existing profiles from `public.profiles`, seeds orders,
+-- and rolls everything back. No placeholders to substitute.
+--
+-- What green looks like when this section is run:
+--   (az) owner of A ....... PASS — report is A's 100.00 only (B's 999.99
+--                                  order in the same window must not leak)
+--   (ba) manager of A ..... PASS — report is A's 100.00 only
+--   (bb) kitchen of A ..... PASS — raises `not_authorised`
+--   (bc) owner of B ....... PASS — report is B's 999.99, never A's 100.00
+--   (bd) plain customer ... PASS — raises `not_authorised`
+--   (be) anon ............. PASS — EXECUTE = false; call raises 42501
+--   (bf) cross-tenant ..... PASS — A's report is identical before and
+--                                  after B receives another 500.00 order
+--   (bg) no spoofable arg . PASS — the RPC has exactly 2 timestamptz
+--                                  arguments and no restaurant/uuid one
+--
+-- Fixture ids: A = c12a0000-0000-4000-8000-000000000001
+--              B = c12b0000-0000-4000-8000-000000000001
+--
+-- The `update`/`delete` statements below clear the chosen profiles' existing
+-- memberships so each check has exactly the roles it intends. The SQL
+-- editor runs as postgres/supabase_admin, which the staff guard treats as
+-- privileged; all changes are rolled back.
+
+-- (az) Owner of A gets A's report only. Restaurant B has a larger order in
+--      the same window, so any leak would show 1099.99 or order_count = 2.
+-- Expected: NOTICE P12 owner report scoped to A ok.
+begin;
+do $$
+declare
+  v_owner uuid;
+begin
+  select id into v_owner from public.profiles order by created_at, id limit 1;
+  if v_owner is null then
+    raise exception 'P12 needs at least one profile row';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_owner, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'owner A: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'owner A: gross_revenue %, expected 100.00 (B leak = 1099.99)',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 owner report scoped to A ok';
+end $$;
+rollback;
+
+-- (ba) Manager of A is allowed and gets the same A-scoped numbers.
+-- Expected: NOTICE P12 manager report scoped to A ok.
+begin;
+do $$
+declare
+  v_manager uuid;
+begin
+  select id into v_manager from public.profiles order by created_at, id offset 1 limit 1;
+  if v_manager is null then
+    raise exception 'P12 needs at least two profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_manager;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_manager, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_manager, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_manager, 'manager', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 1 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'manager A: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'manager A: gross_revenue %, expected 100.00',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 manager report scoped to A ok';
+end $$;
+rollback;
+
+-- (bb) Kitchen staff of A are rejected by the role check.
+-- Expected: NOTICE P12 kitchen not_authorised ok.
+begin;
+do $$
+declare
+  v_kitchen uuid;
+begin
+  select id into v_kitchen from public.profiles order by created_at, id offset 2 limit 1;
+  if v_kitchen is null then
+    raise exception 'P12 needs at least three profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_kitchen;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values ('c12a0000-0000-4000-8000-000000000001', v_kitchen, 'rls-p12-a',
+          'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_kitchen, 'kitchen', true);
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 2 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'kitchen executed get_sales_report';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'kitchen: expected not_authorised, got %', v_err;
+  end if;
+
+  raise notice 'P12 kitchen not_authorised ok';
+end $$;
+rollback;
+
+-- (bc) Owner of B gets B's numbers only. Restaurant A has a 100.00 order in
+--      the same window, so leaking A would show 1099.99.
+-- Expected: NOTICE P12 owner report scoped to B ok.
+begin;
+do $$
+declare
+  v_owner_b uuid;
+begin
+  select id into v_owner_b from public.profiles order by created_at, id offset 3 limit 1;
+  if v_owner_b is null then
+    raise exception 'P12 needs at least four profile rows';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner_b;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner_b, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner_b, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  -- Only B membership: the RPC must resolve B from restaurant_staff.
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12b0000-0000-4000-8000-000000000001', v_owner_b, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 3 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'order_count')::int is distinct from 1 then
+    raise exception 'owner B: order_count %, expected 1', v_out->>'order_count';
+  end if;
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 999.99 then
+    raise exception 'owner B: gross_revenue %, expected 999.99 (A leak = 1099.99)',
+      v_out->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 owner report scoped to B ok';
+end $$;
+rollback;
+
+-- (bd) A signed-in user with no active staff membership is rejected.
+-- Expected: NOTICE P12 customer not_authorised ok.
+begin;
+do $$
+declare
+  v_customer uuid;
+begin
+  select id into v_customer from public.profiles order by created_at, id offset 4 limit 1;
+  if v_customer is null then
+    raise exception 'P12 needs at least five profile rows';
+  end if;
+
+  -- Literally no staff row: this is the plain customer path.
+  delete from public.restaurant_staff where user_id = v_customer;
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id offset 4 limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_err text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'customer executed get_sales_report';
+  exception
+    when others then
+      v_err := sqlerrm;
+  end;
+
+  if v_err is distinct from 'not_authorised' then
+    raise exception 'customer: expected not_authorised, got %', v_err;
+  end if;
+
+  raise notice 'P12 customer not_authorised ok';
+end $$;
+rollback;
+
+-- (be) Anon has no EXECUTE grant, so the call fails before the body runs.
+-- Expected: anon_can_get_sales_report = false, then NOTICE
+--           P12 anon cannot execute get_sales_report ok.
+select has_function_privilege(
+  'anon',
+  'public.get_sales_report(timestamptz,timestamptz)',
+  'EXECUTE'
+) as anon_can_get_sales_report;
+
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+
+do $$
+declare
+  v_state text;
+begin
+  begin
+    perform public.get_sales_report(
+      '2026-01-01T00:00:00+00'::timestamptz,
+      '2026-02-01T00:00:00+00'::timestamptz
+    );
+    raise exception 'anon executed get_sales_report';
+  exception
+    when insufficient_privilege then
+      v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'anon: expected insufficient_privilege (42501), got %', v_state;
+  end if;
+
+  raise notice 'P12 anon cannot execute get_sales_report ok';
+end $$;
+rollback;
+
+-- (bf) Second-restaurant orders cannot alter A's report. The report is
+--      snapshotted, B receives another order, and the same A call must be
+--      byte-identical. Expected: NOTICE P12 cross-restaurant isolation ok.
+begin;
+do $$
+declare
+  v_owner uuid;
+begin
+  select id into v_owner from public.profiles order by created_at, id limit 1;
+  if v_owner is null then
+    raise exception 'P12 needs at least one profile row';
+  end if;
+
+  update public.restaurant_staff set is_active = false where user_id = v_owner;
+
+  insert into public.restaurants (id, owner_id, slug, name, is_active, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-a',
+     'RLS P12 Restaurant A', true, '2000-01-01T00:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', v_owner, 'rls-p12-b',
+     'RLS P12 Restaurant B', true, '2000-01-02T00:00:00+00');
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values ('c12a0000-0000-4000-8000-000000000001', v_owner, 'owner', true);
+
+  insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+  values
+    ('c12a0000-0000-4000-8000-000000000001', 'P12-A-1', 'confirmed',
+     100.00, 0, 100.00, '2026-01-15T12:00:00+00'),
+    ('c12b0000-0000-4000-8000-000000000001', 'P12-B-1', 'confirmed',
+     999.99, 0, 999.99, '2026-01-15T12:00:00+00');
+
+  create temp table p12_before (report jsonb);
+  grant select, insert on p12_before to authenticated;
+end $$;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles order by created_at, id limit 1),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  v_out jsonb;
+begin
+  v_out := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if (v_out->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'cross-tenant: A report should start at 100.00, got %',
+      v_out->>'gross_revenue';
+  end if;
+
+  insert into p12_before (report) values (v_out);
+end $$;
+
+-- Add another B order while acting as the session owner, then return to the
+-- authenticated caller and compare the same fixed-window report.
+reset role;
+insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total, created_at)
+values ('c12b0000-0000-4000-8000-000000000001', 'P12-B-2', 'confirmed',
+        500.00, 0, 500.00, '2026-01-16T12:00:00+00');
+set local role authenticated;
+
+do $$
+declare
+  v_before jsonb;
+  v_after  jsonb;
+begin
+  select report into v_before from p12_before;
+
+  v_after := public.get_sales_report(
+    '2026-01-01T00:00:00+00'::timestamptz,
+    '2026-02-01T00:00:00+00'::timestamptz
+  );
+
+  if v_after is distinct from v_before then
+    raise exception 'cross-tenant: A report changed after B got another order: before=% after=%',
+      v_before, v_after;
+  end if;
+
+  if (v_after->>'gross_revenue')::numeric is distinct from 100.00 then
+    raise exception 'cross-tenant: A gross picked up B revenue: %',
+      v_after->>'gross_revenue';
+  end if;
+
+  raise notice 'P12 cross-restaurant isolation ok';
+end $$;
+rollback;
+
+-- (bg) The RPC signature cannot accept a spoofed restaurant id: it has two
+--      timestamptz arguments and no restaurant/uuid parameter.
+-- Expected: NOTICE P12 get_sales_report has no spoofable restaurant argument ok.
+do $$
+declare
+  v_args  text;
+  v_nargs int;
+begin
+  select pg_get_function_arguments(p.oid), p.pronargs
+    into v_args, v_nargs
+  from pg_proc p
+  where p.oid = 'public.get_sales_report(timestamptz, timestamptz)'::regprocedure;
+
+  if v_nargs is distinct from 2 then
+    raise exception 'P12 signature: expected 2 arguments, got %', v_nargs;
+  end if;
+
+  if v_args ~* 'restaurant|uuid' then
+    raise exception 'P12 signature exposes a tenant argument: %', v_args;
+  end if;
+
+  raise notice 'P12 get_sales_report has no spoofable restaurant argument ok';
+end $$;

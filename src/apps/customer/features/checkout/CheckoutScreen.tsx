@@ -1,6 +1,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import styles from "../../App.module.css";
 import { Button } from "@shared/ui/Button";
+import { cn } from "@shared/lib/cn";
 import {
   formatMoney,
   inclusiveTaxLabel,
@@ -12,6 +13,16 @@ import {
   PaymentsNotConfigured,
   StripeCheckout,
 } from "./StripeCheckout";
+import {
+  customTipError,
+  initialTipState,
+  selectCustom,
+  selectPreset,
+  TIP_PRESETS,
+  tipLabel,
+  tipPreviewAmount,
+  tipSelectionPayload,
+} from "./tipSelection";
 import { stripePublishableKey, type PaymentIntentResponse } from "../../data/payments";
 import type { CustomerLocation } from "../../data/geolocation";
 import type { CartItem } from "../../types";
@@ -61,6 +72,7 @@ export function CheckoutScreen({
 }) {
   const [customerName, setCustomerName] = useState(defaultName);
   const [notes, setNotes] = useState("");
+  const [tip, setTip] = useState(initialTipState);
   const hasCustomerName = customerName.trim().length > 0;
 
   const total = useMemo(
@@ -71,7 +83,15 @@ export function CheckoutScreen({
     [items],
   );
   const { subtotal, tax } = splitInclusiveTax(total, taxRate);
-  const canPay = hasCustomerName && canCheckout;
+
+  // The tip is optional and previewed with the shared helper; the server still
+  // recomputes it from `tipSelectionPayload`.
+  const tipError = customTipError(tip);
+  const tipSelection = tipSelectionPayload(tip);
+  const tipAmount = tipPreviewAmount(tip, total);
+  const amountDue = roundMoney(total + tipAmount);
+
+  const canPay = hasCustomerName && canCheckout && !tipError;
   const hasStripe = Boolean(stripePublishableKey);
 
   const preventSubmit = (event: FormEvent) => {
@@ -117,6 +137,117 @@ export function CheckoutScreen({
 
         <section
           className="mb-5 rounded-lg border border-line-2 bg-paper p-4"
+          aria-labelledby="tip-title"
+        >
+          <h2 id="tip-title" className="text-[13px] font-bold text-berry">
+            Add a tip
+          </h2>
+          <p className="mt-1 text-[11px] text-muted">
+            Optional. A tip goes to the team and carries no GST.
+          </p>
+
+          <div
+            role="radiogroup"
+            aria-labelledby="tip-title"
+            className="mt-3 flex flex-col gap-2"
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {TIP_PRESETS.map((percent) => {
+                const checked = tip.mode === "preset" && tip.percent === percent;
+                return (
+                  <label
+                    key={percent}
+                    className={cn(
+                      "flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
+                      checked
+                        ? "border-berry bg-berry-soft text-berry-deep"
+                        : "border-line-2 bg-white text-ink-mid hover:border-berry",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="tip-choice"
+                      value={percent}
+                      checked={checked}
+                      onChange={() =>
+                        setTip((current) => selectPreset(current, percent))
+                      }
+                      className="sr-only"
+                    />
+                    {percent === 0 ? "0%" : `${percent}%`}
+                  </label>
+                );
+              })}
+            </div>
+
+            <label
+              className={cn(
+                "flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-bold transition focus-within:ring-2 focus-within:ring-berry/40",
+                tip.mode === "custom"
+                  ? "border-berry bg-berry-soft text-berry-deep"
+                  : "border-line-2 bg-white text-ink-mid hover:border-berry",
+              )}
+            >
+              <input
+                type="radio"
+                name="tip-choice"
+                value="custom"
+                checked={tip.mode === "custom"}
+                onChange={() => setTip(selectCustom)}
+                className="sr-only"
+              />
+              Custom amount
+            </label>
+
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="tip-custom-amount"
+                className="text-[11px] font-semibold text-ink-mid"
+              >
+                Custom tip amount (AUD)
+              </label>
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-[13px] text-ink-mid">
+                  $
+                </span>
+                <input
+                  id="tip-custom-amount"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.00"
+                  value={tip.custom}
+                  disabled={tip.mode !== "custom"}
+                  onChange={(event) => {
+                    const custom = event.target.value;
+                    setTip((current) => ({ ...selectCustom(current), custom }));
+                  }}
+                  aria-invalid={tipError ? true : undefined}
+                  aria-describedby={
+                    tipError ? "tip-custom-amount-error" : undefined
+                  }
+                  className="h-11 w-28 rounded-[7px] border border-line bg-white px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:bg-cream disabled:text-muted"
+                />
+              </div>
+              {tipError && (
+                <p
+                  id="tip-custom-amount-error"
+                  role="alert"
+                  className="text-[11px] text-danger"
+                >
+                  {tipError}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <p className="mt-3 text-[12px] text-ink-mid" aria-live="polite">
+            {tipLabel(tip)} — {formatMoney(tipAmount, currency)}
+          </p>
+        </section>
+
+        <section
+          className="mb-5 rounded-lg border border-line-2 bg-paper p-4"
           aria-labelledby="order-summary-title"
         >
           <h2
@@ -128,7 +259,7 @@ export function CheckoutScreen({
           <ul className="flex flex-col gap-2 text-[12px] text-ink-mid">
             {items.map((item) => (
               <li key={item.lineId ?? cartLineId(item.menuItemId, item.modifiers)} className="flex justify-between gap-3">
-                <span>
+                <span className="min-w-0 break-words">
                   {item.quantity} × {item.name}
                   {(item.modifiers?.length ?? 0) > 0 && (
                     <small className="mt-1 block text-[10px] text-muted">
@@ -136,7 +267,7 @@ export function CheckoutScreen({
                     </small>
                   )}
                 </span>
-                <span>{formatMoney(item.unitPrice * item.quantity, currency)}</span>
+                <span className="shrink-0">{formatMoney(item.unitPrice * item.quantity, currency)}</span>
               </li>
             ))}
           </ul>
@@ -149,11 +280,25 @@ export function CheckoutScreen({
               <dt>{inclusiveTaxLabel(taxRate)}</dt>
               <dd>{formatMoney(tax, currency)}</dd>
             </div>
-            <div className="flex justify-between text-[14px] font-bold text-ink">
-              <dt>Total</dt>
+            <div className="flex justify-between">
+              <dt>Items total</dt>
               <dd>{formatMoney(total, currency)}</dd>
             </div>
+            <div aria-live="polite" className="flex flex-col gap-2">
+              <div className="flex justify-between">
+                <dt>{tipLabel(tip)}</dt>
+                <dd>{formatMoney(tipAmount, currency)}</dd>
+              </div>
+              <div className="flex justify-between text-[14px] font-bold text-ink">
+                <dt>Amount due</dt>
+                <dd>{formatMoney(amountDue, currency)}</dd>
+              </div>
+            </div>
           </dl>
+          <p className="mt-2 text-[10px] leading-relaxed text-muted">
+            GST is included in the items total. Tips are added on top and carry
+            no GST.
+          </p>
         </section>
 
         {error && (
@@ -172,6 +317,8 @@ export function CheckoutScreen({
             tableToken={tableToken}
             customerName={customerName.trim()}
             notes={notes.trim()}
+            tip={tipSelection}
+            disabledReason={tipError || undefined}
             canPay={canPay}
             onRequestLocation={onRequestLocation}
             onSetupError={onSetupError}

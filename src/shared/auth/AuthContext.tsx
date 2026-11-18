@@ -15,7 +15,7 @@ import {
 } from "@shared/lib/supabase";
 import type { Profile } from "@shared/lib/database.types";
 
-export type OAuthProvider = "google" | "apple" | "facebook";
+export type OAuthProvider = "google";
 
 export type AuthResult = { error: AuthError | Error | null };
 

@@ -21,4 +21,26 @@ export default defineConfig({
       "/api": { target: "http://127.0.0.1:3001", changeOrigin: true },
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Keep vendor code in dedicated, long-lived chunks. Stripe is only
+        // reached from checkout (lazy), so it is never part of the menu load.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@stripe/")) return "stripe";
+          if (id.includes("@supabase/")) return "supabase";
+          if (id.includes("@tanstack/")) return "query";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/react-router/") ||
+            id.includes("/scheduler/")
+          ) {
+            return "react";
+          }
+        },
+      },
+    },
+  },
 });

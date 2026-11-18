@@ -12,6 +12,8 @@ const order: OrderVM = {
   createdAt: "2026-10-21T08:30:00Z",
   createdAtLabel: "21 Oct 2026, 7:30 pm",
   total: 13.64,
+  tipAmount: 1.2,
+  amountDue: 14.84,
   subtotal: 12.4,
   tax: 1.24,
   currency: "AUD",
@@ -32,7 +34,7 @@ const order: OrderVM = {
     {
       id: "payment-1",
       status: "succeeded",
-      amount: 13.64,
+      amount: 14.84,
       currency: "AUD",
       method: "Card",
       paidAt: "2026-10-21T08:30:05Z",
@@ -134,6 +136,10 @@ describe("OrderDetailPage", () => {
     expect(screen.getByText(/oat milk/i)).toBeInTheDocument()
     expect(screen.getByText("Card")).toBeInTheDocument()
     expect(screen.getByText("Paid")).toBeInTheDocument()
+    expect(screen.getByText("Tip")).toBeInTheDocument()
+    expect(screen.getByText("Amount due")).toBeInTheDocument()
+    expect(screen.getAllByText(/14\.84/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/includes .*1\.20 tip/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /mark confirmed/i })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /mark completed/i })).toBeNull()
     expect(screen.getByText(/^Running /)).toBeInTheDocument()

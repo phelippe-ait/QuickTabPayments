@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
 import { NavLink } from "react-router"
 import styles from "../../App.module.css"
+import { usePlan } from "@shared/plans/usePlan"
 import { Icon, type IconName } from "@shared/ui/Icon"
+import { Badge } from "@shared/ui/shadcn/badge"
 import type { Section } from "../../types"
 
 type AdminShellProps = {
@@ -23,6 +25,7 @@ const sectionLabels: Record<Section, string> = {
   tables: "Tables",
   users: "Users",
   orders: "Order history",
+  reports: "Reports",
   settings: "Settings",
 }
 
@@ -31,10 +34,14 @@ const sectionIcons: Record<Section, IconName> = {
   tables: "tables",
   users: "users",
   orders: "orders",
+  reports: "grid",
   settings: "settings",
 }
 
 export function AdminShell({ sections, restaurantName, userName, userRole, userInitials, onOpenProfile, onSignOut, mobileNavOpen, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
+  const { has } = usePlan()
+  const reportsLocked = !has("reports")
+
   return (
     <div className={styles["app-shell"]}>
       <button
@@ -61,7 +68,11 @@ export function AdminShell({ sections, restaurantName, userName, userRole, userI
             >
               <Icon name={sectionIcons[item]} />
               <span>{sectionLabels[item]}</span>
-              <i aria-hidden="true" />
+              {item === "reports" && reportsLocked ? (
+                <Badge className="ml-auto">PRO</Badge>
+              ) : (
+                <i aria-hidden="true" />
+              )}
             </NavLink>
           ))}
         </nav>

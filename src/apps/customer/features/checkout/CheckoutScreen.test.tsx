@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  computeTipPreview,
+  roundMoney,
+  type TipSelection,
+} from "@shared/lib/money"
 import { CheckoutScreen } from "./CheckoutScreen"
 
 const items = [
@@ -17,25 +22,47 @@ const intent = {
   orderNumber: "QT-1",
   trackingToken: "tok",
   amount: 4.7,
+  total: 4.7,
+  tipAmount: 0,
+  amountDue: 4.7,
   currency: "AUD",
   status: "pending" as const,
 }
 
-const state = vi.hoisted(() => ({ key: "" as string }))
+type CapturedStripeProps = {
+  canPay: boolean;
+  amountDue: number;
+  tip: TipSelection | null;
+  onPaid: (value: typeof intent) => Promise<void> | void;
+};
+
+const state = vi.hoisted(() => ({
+  key: "" as string,
+  props: null as null | CapturedStripeProps,
+}))
 
 vi.mock("./StripeCheckout", () => ({
   PaymentsNotConfigured: () => (
     <section>Payments are not configured</section>
   ),
-  StripeCheckout: ({
-    onPaid,
-  }: {
+  StripeCheckout: (props: {
+    canPay: boolean;
+    tip: TipSelection | null;
     onPaid: (value: typeof intent) => Promise<void> | void;
-  }) => (
-    <button type="button" onClick={() => void onPaid(intent)}>
-      Pay 4.70
-    </button>
-  ),
+  }) => {
+    const total = 4.7;
+    const amountDue = roundMoney(total + computeTipPreview(total, props.tip));
+    state.props = { ...props, amountDue };
+    return (
+      <button
+        type="button"
+        disabled={!props.canPay}
+        onClick={() => void props.onPaid(intent)}
+      >
+        Pay {amountDue.toFixed(2)}
+      </button>
+    );
+  },
 }))
 
 vi.mock("../../data/payments", () => ({
@@ -81,9 +108,17 @@ function enterDetails() {
   })
 }
 
+function chooseCustomTip(value: string) {
+  fireEvent.click(screen.getByRole("radio", { name: "Custom amount" }))
+  fireEvent.change(screen.getByLabelText("Custom tip amount (AUD)"), {
+    target: { value },
+  })
+}
+
 describe("CheckoutScreen", () => {
   beforeEach(() => {
     state.key = "pk_test_123"
+    state.props = null
   })
 
   it("shows GST-inclusive subtotal, tax and total to the cent", () => {
@@ -93,6 +128,8 @@ describe("CheckoutScreen", () => {
     expect(screen.getByText(/4\.27/)).toBeInTheDocument()
     expect(screen.getByText("GST (included, 10%)")).toBeInTheDocument()
     expect(screen.getByText(/0\.43/)).toBeInTheDocument()
+    expect(screen.getByText("Items total")).toBeInTheDocument()
+    expect(screen.getByText("Amount due")).toBeInTheDocument()
     expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
   })
 
@@ -137,5 +174,67 @@ describe("CheckoutScreen", () => {
     expect(
       screen.getByText("One of your items just sold out."),
     ).toBeInTheDocument()
+  })
+
+  it("defaults to no tip and shows the amount due equal to the items total", () => {
+    setup()
+    enterDetails()
+
+    expect(state.props?.tip).toBeNull()
+    expect(state.props?.amountDue).toBe(4.7)
+    expect(
+      screen.getByRole("radio", { name: "0%" }),
+    ).toBeChecked()
+  })
+
+  it("sends a percentage tip and previews it in the summary", () => {
+    setup()
+    enterDetails()
+
+    fireEvent.click(screen.getByRole("radio", { name: "10%" }))
+
+    expect(state.props?.tip).toEqual({ type: "percent", value: 10 })
+    expect(state.props?.amountDue).toBe(5.17)
+    expect(screen.getAllByText("Tip (10%)").length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/0\.47/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/5\.17/).length).toBeGreaterThan(0)
+    expect(screen.getByRole("button", { name: "Pay 5.17" })).toBeEnabled()
+  })
+
+  it("sends a fixed tip from the custom amount input", () => {
+    setup()
+    enterDetails()
+
+    chooseCustomTip("5")
+
+    expect(state.props?.tip).toEqual({ type: "fixed", value: 5 })
+    expect(state.props?.amountDue).toBe(9.7)
+    expect(screen.getAllByText("Tip").length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/9\.70/).length).toBeGreaterThan(0)
+  })
+
+  it("returns to no tip when the 0% preset is selected", () => {
+    setup()
+    enterDetails()
+    fireEvent.click(screen.getByRole("radio", { name: "10%" }))
+    fireEvent.click(screen.getByRole("radio", { name: "0%" }))
+
+    expect(state.props?.tip).toBeNull()
+    expect(state.props?.amountDue).toBe(4.7)
+  })
+
+  it.each([
+    ["-5", /can't be negative/i],
+    ["600", /more than \$500/i],
+    ["abc", /valid amount/i],
+  ])("blocks payment for an invalid custom tip (%s)", (input, message) => {
+    setup()
+    enterDetails()
+
+    chooseCustomTip(input)
+
+    expect(state.props?.tip).toBeNull()
+    expect(screen.getByRole("button", { name: /Pay 4\.70/ })).toBeDisabled()
+    expect(screen.getByRole("alert")).toHaveTextContent(message)
   })
 })

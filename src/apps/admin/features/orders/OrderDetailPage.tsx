@@ -314,7 +314,11 @@ export function OrderDetailPage() {
             <div className={`${styles["order-summary"]}`}>
               <div><span>Subtotal</span><strong>{formatMoney(order.subtotal, order.currency)}</strong></div>
               <div><span>Tax</span><strong>{formatMoney(order.tax, order.currency)}</strong></div>
-              <div className={`${styles["order-total"]}`}><span>Total</span><strong>{formatMoney(order.total, order.currency)}</strong></div>
+              <div><span>Items total</span><strong>{formatMoney(order.total, order.currency)}</strong></div>
+              {order.tipAmount > 0 && (
+                <div><span>Tip</span><strong>{formatMoney(order.tipAmount, order.currency)}</strong></div>
+              )}
+              <div className={`${styles["order-total"]}`}><span>Amount due</span><strong>{formatMoney(order.amountDue, order.currency)}</strong></div>
             </div>
             {refundedToDate > 0 && (
               <div className={`${styles["refunded-line"]}`}><span>Refunded to date</span><strong>−{formatMoney(refundedToDate, order.currency)}</strong></div>
@@ -338,6 +342,11 @@ export function OrderDetailPage() {
                     <p className="mt-2 text-xs text-muted">
                       {formatMoney(payment.amount, payment.currency)} · paid {formatTimestamp(payment.paidAt, display.timezone)}
                     </p>
+                    {order.tipAmount > 0 && (
+                      <p className="mt-1 text-[10px] text-muted">
+                        Includes {formatMoney(order.tipAmount, order.currency)} tip
+                      </p>
+                    )}
                     {payment.stripePaymentIntentId && (
                       <p className="mt-1 break-all font-mono text-[10px] text-muted">
                         {payment.stripePaymentIntentId}

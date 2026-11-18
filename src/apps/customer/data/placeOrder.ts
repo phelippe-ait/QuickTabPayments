@@ -1,5 +1,6 @@
 import { requireSupabase } from "@shared/data/client"
 import type { OrderStatus, PaymentStatus } from "@shared/lib/database.types"
+import type { TipSelection } from "@shared/lib/money"
 import type { CartItem, SimulatedPaymentMethod } from "../types"
 
 export type PlacedOrderItem = {
@@ -18,6 +19,10 @@ export type PlacedOrder = {
   subtotal: number
   tax: number
   total: number
+  /** Tip added on top of the GST-inclusive total; no GST on the tip. */
+  tipAmount?: number
+  /** total + tipAmount — the amount actually charged. */
+  amountDue?: number
   currency: string
   /** Restaurant GST rate, used for consistent labels after a reload. */
   taxRate?: number
@@ -41,12 +46,15 @@ export type PlaceOrderErrorCode =
   | "restaurant_not_found"
   | "table_not_found"
   | "menu_item_unavailable"
-  | "invalid_modifier"
   | "invalid_modifier_selection"
+  | "modifier_selection_invalid"
+  | "modifier_required"
+  | "invalid_modifier"
   | "customer_location_required"
   | "customer_location_invalid"
   | "outside_ordering_radius"
   | "restaurant_location_not_configured"
+  | "invalid_tip"
   | "order_number_conflict"
   | "unknown"
 
@@ -62,8 +70,10 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "This table QR code is no longer valid. Please scan the QR code on your table again.",
   menu_item_unavailable:
     "One of your items just sold out. Please review your cart and try again.",
-  invalid_modifier: "One of the selected options is no longer available. Please review your item.",
   invalid_modifier_selection: "Please review the required options for your item and try again.",
+  modifier_selection_invalid: "Please review the options selected for your item and try again.",
+  modifier_required: "Please choose the required options for your item.",
+  invalid_modifier: "One of the selected options is no longer available. Please review your item.",
   customer_location_required:
     "Allow location access to confirm you are within 500 m of the restaurant, then try again.",
   customer_location_invalid:
@@ -72,12 +82,19 @@ const ERROR_MESSAGES: Record<PlaceOrderErrorCode, string> = {
     "You need to be within 500 m of the restaurant to place an order.",
   restaurant_location_not_configured:
     "This restaurant hasn't set its ordering location yet. Please ask the restaurant team for help.",
+  invalid_tip:
+    "That tip isn't valid. Please choose up to 25% or a custom amount up to $500.",
   order_number_conflict:
     "We couldn't create an order number. Please try again in a moment.",
   unknown: "We couldn't place your order. Please try again.",
 }
 
 const ERROR_CODES = Object.keys(ERROR_MESSAGES) as PlaceOrderErrorCode[]
+
+/** Friendly copy for a known RPC validation code. */
+export function placeOrderErrorMessage(code: PlaceOrderErrorCode): string {
+  return ERROR_MESSAGES[code]
+}
 
 export class PlaceOrderError extends Error {
   readonly code: PlaceOrderErrorCode
@@ -149,6 +166,8 @@ export function mapPlacedOrder(raw: unknown): PlacedOrder | null {
     subtotal: num(row.subtotal),
     tax: num(row.tax),
     total: num(row.total),
+    ...(row.tip_amount != null ? { tipAmount: num(row.tip_amount) } : {}),
+    ...(row.amount_due != null ? { amountDue: num(row.amount_due) } : {}),
     currency: typeof row.currency === "string" ? row.currency : "AUD",
     restaurantName:
       typeof row.restaurant_name === "string" ? row.restaurant_name : "",
@@ -167,6 +186,8 @@ export async function placeOrder(input: {
   notes?: string
   items: CartItem[]
   location?: { latitude: number; longitude: number }
+  /** Optional tip; `null` means no tip. The RPC recomputes the amount. */
+  tip?: TipSelection | null
 }): Promise<PlacedOrder> {
   const client = requireSupabase()
 
@@ -177,7 +198,7 @@ export async function placeOrder(input: {
       menu_item_id: item.menuItemId,
       quantity: Math.trunc(item.quantity),
       ...((item.modifiers?.length ?? 0) > 0
-        ? { modifier_ids: item.modifiers!.map((modifier) => modifier.id) }
+        ? { modifiers: item.modifiers!.map((modifier) => modifier.id) }
         : {}),
     }))
 
@@ -189,6 +210,7 @@ export async function placeOrder(input: {
     p_customer_name: input.customerName.trim(),
     p_notes: input.notes?.trim() || null,
     p_items: items,
+    p_tip: input.tip ?? null,
     ...(input.location
       ? {
           p_customer_latitude: input.location.latitude,

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   adminRpc: vi.fn(),
   createIntent: vi.fn(),
   cancelIntent: vi.fn(),
+  userClient: vi.fn(),
 }));
 
 vi.mock("./_lib/stripe", () => ({
@@ -19,7 +20,10 @@ vi.mock("./_lib/stripe", () => ({
 }));
 
 vi.mock("./_lib/supabaseAdmin", () => ({
-  userClient: () => ({ rpc: mocks.userRpc }),
+  userClient: (accessToken: string | null) => {
+    mocks.userClient(accessToken);
+    return { rpc: mocks.userRpc };
+  },
   adminClient: () => ({ rpc: mocks.adminRpc }),
 }));
 
@@ -46,11 +50,15 @@ function makeRes(): FakeRes {
   return res;
 }
 
-function makeReq(body: unknown, method = "POST") {
+function makeReq(
+  body: unknown,
+  method = "POST",
+  headers: Record<string, string> = { authorization: "Bearer token" },
+) {
   return {
     method,
     body,
-    headers: { authorization: "Bearer token" },
+    headers,
   } as never;
 }
 
@@ -59,6 +67,8 @@ const placed = {
   order_number: "QT-1",
   tracking_token: "tok",
   total: 42,
+  tip_amount: 0,
+  amount_due: 42,
   currency: "AUD",
 };
 
@@ -109,9 +119,50 @@ describe("POST /api/create-payment-intent", () => {
       p_customer_latitude: null,
       p_customer_longitude: null,
     });
+    expect(mocks.userClient).toHaveBeenCalledWith("token");
     expect(mocks.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4200, currency: "aud" }),
     );
+    expect(mocks.adminRpc).toHaveBeenCalledWith(
+      "record_payment_intent",
+      expect.objectContaining({ p_stripe_payment_intent_id: "pi_1", p_amount: 42 }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      clientSecret: "pi_1_secret",
+      orderNumber: "QT-1",
+      status: "pending",
+    });
+  });
+
+  it("creates a guest order + intent when there is no Authorization header", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq(
+        {
+          restaurantSlug: "cafe",
+          tableToken: "table",
+          customerName: "Guest",
+          items: [{ menu_item_id: "item-1", quantity: 1 }],
+        },
+        "POST",
+        {},
+      ),
+      res as never,
+    );
+
+    // No Bearer token: the handler still calls place_order as anon, so
+    // auth.uid() stays null and the order is a guest order.
+    expect(mocks.userClient).toHaveBeenCalledWith(null);
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_restaurant_slug: "cafe",
+        p_table_token: "table",
+        p_customer_name: "Guest",
+      }),
+    );
+    expect(mocks.createIntent).toHaveBeenCalledTimes(1);
     expect(mocks.adminRpc).toHaveBeenCalledWith(
       "record_payment_intent",
       expect.objectContaining({ p_stripe_payment_intent_id: "pi_1" }),
@@ -120,8 +171,136 @@ describe("POST /api/create-payment-intent", () => {
     expect(res.body).toMatchObject({
       clientSecret: "pi_1_secret",
       orderNumber: "QT-1",
+      trackingToken: "tok",
       status: "pending",
     });
+  });
+
+  it("charges amount_due and forwards a valid tip to the RPC", async () => {
+    mocks.userRpc.mockResolvedValueOnce({
+      data: { ...placed, tip_amount: 4.2, amount_due: 46.2 },
+      error: null,
+    });
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        tip: { type: "percent", value: 10 },
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_tip: { type: "percent", value: 10 },
+      }),
+    );
+    expect(mocks.createIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 4620,
+        metadata: expect.objectContaining({ tipAmount: "4.2" }),
+      }),
+    );
+    expect(mocks.adminRpc).toHaveBeenCalledWith(
+      "record_payment_intent",
+      expect.objectContaining({ p_amount: 46.2 }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      amount: 46.2,
+      total: 42,
+      tipAmount: 4.2,
+      amountDue: 46.2,
+    });
+  });
+
+  it("forwards whitelisted modifier ids to the RPC", async () => {
+    const size = "11111111-1111-4111-8111-111111111111";
+    const milk = "22222222-2222-4222-8222-222222222222";
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [
+          { menu_item_id: "item-1", quantity: 2, modifiers: [size, milk] },
+        ],
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [
+          { menu_item_id: "item-1", quantity: 2, modifiers: [size, milk] },
+        ],
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects a non-uuid modifier before calling the RPC", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [
+          { menu_item_id: "item-1", quantity: 1, modifiers: ["not-a-uuid"] },
+        ],
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_request" });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
+  });
+
+  it("leaves items without modifiers byte-identical", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1, modifiers: undefined }],
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [{ menu_item_id: "item-1", quantity: 1 }],
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects a malformed tip before calling the RPC", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        tip: { type: "percent", value: "10" },
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_request" });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
   });
 
   it("cancels the intent when the payment row cannot be recorded", async () => {

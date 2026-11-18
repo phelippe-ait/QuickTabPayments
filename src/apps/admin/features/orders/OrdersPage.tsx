@@ -92,15 +92,17 @@ export function OrdersPage() {
       return `"${safeValue.replaceAll('"', '""')}"`
     }
     const csvRows = [
-      ["Order", "Table", "Customer", "Date", "Total", "Status", "Refund status"],
+      ["Order", "Table", "Customer", "Date", "Items total", "Tip", "Amount due", "Status", "Refund status"],
       ...rows.map((order) => [
         order.orderNumber,
         order.tableNumber ?? "—",
         order.customerName,
         order.createdAtLabel,
         formatMoney(order.total, order.currency),
+        formatMoney(order.tipAmount, order.currency),
+        formatMoney(order.amountDue, order.currency),
         orderStatusLabels[order.status],
-        getRefundStatus(order.refundedTotal, order.total) ?? "",
+        getRefundStatus(order.refundedTotal, order.amountDue) ?? "",
       ]),
     ]
     const csv = csvRows
@@ -140,12 +142,12 @@ export function OrdersPage() {
           <small>{statsQuery.isLoading ? "Loading…" : deltaLabel(statsQuery.stats.today.orders, statsQuery.stats.yesterday.orders)}</small>
         </div>
         <div>
-          <span>Today’s revenue</span>
+          <span>Today’s sales (excl. tips)</span>
           <strong>{statsQuery.isLoading ? "—" : formatMoney(statsQuery.stats.today.revenue, display.currency)}</strong>
           <small>{statsQuery.isLoading ? "Loading…" : deltaLabel(statsQuery.stats.today.revenue, statsQuery.stats.yesterday.revenue)}</small>
         </div>
         <div>
-          <span>Average order</span>
+          <span>Average order (excl. tips)</span>
           <strong>{statsQuery.isLoading ? "—" : formatMoney(statsQuery.stats.today.average, display.currency)}</strong>
           <small>Today’s completed and active orders</small>
         </div>
@@ -242,7 +244,7 @@ export function OrdersPage() {
             <span>Order</span><span>Customer</span><span>Date</span><span>Total</span><span>Status</span>
           </div>
           {orders.map((order) => {
-            const refundStatus = getRefundStatus(order.refundedTotal, order.total)
+            const refundStatus = getRefundStatus(order.refundedTotal, order.amountDue)
             return (
               <div className={`${styles["table-row"]}`} key={order.id}>
                 <label className={`${styles["inline-select"]}`} aria-label={`Select order ${order.orderNumber}`}>
@@ -269,7 +271,12 @@ export function OrdersPage() {
                   <span>{order.createdAtLabel}</span>
                   {isOpenOrderStatus(order.status) && <small className={`${styles["running-time"]}`}>Running {formatRunningTime(order.createdAt, now)}</small>}
                 </div>
-                <strong>{formatMoney(order.total, order.currency)}</strong>
+                <div>
+                  <strong>{formatMoney(order.amountDue, order.currency)}</strong>
+                  {order.tipAmount > 0 && (
+                    <small>incl. {formatMoney(order.tipAmount, order.currency)} tip</small>
+                  )}
+                </div>
                 <div className={`${styles["order-statuses"]}`}>
                   <StatusPill tone={orderStatusTones[order.status]}>{orderStatusLabels[order.status]}</StatusPill>
                   {refundStatus && <StatusPill tone={refundStatus === "Refunded" ? "warning" : "neutral"} className="whitespace-nowrap">{refundStatus}</StatusPill>}

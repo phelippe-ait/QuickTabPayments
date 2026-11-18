@@ -17,6 +17,8 @@ const order: PlacedOrder = {
   subtotal: 4.27,
   tax: 0.43,
   total: 4.7,
+  tipAmount: 0.47,
+  amountDue: 5.17,
   currency: "AUD",
   restaurantName: "QuickTab Demo Cafe",
   tableNumber: "T05",

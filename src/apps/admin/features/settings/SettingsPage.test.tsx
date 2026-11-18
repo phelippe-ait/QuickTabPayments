@@ -86,6 +86,7 @@ describe("SettingsPage", () => {
         name: "Renamed Café",
         tax_rate: 0.125,
       }),
+      undefined,
     );
   });
 

@@ -1,4 +1,5 @@
 import { requireSupabase } from "@shared/data/client"
+import { roundMoney } from "@shared/lib/money"
 import type {
   OrderStatus,
   PaymentStatus,
@@ -6,11 +7,13 @@ import type {
 } from "@shared/lib/database.types"
 
 export type CustomerOrderItem = {
+  /** Current menu item id, used to rebuild the cart ("Order again"). */
+  menuItemId: string
   name: string
   quantity: number
   unitPrice: number
   subtotal: number
-  modifiers?: { name: string; priceAdjustment: number }[]
+  modifiers?: { id: string; name: string; priceAdjustment: number }[]
 }
 
 export type CustomerOrder = {
@@ -19,7 +22,14 @@ export type CustomerOrder = {
   status: OrderStatus
   subtotal: number
   tax: number
+  /** GST-inclusive items total (before tip). */
   total: number
+  /** Tip added on top of the items total; no GST on the tip. */
+  tipAmount: number
+  /** `total + tipAmount` — what the order charges. */
+  amountDue: number
+  /** Sum of succeeded payments; 0 until the webhook confirms. */
+  amountPaid: number
   currency: string
   restaurantName: string
   tableNumber: string | null
@@ -38,16 +48,19 @@ type HistoryRow = {
   subtotal: number
   tax: number
   total: number
+  tip_amount?: number
   tracking_token: string
   created_at: string
   tables: { table_number: string } | null
   restaurants: { name: string; currency: string } | null
   order_items: Array<{
+    menu_item_id?: string
     item_name_snapshot: string
     quantity: number
     unit_price_snapshot: number
     subtotal: number
     order_item_modifiers?: Array<{
+      modifier_id?: string
       modifier_name_snapshot: string
       price_adjustment_snapshot: number
     }>
@@ -71,11 +84,12 @@ const historySelect = `
   subtotal,
   tax,
   total,
+  tip_amount,
   tracking_token,
   created_at,
   tables(table_number),
   restaurants(name, currency),
-  order_items(item_name_snapshot, quantity, unit_price_snapshot, subtotal, order_item_modifiers(modifier_name_snapshot, price_adjustment_snapshot)),
+  order_items(menu_item_id, item_name_snapshot, quantity, unit_price_snapshot, subtotal, order_item_modifiers(modifier_id, modifier_name_snapshot, price_adjustment_snapshot)),
   payments(status, payment_method_type, amount, receipt_url),
   refunds(amount, status)
 `
@@ -90,6 +104,16 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
     const refundedTotal = (row.refunds ?? [])
       .filter((refund) => refund.status === "succeeded")
       .reduce((total, refund) => total + Number(refund.amount), 0)
+    const tipAmount = Number(row.tip_amount ?? 0)
+    const amountDue = roundMoney(Number(row.total) + tipAmount)
+    const amountPaid = roundMoney(
+      (row.payments ?? [])
+        .filter(
+          (entry) =>
+            entry.status === "succeeded" || entry.status === "refunded",
+        )
+        .reduce((total, entry) => total + Number(entry.amount), 0),
+    )
 
     return {
       id: row.id,
@@ -98,6 +122,9 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
       subtotal: Number(row.subtotal),
       tax: Number(row.tax),
       total: Number(row.total),
+      tipAmount,
+      amountDue,
+      amountPaid,
       currency: row.restaurants?.currency ?? "AUD",
       restaurantName: row.restaurants?.name ?? "",
       tableNumber: row.tables?.table_number ?? null,
@@ -107,12 +134,14 @@ export function mapCustomerOrders(rows: HistoryRow[]): CustomerOrder[] {
       receiptUrl: payment?.receipt_url ?? null,
       refundedTotal,
       items: (row.order_items ?? []).map((item) => ({
+        menuItemId: item.menu_item_id ?? "",
         name: item.item_name_snapshot,
         quantity: item.quantity,
         unitPrice: Number(item.unit_price_snapshot),
         subtotal: Number(item.subtotal),
         ...((item.order_item_modifiers?.length ?? 0) > 0
           ? { modifiers: item.order_item_modifiers!.map((modifier) => ({
+              id: modifier.modifier_id ?? "",
               name: modifier.modifier_name_snapshot,
               priceAdjustment: Number(modifier.price_adjustment_snapshot),
             })) }

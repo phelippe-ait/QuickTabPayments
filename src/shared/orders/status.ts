@@ -4,6 +4,11 @@ import type { StatusTone } from "@shared/ui/StatusPill"
 /**
  * Single source of truth for order status display and transitions.
  *
+ * The `transitions` matrix below is mirrored in the database by the trigger
+ * `public.check_order_status_transition` (migration 0022), which raises
+ * `invalid_status_transition` for any illegal change. Keep both in sync when
+ * editing either side.
+ *
  * `completed_at` means "closed at": it is set when an order enters `completed`
  * OR `cancelled`, so customers/staff must not read it as "picked up". Refunds
  * are independent rows against `payments`; cancelling never auto-refunds.

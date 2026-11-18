@@ -349,6 +349,7 @@ export type Database = {
           subtotal: number
           table_id: string | null
           tax: number
+          tip_amount: number
           total: number
           tracking_token: string
           updated_at: string
@@ -367,6 +368,7 @@ export type Database = {
           subtotal?: number
           table_id?: string | null
           tax?: number
+          tip_amount?: number
           total?: number
           tracking_token?: string
           updated_at?: string
@@ -385,6 +387,7 @@ export type Database = {
           subtotal?: number
           table_id?: string | null
           tax?: number
+          tip_amount?: number
           total?: number
           tracking_token?: string
           updated_at?: string
@@ -708,6 +711,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -726,6 +730,7 @@ export type Database = {
           name: string
           owner_id: string
           phone?: string | null
+          plan?: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate?: number
           timezone?: string
@@ -744,6 +749,7 @@ export type Database = {
           name?: string
           owner_id?: string
           phone?: string | null
+          plan?: Database["public"]["Enums"]["restaurant_plan"]
           slug?: string
           tax_rate?: number
           timezone?: string
@@ -803,6 +809,7 @@ export type Database = {
           qr_token: string
           restaurant_id: string
           seats: number | null
+          status: Database["public"]["Enums"]["table_status"]
           table_number: string
         }
         Insert: {
@@ -813,6 +820,7 @@ export type Database = {
           qr_token?: string
           restaurant_id: string
           seats?: number | null
+          status?: Database["public"]["Enums"]["table_status"]
           table_number: string
         }
         Update: {
@@ -823,6 +831,7 @@ export type Database = {
           qr_token?: string
           restaurant_id?: string
           seats?: number | null
+          status?: Database["public"]["Enums"]["table_status"]
           table_number?: string
         }
         Relationships: [
@@ -891,6 +900,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -918,6 +928,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          plan: Database["public"]["Enums"]["restaurant_plan"]
           slug: string
           tax_rate: number
           timezone: string
@@ -942,6 +953,10 @@ export type Database = {
       }
       get_order_tracking: {
         Args: { p_token: string }
+        Returns: Json
+      }
+      get_sales_report: {
+        Args: { p_from: string | null; p_to: string | null }
         Returns: Json
       }
       is_manager_of: { Args: { p_restaurant_id: string }; Returns: boolean }
@@ -969,6 +984,7 @@ export type Database = {
           p_table_token: string
           p_customer_latitude?: number | null
           p_customer_longitude?: number | null
+          p_tip?: Json | null
         }
         Returns: Json
       }
@@ -1012,7 +1028,9 @@ export type Database = {
       payment_method_type: "card" | "apple_pay" | "google_pay" | "other"
       payment_status: "pending" | "succeeded" | "failed" | "refunded"
       refund_status: "requested" | "succeeded" | "failed"
+      restaurant_plan: "basic" | "standard" | "premium"
       staff_role: "owner" | "manager" | "kitchen"
+      table_status: "available" | "occupied" | "needs_cleaning"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1037,6 +1055,10 @@ export type RestaurantStaff = Tables<"restaurant_staff">;
 export type StaffRole = Enums<"staff_role">;
 export type MenuCategory = Tables<"menu_categories">;
 export type MenuItem = Tables<"menu_items">;
+export type ModifierGroup = Tables<"modifier_groups">;
+export type Modifier = Tables<"modifiers">;
+export type MenuItemModifierGroup = Tables<"menu_item_modifier_groups">;
+export type ModifierSelection = Enums<"modifier_selection">;
 export type CafeTable = Tables<"tables">;
 export type Order = Tables<"orders">;
 export type OrderItem = Tables<"order_items">;

@@ -3,8 +3,12 @@ import { getStripe } from "./_lib/stripe.js";
 import { adminClient, userClient } from "./_lib/supabaseAdmin.js";
 import { bearer, json } from "./_lib/http.js";
 
-type ItemInput = { menu_item_id: string; quantity: number; modifier_ids?: string[] };
+type ItemInput = { menu_item_id: string; quantity: number; modifiers?: string[] };
 type LocationInput = { latitude: number; longitude: number };
+type TipInput = { type: "percent" | "fixed"; value: number };
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Body = {
   restaurantSlug?: string;
@@ -13,6 +17,7 @@ type Body = {
   notes?: string | null;
   items?: ItemInput[];
   location?: LocationInput;
+  tip?: unknown;
 };
 
 function parseBody(req: VercelRequest): Body {
@@ -21,11 +26,49 @@ function parseBody(req: VercelRequest): Body {
   return req.body as Body;
 }
 
+/** Whitelist the tip payload; the RPC still recomputes and caps the amount. */
+function readTip(value: unknown): { ok: true; tip?: TipInput } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true };
+  if (typeof value !== "object" || Array.isArray(value)) return { ok: false };
+
+  const candidate = value as Record<string, unknown>;
+  if (Object.keys(candidate).some((key) => key !== "type" && key !== "value")) {
+    return { ok: false };
+  }
+  if (candidate.type !== "percent" && candidate.type !== "fixed") {
+    return { ok: false };
+  }
+  if (typeof candidate.value !== "number" || !Number.isFinite(candidate.value)) {
+    return { ok: false };
+  }
+
+  return { ok: true, tip: { type: candidate.type, value: candidate.value } };
+}
+
+/**
+ * Whitelist the per-line modifier ids. Only an array of uuid strings is
+ * forwarded; anything else is a malformed request. The RPC still revalidates
+ * every id against the restaurant's menu.
+ */
+function readModifiers(
+  value: unknown,
+): { ok: true; modifiers?: string[] } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true };
+  if (
+    !Array.isArray(value) ||
+    !value.every((entry) => typeof entry === "string" && UUID_RE.test(entry))
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, modifiers: value };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
 
   try {
-    const { restaurantSlug, tableToken, customerName, notes, items, location } = parseBody(req);
+    const body = parseBody(req);
+    const { restaurantSlug, tableToken, customerName, notes, items, location } = body;
     if (
       !restaurantSlug ||
       !tableToken ||
@@ -36,6 +79,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 400, { error: "invalid_request" });
     }
 
+    const parsedTip = readTip(body.tip);
+    if (!parsedTip.ok) return json(res, 400, { error: "invalid_request" });
+    const tip = parsedTip.tip;
+
+    const forwardedItems: ItemInput[] = [];
+    for (const item of items) {
+      const parsedModifiers = readModifiers(item.modifiers);
+      if (!parsedModifiers.ok) return json(res, 400, { error: "invalid_request" });
+      forwardedItems.push({
+        menu_item_id: item.menu_item_id,
+        quantity: Math.trunc(Number(item.quantity)),
+        ...(parsedModifiers.modifiers && parsedModifiers.modifiers.length > 0
+          ? { modifiers: parsedModifiers.modifiers }
+          : {}),
+      });
+    }
+
     // 1) Create the order AS THE CALLER so auth.uid() sets customer_id for
     //    signed-in users and stays null for guests.
     const user = userClient(bearer(req));
@@ -44,26 +104,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       p_table_token: tableToken,
       p_customer_name: String(customerName).trim(),
       p_notes: notes ? String(notes).trim() : null,
-      p_items: items.map((item) => ({
-        menu_item_id: item.menu_item_id,
-        quantity: Math.trunc(Number(item.quantity)),
-        ...(Array.isArray(item.modifier_ids) && item.modifier_ids.length > 0
-          ? { modifier_ids: item.modifier_ids }
-          : {}),
-      })),
-      ...(location
-        ? {
-            p_customer_latitude: location.latitude,
-            p_customer_longitude: location.longitude,
-          }
-        : {}),
+      p_items: forwardedItems,
+      p_customer_latitude: location?.latitude ?? null,
+      p_customer_longitude: location?.longitude ?? null,
+      ...(tip ? { p_tip: tip } : {}),
     });
 
     if (placeErr) return json(res, 400, { error: placeErr.message });
     if (!placed) return json(res, 500, { error: "order_not_created" });
 
     const orderId = placed.order_id as string;
-    const amount = Number(placed.total);
+    const tipAmount = Number(placed.tip_amount ?? 0);
+    const amount = Number(placed.amount_due ?? placed.total);
     const currency = String(placed.currency ?? "AUD");
 
     // 2) Create the Stripe PaymentIntent (amount in minor units).
@@ -72,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       amount: Math.round(amount * 100),
       currency: currency.toLowerCase(),
       automatic_payment_methods: { enabled: true },
-      metadata: { orderId, restaurantSlug, tableToken },
+      metadata: { orderId, restaurantSlug, tableToken, tipAmount: String(tipAmount) },
     });
 
     // 3) Persist a pending payments row (service role; anon cannot write payments).
@@ -97,6 +149,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       orderNumber: placed.order_number,
       trackingToken: placed.tracking_token,
       amount,
+      total: Number(placed.total ?? amount),
+      tipAmount,
+      amountDue: amount,
       currency,
       status: "pending",
     });

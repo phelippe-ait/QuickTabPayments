@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   },
   restaurant: {
     membership: null as null | { id: string; role: string },
-    restaurant: null as null | { name: string },
+    restaurant: null as null | { name: string; plan?: string },
     role: null as string | null,
     isLoading: false,
     error: null as Error | null,
@@ -163,6 +163,9 @@ describe("Admin app access gate", () => {
     expect(
       screen.queryByRole("link", { name: /users/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /reports/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("blocks a kitchen deep link to an owner/manager section", async () => {
@@ -188,6 +191,45 @@ describe("Admin app access gate", () => {
     renderAdminApp(["/admin/catalog"]);
     const catalogLink = await screen.findByRole("link", { name: /catalog/i });
     expect(catalogLink).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows the reports nav item with a PRO badge on the basic plan", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café", plan: "basic" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp();
+    await screen.findByRole("heading", { name: /^catalog$/i });
+
+    const reportsLink = screen.getByRole("link", { name: /reports/i });
+    expect(within(reportsLink).getByText("PRO")).toBeInTheDocument();
+  });
+
+  it("hides the PRO badge once reports are included", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café", plan: "standard" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp();
+    await screen.findByRole("heading", { name: /^catalog$/i });
+
+    const reportsLink = screen.getByRole("link", { name: /reports/i });
+    expect(within(reportsLink).queryByText("PRO")).not.toBeInTheDocument();
+  });
+
+  it("renders the reports route with the upgrade panel on the basic plan", async () => {
+    mocks.auth.user = { id: "user-1", email: "owner@example.com" };
+    mocks.restaurant.membership = { id: "staff-1", role: "owner" };
+    mocks.restaurant.restaurant = { name: "Test Café", plan: "basic" };
+    mocks.restaurant.role = "owner";
+
+    renderAdminApp(["/admin/reports"]);
+
+    expect(
+      await screen.findByRole("heading", { name: /upgrade to standard/i }),
+    ).toBeInTheDocument();
   });
 
   it("asks for confirmation before signing out", async () => {

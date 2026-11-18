@@ -3,7 +3,7 @@ import type {
   MenuCategory as MenuCategoryRow,
   MenuItem as MenuItemRow,
 } from "@shared/lib/database.types"
-import { mapMenu, menuItemIds, toMenuItem } from "./menuApi"
+import { mapMenu, mapModifierGroupsByItem, menuItemIds, toMenuItem } from "./menuApi"
 
 const category = (
   id: string,
@@ -119,5 +119,101 @@ describe("toMenuItem", () => {
     expect(mapped.price).toBe(5)
     expect(mapped.allergens).toEqual([])
     expect(mapped.dietaryTags).toEqual(["Vegetarian"])
+    expect(mapped.modifierGroups).toEqual([])
+  })
+})
+
+describe("mapModifierGroupsByItem", () => {
+  const link = (itemId: string, groupId: string, displayOrder: number) => ({
+    menu_item_id: itemId,
+    modifier_group_id: groupId,
+    display_order: displayOrder,
+  })
+
+  const modifierGroup = (
+    id: string,
+    name: string,
+    displayOrder: number,
+    selectionType: "single" | "multiple" = "single",
+  ) => ({
+    id,
+    name,
+    selection_type: selectionType,
+    min_selections: selectionType === "single" ? 1 : 0,
+    max_selections: selectionType === "single" ? 1 : 2,
+    is_required: true,
+    display_order: displayOrder,
+  })
+
+  const modifier = (
+    id: string,
+    groupId: string,
+    name: string,
+    displayOrder: number,
+    priceAdjustment = 0,
+    isAvailable = true,
+  ) => ({
+    id,
+    modifier_group_id: groupId,
+    name,
+    price_adjustment: priceAdjustment,
+    display_order: displayOrder,
+    is_available: isAvailable,
+  })
+
+  it("joins groups and options in display order and hides unavailable options", () => {
+    const byItem = mapModifierGroupsByItem(
+      [link("item-1", "group-2", 1), link("item-1", "group-1", 0)],
+      [
+        modifierGroup("group-1", "Size", 0),
+        modifierGroup("group-2", "Extras", 1, "multiple"),
+      ],
+      [
+        modifier("option-large", "group-1", "Large", 1, 1),
+        modifier("option-regular", "group-1", "Regular", 0),
+        modifier("option-sold-out", "group-1", "Sold out", 2, 0, false),
+        modifier("option-shot", "group-2", "Extra shot", 0, 0.5),
+      ],
+    )
+
+    const groups = byItem.get("item-1") ?? []
+    expect(groups.map((group) => group.name)).toEqual(["Size", "Extras"])
+    expect(groups[0]).toMatchObject({
+      selectionType: "single",
+      isRequired: true,
+      options: [
+        { id: "option-regular", name: "Regular", priceAdjustment: 0 },
+        { id: "option-large", name: "Large", priceAdjustment: 1 },
+      ],
+    })
+    expect(groups[1].options.map((option) => option.name)).toEqual(["Extra shot"])
+  })
+
+  it("attaches the mapped groups to menu items", () => {
+    const byItem = mapModifierGroupsByItem(
+      [link("item-1", "group-1", 0)],
+      [modifierGroup("group-1", "Size", 0)],
+      [modifier("option-regular", "group-1", "Regular", 0)],
+    )
+
+    const menu = mapMenu(
+      [category("a", "Drinks", 0)],
+      [item("item-1", "a", "Flat White", 0)],
+      byItem,
+    )
+
+    expect(menu[0].items[0].modifierGroups).toEqual([
+      {
+        id: "group-1",
+        name: "Size",
+        selectionType: "single",
+        minSelections: 1,
+        maxSelections: 1,
+        isRequired: true,
+        options: [
+          { id: "option-regular", name: "Regular", priceAdjustment: 0 },
+        ],
+      },
+    ])
   })
 })

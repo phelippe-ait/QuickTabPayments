@@ -17,6 +17,7 @@ const trackedOrder = {
   subtotal: 4.27,
   tax: 0.43,
   total: 4.7,
+  tipAmount: 0,
   currency: "AUD",
   createdAt: "2026-10-25T02:00:00Z",
   tableNumber: "T05",
@@ -53,6 +54,43 @@ describe("OrderTrackingScreen", () => {
     expect(screen.getByText("Table T05")).toBeInTheDocument()
     expect(screen.getByText(/Flat White/)).toBeInTheDocument()
     expect(mocks.fetchOrderTracking).toHaveBeenCalledWith("token-1")
+  })
+
+  it("shows modifier names under each ordered line", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      items: [
+        {
+          ...trackedOrder.items[0],
+          modifiers: [{ name: "Oat milk", priceAdjustment: 0.5 }],
+        },
+      ],
+    })
+    renderTracking()
+
+    expect(await screen.findByText("Oat milk")).toBeInTheDocument()
+  })
+
+  it("shows the tip line and the charged amount when a tip was paid", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      tipAmount: 0.47,
+      amountPaid: 5.17,
+    })
+    renderTracking()
+
+    expect(await screen.findByText("Tip")).toBeInTheDocument()
+    expect(screen.getByText(/0\.47/)).toBeInTheDocument()
+    expect(screen.getAllByText("Paid").length).toBeGreaterThan(0)
+    expect(screen.getByText(/5\.17/)).toBeInTheDocument()
+  })
+
+  it("does not show a tip line when there is no tip", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue(trackedOrder)
+    renderTracking()
+
+    await screen.findByText("QT-261025-0001")
+    expect(screen.queryByText("Tip")).not.toBeInTheDocument()
   })
 
   it("renders the pending payment-confirmation state", async () => {

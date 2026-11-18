@@ -8,26 +8,32 @@ import {
   orderStatusTones,
 } from "./status"
 
-describe("order status transitions", () => {
-  const legal: Array<[OrderStatus, OrderStatus]> = [
-    ["pending", "confirmed"],
-    ["pending", "cancelled"],
-    ["confirmed", "preparing"],
-    ["confirmed", "cancelled"],
-    ["preparing", "ready"],
-    ["preparing", "cancelled"],
-    ["ready", "completed"],
-    ["ready", "cancelled"],
-  ]
+// Copied from the CASE list in
+// supabase/migrations/0022_order_status_transition_guard.sql. The duplicate is
+// intentional: this test fails if the client matrix and the DB trigger drift.
+const DB_TRANSITION_MATRIX: Record<OrderStatus, readonly OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+}
 
-  it("accepts exactly the legal transitions", () => {
+describe("order status transitions", () => {
+  it("matches the DB trigger matrix for every status pair", () => {
     for (const from of ORDER_STATUSES) {
       for (const to of ORDER_STATUSES) {
-        const expected = legal.some(
-          ([legalFrom, legalTo]) => legalFrom === from && legalTo === to,
+        expect(canTransitionStatus(from, to)).toBe(
+          DB_TRANSITION_MATRIX[from].includes(to),
         )
-        expect(canTransitionStatus(from, to)).toBe(expected)
       }
+    }
+  })
+
+  it("exposes exactly the DB matrix through nextStatuses", () => {
+    for (const from of ORDER_STATUSES) {
+      expect(nextStatuses(from)).toEqual([...DB_TRANSITION_MATRIX[from]])
     }
   })
 

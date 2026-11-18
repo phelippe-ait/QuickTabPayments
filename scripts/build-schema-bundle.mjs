@@ -16,7 +16,24 @@ const outputPath = path.join(root, "supabase", "schema.sql");
 
 const files = (await readdir(migrationsDir))
   .filter((file) => file.endsWith(".sql"))
-  .sort((a, b) => a.localeCompare(b, "en"));
+  .sort((a, b) => {
+    const groupA = migrationGroup(a);
+    const groupB = migrationGroup(b);
+    return groupA === groupB ? a.localeCompare(b, "en") : groupA - groupB;
+  });
+
+/**
+ * The historical schema is numbered 0001–0019 followed by timestamped
+ * `2026…` migrations. The multi-digit packet migrations (0020+) were added
+ * afterwards, so they must replay last even though "0020" sorts before
+ * "2026…". This keeps `schema.sql` matching the order the migrations were
+ * actually applied in.
+ */
+function migrationGroup(file) {
+  const prefix = file.slice(0, file.indexOf("_"));
+  if (prefix.length > 4) return 1; // timestamped legacy migration
+  return Number(prefix) >= 20 ? 2 : 0; // 0001–0019, then 0020+
+}
 
 if (files.length === 0) {
   throw new Error(`No migrations found in ${migrationsDir}`);

@@ -11,6 +11,7 @@ describe("mapCustomerOrders", () => {
         subtotal: 4.27,
         tax: 0.43,
         total: 4.7,
+        tip_amount: 1.2,
         tracking_token: "token-1",
         created_at: "2026-10-25T02:00:00Z",
         tables: { table_number: "T05" },
@@ -27,7 +28,7 @@ describe("mapCustomerOrders", () => {
           {
             status: "succeeded",
             payment_method_type: "card",
-            amount: 4.7,
+            amount: 5.9,
             receipt_url: "https://receipt",
           },
         ],
@@ -44,8 +45,53 @@ describe("mapCustomerOrders", () => {
       paymentStatus: "succeeded",
       receiptUrl: "https://receipt",
       refundedTotal: 1.2,
+      tipAmount: 1.2,
+      amountDue: 5.9,
+      amountPaid: 5.9,
       items: [
         { name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 },
+      ],
+    })
+  })
+
+  it("keeps the menu item and modifier ids needed to order again", () => {
+    const orders = mapCustomerOrders([
+      {
+        id: "order-1",
+        order_number: "QT-261025-0001",
+        status: "completed",
+        subtotal: 5.2,
+        tax: 0.47,
+        total: 5.7,
+        tracking_token: "token-1",
+        created_at: "2026-10-25T02:00:00Z",
+        tables: null,
+        restaurants: { name: "QuickTab Demo Cafe", currency: "AUD" },
+        order_items: [
+          {
+            menu_item_id: "item-1",
+            item_name_snapshot: "Flat White",
+            quantity: 1,
+            unit_price_snapshot: 5.2,
+            subtotal: 5.2,
+            order_item_modifiers: [
+              {
+                modifier_id: "mod-oat",
+                modifier_name_snapshot: "Oat milk",
+                price_adjustment_snapshot: 0.5,
+              },
+            ],
+          },
+        ],
+        payments: [],
+        refunds: [],
+      },
+    ])
+
+    expect(orders[0].items[0]).toMatchObject({
+      menuItemId: "item-1",
+      modifiers: [
+        { id: "mod-oat", name: "Oat milk", priceAdjustment: 0.5 },
       ],
     })
   })
@@ -74,5 +120,8 @@ describe("mapCustomerOrders", () => {
     expect(orders[0].items).toEqual([])
     expect(orders[0].paymentStatus).toBeNull()
     expect(orders[0].refundedTotal).toBe(0)
+    expect(orders[0].tipAmount).toBe(0)
+    expect(orders[0].amountDue).toBe(0)
+    expect(orders[0].amountPaid).toBe(0)
   })
 })

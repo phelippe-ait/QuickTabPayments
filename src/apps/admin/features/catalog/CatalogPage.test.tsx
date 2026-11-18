@@ -64,6 +64,25 @@ vi.mock("../../hooks/useMenu", () => ({
   useMenu: () => mocks.menu,
 }))
 
+vi.mock("../../hooks/useModifiers", () => ({
+  useModifiers: () => ({
+    groups: [],
+    links: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+    isMutating: false,
+    createGroup: vi.fn(async () => true),
+    updateGroup: vi.fn(async () => true),
+    deleteGroup: vi.fn(async () => true),
+    addModifier: vi.fn(async () => true),
+    updateOption: vi.fn(async () => true),
+    deleteOption: vi.fn(async () => true),
+    reorderOptions: vi.fn(async () => true),
+    setGroupLink: vi.fn(async () => true),
+  }),
+}))
+
 describe("CatalogPage", () => {
   beforeEach(() => {
     mocks.menu.categories = []

@@ -82,17 +82,17 @@ export function OrderHistory({
             onClick={() => onSelect(order)}
           >
             <span className="text-sm font-bold">{order.id}</span>
-            <span className="row-start-2 text-xs text-muted-2 md:row-auto md:text-sm md:text-ink">
+            <span className="row-start-2 truncate text-xs text-muted-2 md:row-auto md:text-sm md:text-ink">
               {order.table}
             </span>
-            <span className="text-sm font-bold md:font-normal">
+            <span className="min-w-0 truncate text-sm font-bold md:font-normal">
               {order.guest}
             </span>
             <span className="hidden text-sm text-muted-2 md:block">
               {order.time}
             </span>
             <span className="row-span-2 row-start-1 text-right font-serif text-lg md:row-auto md:text-left">
-              {formatMoney(order.total, currency)}
+              {formatMoney(order.amountDue ?? order.total, currency)}
             </span>
             <span className="hidden text-placeholder transition group-hover:translate-x-1 group-hover:text-berry md:block">
               <Icon name="chevron" size={18} />
@@ -124,6 +124,8 @@ export function HistoryOrderDrawer({
 }) {
   const subtotal = order.subtotal ?? order.total / 1.09
   const tax = order.tax ?? order.total - subtotal
+  const tipAmount = order.tipAmount ?? 0
+  const amountDue = order.amountDue ?? order.total + tipAmount
   const completed = order.status === "Completed"
   const panelRef = useDialogFocus<HTMLElement>(onClose)
   useBodyScrollLock()
@@ -214,9 +216,15 @@ export function HistoryOrderDrawer({
             <span>Tax</span>
             <span>{formatMoney(tax, currency)}</span>
           </div>
+          {tipAmount > 0 && (
+            <div className="flex justify-between text-muted-2">
+              <span>Tip</span>
+              <span>{formatMoney(tipAmount, currency)}</span>
+            </div>
+          )}
           <div className="flex justify-between pt-2 font-serif text-2xl">
-            <span>Total</span>
-            <span>{formatMoney(order.total, currency)}</span>
+            <span>Amount due</span>
+            <span>{formatMoney(amountDue, currency)}</span>
           </div>
         </div>
 

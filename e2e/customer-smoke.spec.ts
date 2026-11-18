@@ -1,30 +1,115 @@
 import { test, expect } from "@playwright/test";
+import {
+  addFriesWithLargeSize,
+  fillStripeCard,
+  MISSING_FIXTURE_NOTE,
+  openCart,
+  openSeededMenu,
+  orderNumberFromHref,
+  stripeTestEnabled,
+  tableToken,
+} from "./support";
 
 /**
- * Customer smoke test: scan a table QR -> menu renders -> add to cart.
+ * Customer journey (A4.4): scan the seeded QR -> menu -> modifier picker ->
+ * cart -> checkout -> (optional) payment -> confirmation -> tracking.
  *
- * Requires a reachable Supabase project with the demo restaurant + an active
- * table. Set `E2E_TABLE_TOKEN` to that table's `qr_token`; without it the spec
- * skips rather than failing (CI may not have demo data).
+ * Runs against the fixed fixture in `supabase/e2e_seed.sql`. Skips when the
+ * table token/env is missing (fork PRs, offline local runs); the card payment
+ * half additionally needs `STRIPE_TEST=1` plus the Stripe keys/webhook relay.
  */
-const slug = process.env.E2E_RESTAURANT_SLUG ?? "quicktab-demo-cafe";
-const token = process.env.E2E_TABLE_TOKEN ?? "";
+const SKIP_TOKEN_NOTE =
+  "Set E2E_TABLE_TOKEN (e2e-table-token-fixed after running supabase/e2e_seed.sql).";
 
-test("scan QR -> menu -> add to cart", async ({ page }) => {
-  test.skip(!token, "Set E2E_TABLE_TOKEN to a demo table token to run this spec.");
+test("scan QR -> seeded menu renders", async ({ page }) => {
+  test.skip(!tableToken, SKIP_TOKEN_NOTE);
+  test.skip(!(await openSeededMenu(page)), MISSING_FIXTURE_NOTE);
 
-  await page.goto(`/?r=${slug}&t=${token}`);
-  await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  const firstProduct = page.getByRole("button", { name: /^View / }).first();
-  const menuReady = await firstProduct
-    .waitFor({ state: "visible", timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!menuReady) {
-    test.skip(true, "The demo menu is empty in this environment.");
+  // Known fixture items are all available and rendered.
+  await expect(page.getByRole("button", { name: "View E2E Burger" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View E2E Fries" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View E2E Iced Tea" })).toBeVisible();
+
+  // The allergen item carries its P19 warning tag.
+  await expect(
+    page.getByRole("button", { name: "View E2E Nut Salad" }),
+  ).toContainText(/nuts/i);
+
+  // Empty cart is announced, not just implied.
+  await expect(
+    page.getByRole("button", { name: /your cart is empty/i }),
+  ).toBeVisible();
+});
+
+test("add seeded item with modifier -> cart -> checkout", async ({ page }) => {
+  test.skip(!tableToken, SKIP_TOKEN_NOTE);
+  test.skip(!(await openSeededMenu(page)), MISSING_FIXTURE_NOTE);
+
+  await addFriesWithLargeSize(page);
+  await expect(page.getByRole("button", { name: /1 item in your cart/i })).toBeVisible();
+
+  const cart = await openCart(page);
+  await expect(cart.getByText("E2E Fries")).toBeVisible();
+  await expect(cart.getByText("Large")).toBeVisible();
+  await expect(cart.getByText(/total/i)).toBeVisible();
+
+  await cart.getByRole("button", { name: /^checkout$/i }).click();
+
+  // Checkout screen loads with the order intact.
+  await expect(
+    page.getByRole("heading", { name: /review & place order/i }),
+  ).toBeVisible();
+  // Exact: the checkout footer also mentions the table.
+  await expect(page.getByText("Table 1", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /order summary/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/E2E Fries/)).toBeVisible();
+  await expect(page.getByText("Large")).toBeVisible();
+
+  if (!stripeTestEnabled) {
+    test
+      .info()
+      .annotations.push({
+        type: "note",
+        description:
+          "Set STRIPE_TEST=1 (with Stripe test keys, /api on :3001 and the webhook relay) to also verify payment, confirmation and tracking.",
+      });
+    return;
   }
-  await firstProduct.click();
-  await page.getByRole("button", { name: /add to order/i }).click();
-  await expect(page.getByText(/item(s)? in your cart|your cart is empty/i)).toBeVisible();
+
+  // Full payment path (CI only when the secret is present).
+  await page.getByLabel("Name for the order").fill("E2E Guest");
+  await page
+    .getByLabel("Notes for the kitchen (optional)")
+    .fill("Automated customer journey");
+
+  const payButton = page.getByRole("button", { name: /^pay /i });
+  await expect(payButton).toBeEnabled({ timeout: 20_000 });
+  await fillStripeCard(page);
+  await payButton.click();
+
+  // Confirmation screen (webhook may still be confirming the payment).
+  await expect(
+    page.getByText(/payment received|payment confirming/i).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  const trackLink = page.getByRole("link", { name: /track order/i });
+  await expect(trackLink).toBeVisible();
+  const href = await trackLink.getAttribute("href");
+  expect(href).toContain("/order/");
+  const orderNumber = orderNumberFromHref(href!);
+
+  // Tracking page: order details, then the webhook moves it to `confirmed`.
+  await page.goto(href!);
+  await expect(page.getByText(orderNumber).first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText(/E2E Fries/)).toBeVisible();
+  await expect(page.getByText("Large")).toBeVisible();
+  await expect(page.getByText(/your order was sent to the kitchen/i)).toBeVisible(
+    { timeout: 45_000 },
+  );
 });

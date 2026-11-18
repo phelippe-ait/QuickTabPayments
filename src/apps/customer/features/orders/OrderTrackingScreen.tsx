@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router"
 import { useAuth } from "@shared/auth/AuthContext"
 import { supabase } from "@shared/lib/supabase"
 import { cn } from "@shared/lib/cn"
-import { formatMoney, inclusiveTaxLabel } from "@shared/lib/money"
+import { formatMoney, inclusiveTaxLabel, roundMoney } from "@shared/lib/money"
 import { orderStatusLabels, orderStatusTones } from "@shared/orders/status"
 import {
   paymentSummaryLabel,
@@ -156,6 +156,10 @@ export function OrderTrackingScreen() {
 
   // Signed-in owners/staff may receive Realtime updates; polling is the
   // fallback for them and the primary mechanism for guests.
+  //
+  // Scoping guarantee (C7): guests are RLS-filtered out of Realtime, and this
+  // channel listens to one specific order id — never the whole `orders` table.
+  // Keep the `id` filter if this subscription is ever changed.
   useEffect(() => {
     if (!supabase || !user || !order?.orderId) return
     const channel = supabase
@@ -210,7 +214,7 @@ export function OrderTrackingScreen() {
         <header className="flex items-center justify-between">
           <Link
             to="/"
-            className="text-[11px] font-bold uppercase tracking-[0.12em] text-berry-deep hover:underline"
+            className="inline-flex min-h-11 items-center text-[11px] font-bold uppercase tracking-[0.12em] text-berry-deep hover:underline"
           >
             ← Back to menu
           </Link>
@@ -243,7 +247,7 @@ export function OrderTrackingScreen() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link to="/" className={buttonVariants({ variant: "outline", className: "w-full" })}>
+              <Link to="/" className={buttonVariants({ variant: "outline", className: "min-h-11 w-full" })}>
                 Back to menu
               </Link>
             </CardContent>
@@ -259,7 +263,7 @@ export function OrderTrackingScreen() {
             <CardContent>
               <button
                 type="button"
-                className={buttonVariants({ variant: "outline", className: "w-full" })}
+                className={buttonVariants({ variant: "outline", className: "min-h-11 w-full" })}
                 onClick={() => void refresh()}
               >
                 Try again
@@ -367,7 +371,7 @@ export function OrderTrackingScreen() {
                 <ul className="flex flex-col gap-2 text-[12px] text-ink-mid">
                   {order.items.map((item, index) => (
                     <li key={`${item.name}-${index}`} className="flex justify-between gap-3">
-                      <span>
+                      <span className="min-w-0 break-words">
                         {item.quantity} × {item.name}
                         {(item.modifiers?.length ?? 0) > 0 && (
                           <small className="mt-1 block text-[10px] text-muted">
@@ -375,7 +379,7 @@ export function OrderTrackingScreen() {
                           </small>
                         )}
                       </span>
-                      <span>{formatMoney(item.subtotal, order.currency)}</span>
+                      <span className="shrink-0">{formatMoney(item.subtotal, order.currency)}</span>
                     </li>
                   ))}
                   {order.items.length === 0 && (
@@ -398,9 +402,26 @@ export function OrderTrackingScreen() {
                     </dt>
                     <dd>{formatMoney(order.tax, order.currency)}</dd>
                   </div>
-                  <div className="flex justify-between text-[14px] font-bold text-ink">
-                    <dt>Total</dt>
+                  <div className="flex justify-between">
+                    <dt>Items total</dt>
                     <dd>{formatMoney(order.total, order.currency)}</dd>
+                  </div>
+                  {order.tipAmount > 0 && (
+                    <div className="flex justify-between">
+                      <dt>Tip</dt>
+                      <dd>{formatMoney(order.tipAmount, order.currency)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[14px] font-bold text-ink">
+                    <dt>{order.amountPaid > 0 ? "Paid" : "Amount due"}</dt>
+                    <dd>
+                      {formatMoney(
+                        order.amountPaid > 0
+                          ? order.amountPaid
+                          : roundMoney(order.total + order.tipAmount),
+                        order.currency,
+                      )}
+                    </dd>
                   </div>
                 </dl>
 
@@ -428,7 +449,7 @@ export function OrderTrackingScreen() {
 
                 {order.receiptUrl && (
                   <a
-                    className="mt-3 inline-block text-[11px] font-bold text-berry underline underline-offset-2"
+                    className="mt-2 inline-flex min-h-11 items-center text-[11px] font-bold text-berry underline underline-offset-2"
                     href={order.receiptUrl}
                     target="_blank"
                     rel="noreferrer"

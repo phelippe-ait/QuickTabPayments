@@ -1,7 +1,11 @@
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import type { Stripe } from "@stripe/stripe-js";
 import { supabase } from "@shared/lib/supabase";
+import type { TipSelection } from "@shared/lib/money";
 import type { CartItem } from "../types";
-import type { PlaceOrderErrorCode } from "./placeOrder";
+import {
+  placeOrderErrorMessage,
+  type PlaceOrderErrorCode,
+} from "./placeOrder";
 import type { CustomerLocation } from "./geolocation";
 
 const publishableKey = (
@@ -15,7 +19,12 @@ let stripePromise: Promise<Stripe | null> | null = null;
 
 export function getStripePromise(): Promise<Stripe | null> | null {
   if (!publishableKey) return null;
-  if (!stripePromise) stripePromise = loadStripe(publishableKey);
+  if (!stripePromise) {
+    // Loaded on demand: the SDK belongs to the checkout chunk, not the menu.
+    stripePromise = import("@stripe/stripe-js").then(({ loadStripe }) =>
+      loadStripe(publishableKey),
+    );
+  }
   return stripePromise;
 }
 
@@ -26,6 +35,8 @@ export type CreatePaymentIntentInput = {
   notes?: string;
   items: CartItem[];
   location?: CustomerLocation;
+  /** Optional tip; `null` means no tip. The RPC recomputes the amount. */
+  tip?: TipSelection | null;
 };
 
 export type PaymentIntentResponse = {
@@ -33,7 +44,13 @@ export type PaymentIntentResponse = {
   orderId: string;
   orderNumber: string;
   trackingToken: string;
+  /** Amount actually charged (items total + tip). */
   amount: number;
+  /** GST-inclusive items total, before the tip. */
+  total?: number;
+  tipAmount?: number;
+  /** Server-computed `amount_due`; mirrors `amount` when present. */
+  amountDue?: number;
   currency: string;
   status: "pending";
 };
@@ -47,13 +64,16 @@ const ERROR_CODES: PlaceOrderErrorCode[] = [
   "restaurant_not_found",
   "table_not_found",
   "menu_item_unavailable",
-  "invalid_modifier",
   "invalid_modifier_selection",
+  "modifier_selection_invalid",
+  "modifier_required",
+  "invalid_modifier",
   "order_number_conflict",
   "customer_location_required",
   "customer_location_invalid",
   "outside_ordering_radius",
   "restaurant_location_not_configured",
+  "invalid_tip",
 ];
 
 export class PaymentSetupError extends Error {
@@ -92,10 +112,11 @@ export async function createPaymentIntent(
           menu_item_id: item.menuItemId,
           quantity: Math.trunc(item.quantity),
           ...((item.modifiers?.length ?? 0) > 0
-            ? { modifier_ids: item.modifiers!.map((modifier) => modifier.id) }
+            ? { modifiers: item.modifiers!.map((modifier) => modifier.id) }
             : {}),
         })),
       location: input.location,
+      tip: input.tip ?? null,
     }),
   });
 
@@ -106,7 +127,10 @@ export async function createPaymentIntent(
   if (!res.ok) {
     const message = payload.error ?? "payment_setup_failed";
     const code = ERROR_CODES.find((candidate) => message.includes(candidate));
-    throw new PaymentSetupError(code ?? "unknown", message);
+    throw new PaymentSetupError(
+      code ?? "unknown",
+      code ? placeOrderErrorMessage(code) : message,
+    );
   }
 
   return payload as PaymentIntentResponse;

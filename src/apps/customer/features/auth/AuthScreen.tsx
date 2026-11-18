@@ -2,7 +2,7 @@ import { type FormEvent, useState } from "react";
 import styles from "../../App.module.css";
 import { Icon } from "@shared/ui/Icon";
 import { Button } from "@shared/ui/Button";
-import { useAuth } from "@shared/auth/AuthContext";
+import { useAuth, type OAuthProvider } from "@shared/auth/AuthContext";
 import { HeaderButton } from "../../components/CustomerUi";
 
 export function AuthScreen({
@@ -31,16 +31,10 @@ export function AuthScreen({
   const [pending, setPending] = useState(false);
   const busy = pending || authLoading;
 
-  // Social providers stay visible but disabled until each is configured in
-  // Supabase. Email is the only live method for now — flip `enabled` to true
-  // once a provider's credentials are set up.
-  const providers = [
-    { id: "apple", label: "Apple", enabled: false },
-    { id: "google", label: "Google", enabled: true },
-    { id: "facebook", label: "Facebook", enabled: false },
-  ] as const;
+  // Auth methods are frozen to email/password + Google OAuth.
+  const providers = [{ id: "google", label: "Google", enabled: true }] as const;
 
-  const handleOAuth = async (provider: "google" | "apple" | "facebook") => {
+  const handleOAuth = async (provider: OAuthProvider) => {
     setError("");
     setPending(true);
     const { error: oauthError } = await signInWithOAuth(provider);
@@ -86,8 +80,8 @@ export function AuthScreen({
       </header>
       <p className={`${styles["auth-intro"]}`}>
         {signup
-          ? "Create your account with your email to order faster next time."
-          : "Welcome back. Log in with your email."}
+          ? "Create your account with your email or Google to order faster next time."
+          : "Welcome back. Log in with your email or Google."}
       </p>
       <div className={`${styles["auth-social"]}`}>
         {providers.map((provider) => (
@@ -96,18 +90,12 @@ export function AuthScreen({
             type="button"
             className={`${styles["auth-social-button"]}`}
             disabled={!provider.enabled || busy}
-            title={provider.enabled ? undefined : "Coming soon"}
             onClick={() => handleOAuth(provider.id)}
           >
             <Icon name={provider.id} size={18} />
             <span>
               {signup ? "Sign up" : "Log in"} with {provider.label}
             </span>
-            {!provider.enabled && (
-              <span className={`${styles["auth-social-soon"]}`}>
-                Coming soon
-              </span>
-            )}
           </button>
         ))}
       </div>

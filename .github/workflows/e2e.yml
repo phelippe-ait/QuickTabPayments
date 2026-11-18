@@ -4,12 +4,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Blocking: a failing spec fails the PR once the fixture is configured.
+# Prerequisites (see HUMAN_CHECKLIST §3) — without them the suite skips and
+# still passes:
+#   - `supabase/e2e_seed.sql` applied to the project
+#   - secrets: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+#   - optional: E2E_STAFF_EMAIL/E2E_STAFF_PASSWORD (linked by the seed) and
+#     STRIPE_TEST=1 + VITE_STRIPE_PUBLISHABLE_KEY for the paid journey.
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    # Non-blocking until the demo menu + table token are stable in every
-    # environment. Remove `continue-on-error` once the smoke suite is green.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,14 +22,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --project=chromium
+      - name: Playwright (chromium)
+        run: npx playwright test --project=chromium --reporter=list,html
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          E2E_TABLE_TOKEN: ${{ secrets.E2E_TABLE_TOKEN }}
+          VITE_RESTAURANT_SLUG: e2e-bistro
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+          E2E_RESTAURANT_SLUG: e2e-bistro
+          # The seed fixes this token, so a project without the secret still
+          # exercises the seeded journey (and skips if the seed is missing).
+          E2E_TABLE_TOKEN: ${{ secrets.E2E_TABLE_TOKEN || 'e2e-table-token-fixed' }}
+          STRIPE_TEST: ${{ secrets.STRIPE_TEST }}
+          E2E_STAFF_EMAIL: ${{ secrets.E2E_STAFF_EMAIL }}
+          E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+          if-no-files-found: ignore

@@ -20,6 +20,8 @@ const rpcResult = {
   subtotal: 4.27,
   tax: 0.43,
   total: 4.7,
+  tip_amount: 0.47,
+  amount_due: 5.17,
   currency: "AUD",
   restaurant_name: "QuickTab Demo Cafe",
   table_number: "T05",
@@ -40,6 +42,8 @@ describe("mapPlacedOrder", () => {
       subtotal: 4.27,
       tax: 0.43,
       total: 4.7,
+      tipAmount: 0.47,
+      amountDue: 5.17,
       currency: "AUD",
       tableNumber: "T05",
       items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
@@ -61,6 +65,9 @@ describe("mapPlaceOrderError", () => {
     ["empty_cart", "empty_cart"],
     ["customer_name_required", "customer_name_required"],
     ["order_number_conflict", "order_number_conflict"],
+    ["invalid_modifier", "invalid_modifier"],
+    ["modifier_selection_invalid", "modifier_selection_invalid"],
+    ["modifier_required", "modifier_required"],
   ])("maps %s from the Postgres message", (message, code) => {
     const error = mapPlaceOrderError({ message })
     expect(error).toBeInstanceOf(PlaceOrderError)
@@ -100,11 +107,57 @@ describe("placeOrder", () => {
       p_customer_name: "Olivia",
       p_notes: "extra hot",
       p_items: [{ menu_item_id: "item-1", quantity: 2 }],
+      p_tip: null,
     })
     const payload = mocks.rpc.mock.calls[0][1]
     expect(JSON.stringify(payload.p_items)).not.toContain("999")
     expect(JSON.stringify(payload.p_items)).not.toContain("Flat White")
     expect(order.customerName).toBe("Olivia")
+  })
+
+  it("sends modifier ids per line and never client prices or names", async () => {
+    mocks.rpc.mockResolvedValue({ data: rpcResult, error: null })
+
+    await placeOrder({
+      restaurantSlug: "quicktab-demo-cafe",
+      tableToken: "table-token",
+      customerName: "Olivia",
+      items: [
+        {
+          menuItemId: "item-1",
+          name: "Flat White",
+          unitPrice: 999,
+          quantity: 1,
+          modifiers: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Oat milk",
+              priceAdjustment: 0.5,
+              groupName: "Milk",
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_items: [
+          {
+            menu_item_id: "item-1",
+            quantity: 1,
+            modifiers: ["11111111-1111-4111-8111-111111111111"],
+          },
+        ],
+      }),
+    )
+
+    const payload = mocks.rpc.mock.calls[0][1]
+    const serialized = JSON.stringify(payload.p_items)
+    expect(serialized).not.toContain("999")
+    expect(serialized).not.toContain("Oat milk")
+    expect(serialized).not.toContain("priceAdjustment")
   })
 
   it("rejects an empty cart without calling the RPC", async () => {
@@ -117,6 +170,49 @@ describe("placeOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "empty_cart" })
     expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it("forwards the tip payload to the server", async () => {
+    mocks.rpc.mockResolvedValue({ data: rpcResult, error: null })
+
+    await placeOrder({
+      restaurantSlug: "quicktab-demo-cafe",
+      tableToken: "table-token",
+      customerName: "Olivia",
+      items: [
+        { menuItemId: "item-1", name: "Flat White", unitPrice: 4.7, quantity: 1 },
+      ],
+      tip: { type: "fixed", value: 5 },
+    })
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({
+        p_tip: { type: "fixed", value: 5 },
+      }),
+    )
+  })
+
+  it("maps invalid_tip onto a friendly message", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "invalid_tip", details: null, hint: null },
+    })
+
+    await expect(
+      placeOrder({
+        restaurantSlug: "cafe",
+        tableToken: "token",
+        customerName: "Olivia",
+        items: [
+          { menuItemId: "item-1", name: "Coffee", unitPrice: 4.7, quantity: 1 },
+        ],
+        tip: { type: "percent", value: 50 },
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_tip",
+      message: expect.stringMatching(/tip/i),
+    })
   })
 
   it("maps RPC validation errors", async () => {

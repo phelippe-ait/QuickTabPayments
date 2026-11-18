@@ -58,6 +58,36 @@ describe("createPaymentIntent", () => {
     });
   });
 
+  it("serializes modifier ids per line", async () => {
+    await createPaymentIntent({
+      ...input,
+      items: [
+        {
+          ...input.items[0],
+          modifiers: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Oat milk",
+              priceAdjustment: 0.5,
+              groupName: "Milk",
+            },
+          ],
+        },
+      ],
+    });
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      items: [
+        {
+          menu_item_id: "item-1",
+          quantity: 2,
+          modifiers: ["11111111-1111-4111-8111-111111111111"],
+        },
+      ],
+    });
+  });
+
   it("forwards the access token for signed-in customers", async () => {
     mocks.getSession.mockResolvedValue({
       data: { session: { access_token: "jwt-123" } },
@@ -69,6 +99,44 @@ describe("createPaymentIntent", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(
       "Bearer jwt-123",
     );
+  });
+
+  it("sends a percentage tip payload", async () => {
+    await createPaymentIntent({ ...input, tip: { type: "percent", value: 10 } });
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tip: { type: "percent", value: 10 },
+    });
+  });
+
+  it("sends a fixed custom tip payload", async () => {
+    await createPaymentIntent({ ...input, tip: { type: "fixed", value: 5 } });
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tip: { type: "fixed", value: 5 },
+    });
+  });
+
+  it("sends an explicit null tip when none is selected", async () => {
+    await createPaymentIntent(input);
+
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).tip).toBeNull();
+  });
+
+  it("maps invalid_tip onto a friendly checkout error", async () => {
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "invalid_tip" }),
+    });
+
+    await expect(createPaymentIntent(input)).rejects.toMatchObject({
+      name: "PaymentSetupError",
+      code: "invalid_tip",
+      message: expect.stringMatching(/tip/i),
+    });
   });
 
   it("maps API errors onto checkout codes", async () => {
@@ -84,5 +152,22 @@ describe("createPaymentIntent", () => {
     await expect(createPaymentIntent(input)).rejects.toBeInstanceOf(
       PaymentSetupError,
     );
+  });
+
+  it.each([
+    ["invalid_modifier", /no longer available/i],
+    ["modifier_selection_invalid", /review the options/i],
+    ["modifier_required", /required options/i],
+  ])("maps the %s RPC code onto a friendly checkout error", async (code, pattern) => {
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: code }),
+    });
+
+    await expect(createPaymentIntent(input)).rejects.toMatchObject({
+      name: "PaymentSetupError",
+      code,
+      message: expect.stringMatching(pattern),
+    });
   });
 });

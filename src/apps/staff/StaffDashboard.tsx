@@ -46,6 +46,18 @@ function StaffWorkspace() {
   const restaurantId = membership?.restaurantId ?? null
   const workspace = useStaffWorkspace(restaurantId)
 
+  // Keep an open history drawer live: payment/status updates replace the
+  // snapshot captured when the row was clicked.
+  const liveSelectedOrder = useMemo(
+    () =>
+      selectedOrder
+        ? (workspace.historyOrders.find(
+            (order) => order.databaseId === selectedOrder.databaseId,
+          ) ?? selectedOrder)
+        : null,
+    [selectedOrder, workspace.historyOrders],
+  )
+
   const userName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
     user?.user_metadata?.full_name ||
@@ -78,7 +90,15 @@ function StaffWorkspace() {
   const currency = restaurant?.currency ?? "AUD"
 
   const saveTable = (table: Table) => {
+    const statusChanged =
+      selectedTable !== null && table.status !== selectedTable.status
     workspace.updateTable(table)
+    // The editor's guest/occupant fields are local-only, but the operational
+    // status is real state: persist it through the same scoped mutation the
+    // one-tap card button uses so a reload doesn't undo the change.
+    if (statusChanged) {
+      void workspace.updateTableStatus(String(table.id), table.status)
+    }
     setSelectedTable(null)
   }
 
@@ -90,7 +110,7 @@ function StaffWorkspace() {
       restaurantName={restaurant?.name ?? "Your restaurant"}
       roleLabel={role ? roleLabels[role] : ""}
       onSignOut={() => void signOut()}
-      serviceHealthy={!workspace.ordersError}
+      connectionState={workspace.connectionState}
     >
       {view === "tables" && (
         <TablesWorkspace
@@ -102,6 +122,8 @@ function StaffWorkspace() {
           selectedTable={selectedTable}
           onFilterChange={setFilter}
           onSelectTable={setSelectedTable}
+          onTableStatusChange={workspace.updateTableStatus}
+          updatingTableIds={workspace.tableStatusUpdating}
           currency={currency}
           isLoading={workspace.tablesLoading}
           error={workspace.tablesError}
@@ -114,6 +136,9 @@ function StaffWorkspace() {
           onStatusChange={workspace.updateKitchenStatus}
           ordersLoading={workspace.ordersLoading}
           ordersError={workspace.ordersError}
+          sound={workspace.sound}
+          unseenOrderIds={workspace.unseenOrderIds}
+          onOrderSeen={workspace.markOrderSeen}
         />
       )}
       {view === "history" && (
@@ -143,9 +168,9 @@ function StaffWorkspace() {
           onSave={saveTable}
         />
       )}
-      {selectedOrder && view === "history" && (
+      {liveSelectedOrder && view === "history" && (
         <HistoryOrderDrawer
-          order={selectedOrder}
+          order={liveSelectedOrder}
           onClose={() => setSelectedOrder(null)}
           currency={currency}
         />

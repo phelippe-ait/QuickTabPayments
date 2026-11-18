@@ -44,6 +44,12 @@ export function readLastOrder(source: QrSource): PlacedOrder | null {
       subtotal: Number(row.subtotal ?? 0),
       tax: Number(row.tax ?? 0),
       total: Number(row.total ?? 0),
+      tipAmount: Number.isFinite(Number(row.tipAmount))
+        ? Number(row.tipAmount)
+        : undefined,
+      amountDue: Number.isFinite(Number(row.amountDue))
+        ? Number(row.amountDue)
+        : undefined,
       currency: typeof row.currency === "string" ? row.currency : "AUD",
       taxRate: Number.isFinite(Number(row.taxRate))
         ? Number(row.taxRate)

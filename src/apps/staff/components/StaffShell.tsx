@@ -2,7 +2,9 @@ import type { ReactNode } from "react"
 import styles from "../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { MobileNav, NavButton } from "./StaffUi"
+import { ConnectionBanner } from "./ConnectionBanner"
 import { RESERVATIONS_ENABLED } from "../flags"
+import type { ConnectionState } from "../hooks/connectionState"
 import type { View } from "../types"
 
 type StaffShellProps = {
@@ -14,7 +16,20 @@ type StaffShellProps = {
   restaurantName?: string
   roleLabel?: string
   onSignOut?: () => void
-  serviceHealthy?: boolean
+  connectionState: ConnectionState
+}
+
+const connectionCopy: Record<
+  ConnectionState,
+  { label: string; dot: string; tone: string }
+> = {
+  online: { label: "Live", dot: "bg-sage", tone: "text-ink-soft" },
+  connecting: {
+    label: "Reconnecting…",
+    dot: "bg-amber",
+    tone: "text-amber",
+  },
+  offline: { label: "Offline", dot: "bg-danger", tone: "text-danger" },
 }
 
 export function StaffShell({
@@ -26,7 +41,7 @@ export function StaffShell({
   restaurantName = "Your restaurant",
   roleLabel = "",
   onSignOut,
-  serviceHealthy = true,
+  connectionState,
 }: StaffShellProps) {
   const initials = userName
     .trim()
@@ -40,6 +55,7 @@ export function StaffShell({
     day: "numeric",
     month: "long",
   }).format(new Date())
+  const connection = connectionCopy[connectionState]
 
   return (
     <div className="min-h-screen bg-cream-2 text-ink">
@@ -48,8 +64,8 @@ export function StaffShell({
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-berry font-serif text-xl text-white">
             {restaurantName.charAt(0).toUpperCase() || "Q"}
           </div>
-          <div>
-            <p className="font-serif text-[21px] leading-5">{restaurantName}</p>
+          <div className="min-w-0">
+            <p className="truncate font-serif text-[21px] leading-5">{restaurantName}</p>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
               Dining room
             </p>
@@ -88,6 +104,7 @@ export function StaffShell({
       </aside>
 
       <div className="lg:pl-[248px]">
+        <ConnectionBanner state={connectionState} />
         <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-line bg-paper/95 px-5 backdrop-blur md:px-8">
           <div className="flex items-center gap-3 lg:hidden">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-berry font-serif text-lg text-white">
@@ -101,15 +118,12 @@ export function StaffShell({
           </div>
           <div className="flex items-center gap-3">
             <div
-              className="hidden items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 text-xs font-bold text-ink-soft sm:flex"
+              className={`hidden items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 text-xs font-bold sm:flex ${connection.tone}`}
               role="status"
+              aria-live="polite"
             >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  serviceHealthy ? "bg-sage" : "bg-amber"
-                }`}
-              />
-              {serviceHealthy ? "Live" : "Reconnecting…"}
+              <span className={`h-2 w-2 rounded-full ${connection.dot}`} />
+              {connection.label}
             </div>
           </div>
         </header>

@@ -20,6 +20,8 @@ export type TrackingOrder = {
   subtotal: number
   tax: number
   total: number
+  /** Tip added on top of the GST-inclusive items total (no GST on the tip). */
+  tipAmount: number
   currency: string
   createdAt: string
   tableNumber: string | null
@@ -79,6 +81,7 @@ export function mapTracking(raw: unknown): TrackingOrder | null {
     subtotal: num(row.subtotal),
     tax: num(row.tax),
     total: num(row.total),
+    tipAmount: num(row.tip_amount),
     currency: typeof row.currency === "string" ? row.currency : "AUD",
     createdAt: typeof row.created_at === "string" ? row.created_at : "",
     tableNumber:

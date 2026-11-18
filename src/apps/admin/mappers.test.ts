@@ -82,6 +82,7 @@ const orderRow: OrderWithDetails = {
   status: "preparing",
   subtotal: 12.4,
   tax: 1.24,
+  tip_amount: 0,
   total: 13.64,
   tracking_token: "tracking-token-1",
   notes: null,
@@ -183,6 +184,19 @@ describe("toOrderVM", () => {
     expect(vm.payments[0]?.method).toBe("Card")
     expect(vm.createdAt).toBe("2026-10-21T08:30:00Z")
     expect(vm.createdAtLabel).toContain("2026")
+    expect(vm.tipAmount).toBe(0)
+    expect(vm.amountDue).toBe(13.64)
+  })
+
+  it("adds the tip on top of the items total", () => {
+    const vm = toOrderVM(
+      { ...orderRow, tip_amount: 1.2 },
+      { currency: "AUD", timezone: "UTC" },
+    )
+
+    expect(vm.total).toBe(13.64)
+    expect(vm.tipAmount).toBe(1.2)
+    expect(vm.amountDue).toBe(14.84)
   })
 
   it("falls back to Guest and zero refunds", () => {

@@ -267,15 +267,13 @@ For a **new** Supabase project:
    URLs.
 3. Run the database schema and import the demo data (see
    [Database setup](#database-setup)).
-4. Social logins (optional): enable **Google** under Providers. Its OAuth
+4. Social login (optional): enable **Google** under Providers. Its OAuth
    redirect URI must be
-   `https://<project-ref>.supabase.co/auth/v1/callback`. Apple and Facebook are
-   intentionally deferred; their buttons stay disabled.
+   `https://<project-ref>.supabase.co/auth/v1/callback`.
 
 In the customer app **Google and email/password** are the supported sign-in
-methods. Apple and Facebook remain visible but disabled until configured.
-Email/password is sufficient for the reviewer; Google OAuth requires additional
-URL/provider configuration and is not required for the demo.
+methods. Email/password is sufficient for the reviewer; Google OAuth requires
+additional URL/provider configuration and is not required for the demo.
 
 ## QR scanning contract
 
@@ -598,6 +596,23 @@ The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
 mappers, and shared helpers. Playwright covers a customer smoke test and a
 gated payment lifecycle spec (`npm run test:e2e`).
 
+### End-to-end (Playwright)
+
+The E2E specs target a deterministic fixture instead of the demo data. Apply
+`supabase/e2e_seed.sql` to the project (it is idempotent and only touches the
+`e2e-bistro` restaurant), then run with:
+
+```bash
+E2E_TABLE_TOKEN=e2e-table-token-fixed npm run test:e2e
+```
+
+Optional coverage: `STRIPE_TEST=1` (plus the Stripe keys and webhook relay) adds
+the paid journey; `E2E_STAFF_EMAIL`/`E2E_STAFF_PASSWORD` add the kitchen-board
+advancement (that auth user must exist and is linked to `e2e-bistro` by the
+seed). Without the env values the specs skip, so an offline run stays green.
+CI (`.github/workflows/e2e.yml`) runs the same suite as a blocking check; see
+the seed header for the human steps.
+
 ## Build and Deployment
 
 A production build can be created locally with:
@@ -618,6 +633,29 @@ deployed origin and add both `https://<domain>/**` and
 `http://localhost:5173/**` to the Redirect URLs. The `vercel.json` SPA rewrite
 keeps `/admin`, `/staff`, and `/order/:number` working on a hard refresh while
 letting `/api/*` reach the serverless functions.
+
+### Automated deploys (GitHub Actions)
+
+`.github/workflows/deploy.yml` deploys with the Vercel CLI:
+
+- **Push to `main`** → Production deployment (`vercel build --prod` then
+  `vercel deploy --prebuilt --prod`), recorded in the `production` GitHub
+  environment.
+- **Pull request** → Preview deployment, recorded in the `preview` environment.
+  Its URL is posted in a single **sticky PR comment** (`<!-- vercel-preview -->`
+  marker) and updated on every new push instead of adding another comment.
+
+Required repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Where to get it |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `vercel link` / `vercel inspect`, or the Vercel project settings |
+| `VERCEL_PROJECT_ID` | `vercel link` / `vercel inspect`, or the Vercel project settings |
+
+Until those secrets exist, preview runs skip with a workflow notice and pushes
+to `main` fail loudly. `ci.yml` remains the quality gate; the deploy workflow
+only builds what Vercel needs (no duplicated lint/test run).
 
 The `/staff` route is auth-gated: signed-out visitors get a staff sign-in
 screen, and signed-in users without an active membership see a no-access state.

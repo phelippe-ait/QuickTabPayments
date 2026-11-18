@@ -36,7 +36,7 @@ export function QrErrorScreen({
           {qrErrorMessage(error)}
         </p>
         {canRetry && (
-          <Button variant="outline" className="mt-6 w-full" onClick={onRetry}>
+          <Button variant="outline" className="mt-6 min-h-11 w-full" onClick={onRetry}>
             Try again
           </Button>
         )}

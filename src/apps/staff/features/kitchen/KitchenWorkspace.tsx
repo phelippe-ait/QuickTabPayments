@@ -1,11 +1,41 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
+import { cn } from "@shared/lib/cn"
 import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
+import { Badge } from "@shared/ui/shadcn/badge"
 import { Stat } from "../../components/StaffUi"
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
+import { nextKitchenActions } from "../../services/staffOrders"
 import type { KitchenStatus, Order } from "../../types"
+import type { OrderSoundControls } from "../../hooks/useOrderSound"
+import { sortOrdersOldestFirst } from "./orderSort"
+import {
+  formatElapsedMinutes,
+  getElapsedMinutes,
+  getSlaLevel,
+  slaBadgeClasses,
+  slaCardClasses,
+} from "./sla"
+
+/** How often the elapsed-time labels re-render while the board is open. */
+const CLOCK_TICK_MS = 30_000
+
+type BumpStatus = "Preparing" | "Ready" | "Completed"
+
+const bumpLabels: Record<BumpStatus, string> = {
+  Preparing: "Prepare",
+  Ready: "Ready",
+  Completed: "Complete",
+}
+
+const bumpButtonClasses: Record<BumpStatus, string> = {
+  Preparing:
+    "border-amber/40 bg-amber-soft text-amber hover:bg-amber-soft/70",
+  Ready: "border-sage/40 bg-paper text-sage-strong hover:bg-sage-soft",
+  Completed: "border-sage bg-sage-soft text-sage-strong hover:bg-sage-soft/70",
+}
 
 export function KitchenWorkspace({
   orders,
@@ -13,21 +43,45 @@ export function KitchenWorkspace({
   onStatusChange,
   ordersLoading,
   ordersError,
+  sound,
+  unseenOrderIds,
+  onOrderSeen,
 }: {
   orders: Order[]
   previousOrders: Order[]
   onStatusChange: (id: string, status: KitchenStatus) => void
   ordersLoading: boolean
   ordersError: string | null
+  sound: OrderSoundControls
+  unseenOrderIds: ReadonlySet<string>
+  onOrderSeen: (orderId: string) => void
 }) {
   const [pendingAction, setPendingAction] = useState<{
     order: Order
     status: KitchenStatus
   } | null>(null)
-  const preparing = orders.filter(
+  const [now, setNow] = useState(() => Date.now())
+  const activeOrders = useMemo(
+    () => sortOrdersOldestFirst(orders),
+    [orders],
+  )
+  const preparing = activeOrders.filter(
     (order) => order.kitchenStatus === "Preparing",
   ).length
-  const ready = orders.filter((order) => order.kitchenStatus === "Ready").length
+  const ready = activeOrders.filter(
+    (order) => order.kitchenStatus === "Ready",
+  ).length
+  const unseenCount = activeOrders.filter((order) =>
+    unseenOrderIds.has(order.id),
+  ).length
+  const isUnseen = (order: Order) => unseenOrderIds.has(order.id)
+
+  // Keep SLA labels current without a per-second render storm. Thirty seconds
+  // is well inside the one-minute resolution shown on the cards.
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    return () => clearInterval(interval)
+  }, [])
 
   function confirmStatusChange() {
     if (!pendingAction) return
@@ -35,11 +89,20 @@ export function KitchenWorkspace({
     setPendingAction(null)
   }
 
+  // Acknowledge is deliberately status-neutral: the board only receives paid,
+  // already-confirmed orders (the query filters `pending`), so "seen" means
+  // clearing the P15 highlight without advancing the kitchen workflow.
+  // Opening an action confirmation also counts as acknowledging the order.
+  function requestStatusChange(order: Order, status: KitchenStatus) {
+    onOrderSeen(order.id)
+    setPendingAction({ order, status })
+  }
+
   return (
     <>
       <p className="sr-only" role="status" aria-live="polite">
-        {orders.length} active orders on the board, {preparing} preparing and{" "}
-        {ready} ready.
+        {activeOrders.length} active orders on the board, {preparing} preparing
+        and {ready} ready.
       </p>
       <section className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
@@ -51,7 +114,45 @@ export function KitchenWorkspace({
             Keep the kitchen moving and let the floor know what’s ready.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span aria-atomic="true" aria-live="polite" role="status">
+            {unseenCount > 0 && (
+              <Badge
+                aria-label={
+                  unseenCount === 1 ? "1 new order" : `${unseenCount} new orders`
+                }
+                className="animate-pulse motion-reduce:animate-none"
+                variant="warning"
+              >
+                {unseenCount} new
+              </Badge>
+            )}
+          </span>
+          <button
+            type="button"
+            aria-label={
+              sound.enabled
+                ? "Mute new order sound"
+                : "Unmute new order sound"
+            }
+            aria-pressed={sound.enabled}
+            className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-line transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry ${
+              sound.enabled
+                ? "bg-paper text-ink-soft hover:bg-cream-3"
+                : "bg-cream-3 text-muted hover:bg-cream-2"
+            }`}
+            onClick={() => {
+              if (!sound.unlocked) sound.prime()
+              sound.toggle()
+            }}
+            title={
+              sound.enabled
+                ? "Sound on for new orders"
+                : "Sound muted for new orders"
+            }
+          >
+            <Icon name={sound.enabled ? "volume" : "volume-off"} size={18} />
+          </button>
           <Stat value={preparing.toString().padStart(2, "0")} label="Preparing" tone="rose" />
           <Stat value={ready.toString().padStart(2, "0")} label="Ready" tone="green" />
         </div>
@@ -75,93 +176,129 @@ export function KitchenWorkspace({
   </div>
 ) : orders.length > 0 ? (
         <div className="grid gap-5 lg:grid-cols-2">
-          {orders.map((order) => (
-            <article
-              className="overflow-hidden rounded-[22px] border border-line bg-paper"
-              key={order.id}
-            >
-              <div className="flex items-start justify-between border-b border-line-soft px-5 py-5 sm:px-6">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-serif text-3xl">{order.id}</h2>
-                    <KitchenStatusPill status={order.kitchenStatus} />
-                  </div>
-                  <p className="mt-1.5 text-sm font-bold">{order.table}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {order.time} · {order.server}
-                  </p>
-                </div>
-                <span className="rounded-full bg-cream-2 px-3 py-1.5 text-xs font-bold text-muted-2">
-                  {order.items.reduce((sum, item) => sum + item.qty, 0)} items
-                </span>
-              </div>
+          {activeOrders.map((order) => {
+            const elapsed = getElapsedMinutes(order.createdAt, now)
+            const sla = getSlaLevel(elapsed)
+            const actions = nextKitchenActions(order.kitchenStatus)
+            const bumpStatus = actions.find(
+              (status): status is BumpStatus => status !== "Cancelled",
+            )
+            const canCancel = actions.includes("Cancelled")
 
-              <div className="px-5 py-2 sm:px-6">
-                {order.items.map((item) => (
-                  <div
-                    className="flex items-center gap-3 border-b border-sand py-3.5 last:border-0"
-                    key={`${item.name}-${item.modifiers?.join(",") ?? ""}`}
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sand text-sm font-bold">
-                      {item.qty}
-                    </span>
-                    <span className="text-sm font-bold">
-                      {item.name}
-                      {(item.modifiers?.length ?? 0) > 0 && (
-                        <small className="mt-0.5 block font-normal text-muted">{item.modifiers?.join(", ")}</small>
+            return (
+              <article
+                className={cn(
+                  "overflow-hidden rounded-[22px] border bg-paper",
+                  isUnseen(order)
+                    ? "border-amber/60 ring-2 ring-amber/30"
+                    : "border-line",
+                  slaCardClasses[sla],
+                )}
+                key={order.id}
+              >
+                <div className="flex items-start justify-between gap-4 border-b border-line-soft px-5 py-5 sm:px-6">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="font-serif text-3xl">{order.id}</h2>
+                      <KitchenStatusPill status={order.kitchenStatus} />
+                      {isUnseen(order) && (
+                        <Badge
+                          aria-label="New order"
+                          className="animate-pulse motion-reduce:animate-none"
+                          variant="warning"
+                        >
+                          New
+                        </Badge>
                       )}
+                    </div>
+                    <p className="mt-1.5 text-sm font-bold">{order.table}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {order.time} · {order.server}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2 xl:flex-row xl:items-center">
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1.5 text-xs font-bold tabular-nums",
+                        slaBadgeClasses[sla],
+                      )}
+                      title={`Waiting ${elapsed} minute${elapsed === 1 ? "" : "s"}`}
+                    >
+                      <span className="sr-only">Waiting </span>
+                      {formatElapsedMinutes(elapsed)}
+                    </span>
+                    <span className="rounded-full bg-cream-2 px-3 py-1.5 text-xs font-bold text-muted-2">
+                      {order.items.reduce((sum, item) => sum + item.qty, 0)}{" "}
+                      items
                     </span>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              
-<div className="grid grid-cols-2 gap-3 border-t border-line-soft bg-cream-3 p-4">
-  {order.kitchenStatus === "New" && (
-    <button
-      className="rounded-xl border border-[#e5c89f] bg-cream-3 px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
-      onClick={() =>
-        setPendingAction({ order, status: "Preparing" })
-      }
-    >
-      Prepare
-    </button>
-  )}
+                <div className="px-5 py-2 sm:px-6">
+                  {order.items.map((item) => (
+                    <div
+                      className="flex items-center gap-3 border-b border-sand py-3.5 last:border-0"
+                      key={`${item.name}-${item.modifiers?.join(",") ?? ""}`}
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sand text-sm font-bold">
+                        {item.qty}
+                      </span>
+                      <span className="min-w-0 break-words text-sm font-bold">
+                        {item.name}
+                        {(item.allergens?.length ?? 0) > 0 && (
+                          <span
+                            className="mt-1.5 flex w-fit items-start gap-1 rounded-md bg-danger-soft px-2 py-1 text-[10px] font-bold text-danger"
+                            role="note"
+                          >
+                            <span aria-hidden="true">⚠</span>
+                            <span>Contains {item.allergens?.join(", ")}</span>
+                          </span>
+                        )}
+                        {(item.modifiers?.length ?? 0) > 0 && (
+                          <small className="mt-0.5 block font-normal text-muted">
+                            {item.modifiers?.join(", ")}
+                          </small>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
 
-  {order.kitchenStatus === "Preparing" && (
-    <button
-      className="rounded-xl border border-[#bfd0bb] bg-paper px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage-soft"
-      onClick={() =>
-        setPendingAction({ order, status: "Ready" })
-      }
-    >
-      Ready
-    </button>
-  )}
+                <div className="flex flex-wrap gap-3 border-t border-line-soft bg-cream-3 p-4">
+                  {isUnseen(order) && (
+                    <button
+                      className="min-h-11 min-w-32 flex-1 rounded-xl border border-amber/40 bg-paper px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
+                      onClick={() => onOrderSeen(order.id)}
+                    >
+                      Acknowledge
+                    </button>
+                  )}
 
-  {order.kitchenStatus === "Ready" && (
-    <button
-      className="rounded-xl border border-sage bg-sage-soft px-3 py-3 text-xs font-bold text-sage-strong transition hover:bg-sage"
-      onClick={() =>
-        setPendingAction({ order, status: "Completed" })
-      }
-    >
-      Complete
-    </button>
-  )}
+                  {bumpStatus && (
+                    <button
+                      className={cn(
+                        "min-h-11 min-w-32 flex-1 rounded-xl border px-3 py-3 text-xs font-bold transition",
+                        bumpButtonClasses[bumpStatus],
+                      )}
+                      onClick={() => requestStatusChange(order, bumpStatus)}
+                      title={`Bump to ${bumpStatus}`}
+                    >
+                      {bumpLabels[bumpStatus]}
+                    </button>
+                  )}
 
-  <button
-    className="rounded-xl border border-[#dfb9b9] bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
-    onClick={() =>
-      setPendingAction({ order, status: "Cancelled" })
-    }
-  >
-    Cancel
-  </button>
-</div>
-
-            </article>
-          ))}
+                  {canCancel && (
+                    <button
+                      className="min-h-11 min-w-32 flex-1 rounded-xl border border-danger/40 bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
+                      onClick={() => requestStatusChange(order, "Cancelled")}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       ) : (
         <div className="rounded-[22px] border border-dashed border-line bg-cream-3 px-6 py-20 text-center">
@@ -276,13 +413,13 @@ function KitchenStatusConfirmation({
         </p>
         <div className="mt-7 grid grid-cols-2 gap-3">
           <button
-            className="rounded-xl border border-line bg-white py-3 text-sm font-bold text-ink-soft transition hover:border-placeholder"
+            className="min-h-11 rounded-xl border border-line bg-white py-3 text-sm font-bold text-ink-soft transition hover:border-placeholder"
             onClick={onCancel}
           >
             Go back
           </button>
           <button
-            className={`rounded-xl py-3 text-sm font-bold text-white transition ${
+            className={`min-h-11 rounded-xl py-3 text-sm font-bold text-white transition ${
               cancelled
                 ? "bg-berry-strong hover:bg-[#9f354b]"
                 : "bg-sage-strong hover:bg-sage-strong"

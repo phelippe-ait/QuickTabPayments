@@ -7,10 +7,13 @@ import {
   trackingUrl,
 } from "./tracking"
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn() }))
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getSession: vi.fn() }))
 
 vi.mock("@shared/data/client", () => ({
-  requireSupabase: () => ({ rpc: mocks.rpc }),
+  requireSupabase: () => ({
+    rpc: mocks.rpc,
+    auth: { getSession: mocks.getSession },
+  }),
 }))
 
 const row = {
@@ -20,6 +23,7 @@ const row = {
   subtotal: 4.27,
   tax: 0.43,
   total: 4.7,
+  tip_amount: 0.47,
   currency: "AUD",
   created_at: "2026-10-25T02:00:00Z",
   pickup_time_estimate: "2026-10-25T02:10:00Z",
@@ -36,6 +40,7 @@ describe("mapTracking", () => {
       status: "preparing",
       tableNumber: "T05",
       restaurantName: "QuickTab Demo Cafe",
+      tipAmount: 0.47,
       items: [{ name: "Flat White", quantity: 1, unitPrice: 4.7, subtotal: 4.7 }],
     })
   })
@@ -49,6 +54,7 @@ describe("mapTracking", () => {
 describe("fetchOrderTracking", () => {
   beforeEach(() => {
     mocks.rpc.mockReset()
+    mocks.getSession.mockReset()
   })
 
   it("returns null without calling the RPC for a missing token", async () => {
@@ -63,6 +69,23 @@ describe("fetchOrderTracking", () => {
       p_token: "token-1",
     })
     expect(order?.orderNumber).toBe("QT-261025-0001")
+  })
+
+  it("tracks by token without consulting the auth session", async () => {
+    // Guest tracking must work whether or not a Supabase session exists; the
+    // opaque token is the only credential the RPC needs.
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: "jwt-123" } },
+    })
+    mocks.rpc.mockResolvedValue({ data: row, error: null })
+
+    const order = await fetchOrderTracking("token-1")
+
+    expect(order?.orderId).toBe("order-1")
+    expect(mocks.rpc).toHaveBeenCalledWith("get_order_tracking", {
+      p_token: "token-1",
+    })
+    expect(mocks.getSession).not.toHaveBeenCalled()
   })
 
   it("throws a safe error when the RPC fails", async () => {

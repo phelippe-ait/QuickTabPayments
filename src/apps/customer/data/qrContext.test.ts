@@ -36,6 +36,7 @@ describe("mapResolveResult", () => {
         restaurantName: "QuickTab Demo Cafe",
         currency: "AUD",
         taxRate: 0.1,
+        geofenceEnabled: false,
         tableId: "table-1",
         tableToken: "token-1",
         tableNumber: "T05",

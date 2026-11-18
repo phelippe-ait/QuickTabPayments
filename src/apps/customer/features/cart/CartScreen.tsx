@@ -2,6 +2,7 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { Button } from "@shared/ui/Button"
 import { formatMoney } from "@shared/lib/money"
+import { useDialogFocus } from "@shared/ui/useDialogFocus"
 import { HeaderButton } from "../../components/CustomerUi"
 import { cartLineId } from "../../hooks/useCart"
 import type { CartItem } from "../../types"
@@ -25,10 +26,18 @@ export function CartScreen({
   onIncrease: (menuItemId: string) => void;
   onCheckout: () => void;
 }) {
+  const panelRef = useDialogFocus<HTMLElement>(onClose)
+
   return (
-    <main className={`${styles["page-screen"]}`}>
+    <main
+      ref={panelRef}
+      className={`${styles["page-screen"]}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cart-title"
+    >
       <header className={`${styles["page-header"]}`}>
-        <h1>Review Your Order</h1>
+        <h1 id="cart-title">Review Your Order</h1>
         <HeaderButton icon="close" label="Close cart" onClick={onClose} />
       </header>
       {items.length > 0 ? (
