@@ -1,3 +1,22 @@
+-- =====================================================================
+-- Restore the single `place_order` contract (audit H1)
+-- ---------------------------------------------------------------------
+-- 20261105094127_order_geofence_toggle.sql re-created a 7-arg place_order
+-- (no `p_tip`) and an older get_order_tracking, without dropping the
+-- canonical 8-arg function. The CLI sorts 0027 before the timestamped
+-- group, so a fresh database ends up with both overloads (PGRST203).
+--
+-- This migration drops the stale 7-arg overload and restores the canonical
+-- 8-arg body from 0027_place_order_pending_status.sql:21+ and the tracking
+-- function from 0024_place_order_modifiers.sql:537+.
+--
+-- On the hosted project this is a deliberate no-op: the 7-arg overload does
+-- not exist there and the 8-arg contract is already live.
+-- Safe to re-run.
+-- =====================================================================
+
+drop function if exists public.place_order(text, text, text, text, jsonb, double precision, double precision);
+
 create or replace function public.place_order(
   p_restaurant_slug text,
   p_table_token     text,
@@ -5,7 +24,8 @@ create or replace function public.place_order(
   p_notes           text default null,
   p_items           jsonb default '[]'::jsonb,
   p_customer_latitude  double precision default null,
-  p_customer_longitude double precision default null
+  p_customer_longitude double precision default null,
+  p_tip             jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -20,6 +40,7 @@ declare
   v_tax_rate        numeric;
   v_restaurant_latitude  double precision;
   v_restaurant_longitude double precision;
+  v_geofence_enabled boolean := false;
   v_distance_m          double precision;
   v_table_id        uuid;
   v_table_number    text;
@@ -29,6 +50,9 @@ declare
   v_total           numeric;
   v_tax             numeric;
   v_subtotal        numeric;
+  v_tip_amount      numeric := 0;
+  v_amount_due      numeric;
+  v_tip_value       numeric;
   v_tax_raw         numeric;
   v_prep_minutes    int;
   v_order_id        uuid;
@@ -44,15 +68,6 @@ begin
   -- -----------------------------------------------------------------
   -- Input validation
   -- -----------------------------------------------------------------
-  if p_customer_latitude is null or p_customer_longitude is null then
-    raise exception 'customer_location_required' using errcode = 'P0001';
-  end if;
-
-  if p_customer_latitude < -90 or p_customer_latitude > 90
-     or p_customer_longitude < -180 or p_customer_longitude > 180 then
-    raise exception 'customer_location_invalid' using errcode = 'P0001';
-  end if;
-
   if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
     raise exception 'customer_name_required' using errcode = 'P0001';
   end if;
@@ -82,25 +97,31 @@ begin
     raise exception 'invalid_quantity' using errcode = 'P0001';
   end if;
 
+  -- `modifiers` is optional; when supplied it must be an array of uuids.
   if exists (
     select 1
     from jsonb_array_elements(p_items) as e
-    where e ? 'modifier_ids' and jsonb_typeof(e->'modifier_ids') <> 'array'
+    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
   ) then
-    raise exception 'invalid_modifier' using errcode = 'P0001';
+    raise exception 'invalid_item' using errcode = 'P0001';
   end if;
 
   if exists (
     select 1
     from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
     where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ) or exists (
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  -- The same modifier may not be chosen twice on one line.
+  if exists (
     select 1
     from jsonb_array_elements(p_items) as e
-    where jsonb_array_length(coalesce(e->'modifier_ids', '[]'::jsonb)) <> (
+    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
       select count(distinct selected.value)
-      from jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
     )
   ) then
     raise exception 'invalid_modifier' using errcode = 'P0001';
@@ -133,41 +154,67 @@ begin
     raise exception 'table_not_found' using errcode = 'P0001';
   end if;
 
-  select rl.latitude, rl.longitude
-    into v_restaurant_latitude, v_restaurant_longitude
+  select rl.latitude, rl.longitude, coalesce(rl.geofence_enabled, false)
+    into v_restaurant_latitude, v_restaurant_longitude, v_geofence_enabled
   from public.restaurant_locations rl
   where rl.restaurant_id = v_restaurant_id;
 
-  if v_restaurant_latitude is null or v_restaurant_longitude is null then
-    raise exception 'restaurant_location_not_configured' using errcode = 'P0001';
-  end if;
+  if coalesce(v_geofence_enabled, false) then
+    if p_customer_latitude is null or p_customer_longitude is null then
+      raise exception 'customer_location_required' using errcode = 'P0001';
+    end if;
 
-  -- Haversine great-circle distance in metres. Coordinates are not persisted.
-  v_distance_m := 6371000 * 2 * asin(least(1, sqrt(
-      power(sin(radians(p_customer_latitude - v_restaurant_latitude) / 2), 2)
-      + cos(radians(v_restaurant_latitude))
-        * cos(radians(p_customer_latitude))
-        * power(sin(radians(p_customer_longitude - v_restaurant_longitude) / 2), 2)
-    )));
+    if p_customer_latitude < -90 or p_customer_latitude > 90
+       or p_customer_longitude < -180 or p_customer_longitude > 180 then
+      raise exception 'customer_location_invalid' using errcode = 'P0001';
+    end if;
 
-  if v_distance_m > 500 then
-    raise exception 'outside_ordering_radius' using errcode = 'P0001';
+    if v_restaurant_latitude is null or v_restaurant_longitude is null then
+      raise exception 'restaurant_location_not_configured' using errcode = 'P0001';
+    end if;
+
+    -- Haversine great-circle distance in metres. Coordinates are not persisted.
+    v_distance_m := 6371000 * 2 * asin(least(1, sqrt(
+        power(sin(radians(p_customer_latitude - v_restaurant_latitude) / 2), 2)
+        + cos(radians(v_restaurant_latitude))
+          * cos(radians(p_customer_latitude))
+          * power(sin(radians(p_customer_longitude - v_restaurant_longitude) / 2), 2)
+      )));
+
+    if v_distance_m > 500 then
+      raise exception 'outside_ordering_radius' using errcode = 'P0001';
+    end if;
   end if;
 
   -- -----------------------------------------------------------------
   -- Validate every menu item belongs to this restaurant and is available.
-  -- Each submitted cart row stays separate to preserve modifier variants.
+  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
+  -- choices fold together while different variants stay separate.
   -- -----------------------------------------------------------------
-  select count(distinct (e->>'menu_item_id')::uuid)
+  select count(*)
     into v_expected_lines
-  from jsonb_array_elements(p_items) as e;
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted;
 
   select count(*)
     into v_valid_lines
   from (
-    select (e->>'menu_item_id')::uuid as menu_item_id
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
     from jsonb_array_elements(p_items) as e
-    group by 1
   ) as wanted
   join public.menu_items mi
     on mi.id = wanted.menu_item_id
@@ -183,7 +230,7 @@ begin
   if exists (
     select 1
     from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
     left join public.modifiers m
       on m.id = selected.value::uuid
      and m.is_available
@@ -198,7 +245,7 @@ begin
     raise exception 'invalid_modifier' using errcode = 'P0001';
   end if;
 
-  -- Enforce each linked group's required/min/max rules on the server too.
+  -- A required group must have at least one choice.
   if exists (
     select 1
     from jsonb_array_elements(p_items) as e
@@ -209,20 +256,48 @@ begin
      and g.restaurant_id = v_restaurant_id
     cross join lateral (
       select count(*)::int as selected_count
-      from jsonb_array_elements_text(coalesce(e->'modifier_ids', '[]'::jsonb)) as selected(value)
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
       join public.modifiers m
         on m.id = selected.value::uuid
        and m.modifier_group_id = g.id
        and m.is_available
     ) chosen
-    where chosen.selected_count < greatest(g.min_selections, case when g.is_required then 1 else 0 end)
-       or chosen.selected_count > case when g.selection_type = 'single' then least(g.max_selections, 1) else g.max_selections end
+    where g.is_required
+      and chosen.selected_count = 0
   ) then
-    raise exception 'invalid_modifier_selection' using errcode = 'P0001';
+    raise exception 'modifier_required' using errcode = 'P0001';
   end if;
 
-  -- Price each submitted cart line from live database values. Distinct
-  -- modifier combinations remain distinct order_items.
+  -- Enforce each linked group's min/max rules on the server too.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where (g.selection_type = 'single'
+             and (chosen.selected_count > 1
+                  or chosen.selected_count < g.min_selections))
+       or (g.selection_type <> 'single'
+             and (chosen.selected_count < g.min_selections
+                  or (g.max_selections > 0
+                      and chosen.selected_count > g.max_selections)))
+  ) then
+    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
+  end if;
+
+  -- Price each grouped cart line from live database values. Identical item +
+  -- modifier combinations have already folded together.
   select
     jsonb_agg(
       jsonb_build_object(
@@ -243,29 +318,47 @@ begin
       mi.name,
       mi.display_order,
       mi.prep_time_minutes,
-      e.ordinality as line_order,
-      (e.value->>'quantity')::int as quantity,
-      greatest(0, mi.price + selected.adjustment) as unit_price,
-      round(greatest(0, mi.price + selected.adjustment) * (e.value->>'quantity')::int, 2) as line_subtotal,
+      grouped.line_order,
+      grouped.quantity,
+      round(mi.price + selected.adjustment, 2) as unit_price,
+      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
       selected.modifiers
-    from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
+    from (
+      select
+        (e.value->>'menu_item_id')::uuid as menu_item_id,
+        array(
+          select selected.value::uuid
+          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
+          order by selected.value
+        ) as modifier_key,
+        sum((e.value->>'quantity')::int)::int as quantity,
+        min(e.ordinality) as line_order
+      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
+      group by 1, 2
+    ) as grouped
     join public.menu_items mi
-      on mi.id = (e.value->>'menu_item_id')::uuid
+      on mi.id = grouped.menu_item_id
      and mi.restaurant_id = v_restaurant_id
      and mi.is_available
     cross join lateral (
       select
-        coalesce(sum(m.price_adjustment), 0) as adjustment,
-        coalesce(jsonb_agg(jsonb_build_object(
-          'modifier_id', m.id,
-          'name', m.name,
-          'price_adjustment', m.price_adjustment
-        ) order by m.display_order, m.name), '[]'::jsonb) as modifiers
-      from jsonb_array_elements_text(coalesce(e.value->'modifier_ids', '[]'::jsonb)) as selected(value)
-      join public.modifiers m
-        on m.id = selected.value::uuid
-       and m.is_available
-    ) selected
+        coalesce((
+          select sum(m.price_adjustment)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), 0) as adjustment,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'modifier_id', m.id,
+            'name', m.name,
+            'price_adjustment', m.price_adjustment
+          ) order by m.display_order, m.name)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), '[]'::jsonb) as modifiers
+    ) as selected
   ) as priced;
 
   -- GST-inclusive split: total is what the customer pays.
@@ -273,6 +366,40 @@ begin
   v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
   v_tax      := round(v_tax_raw, 2);
   v_subtotal := round(v_total - v_tax, 2);
+
+  -- Tip: computed here, never trusted from the client. The tip is added on
+  -- top of the GST-inclusive items total and carries no additional GST.
+  if p_tip is null or p_tip = 'null'::jsonb or p_tip = '{}'::jsonb then
+    v_tip_amount := 0;
+  elsif jsonb_typeof(p_tip) <> 'object' then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif not (p_tip ? 'type') then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif p_tip->>'type' = 'none' then
+    v_tip_amount := 0;
+  elsif p_tip->>'type' = 'percent' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 25 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_total * v_tip_value / 100, 2);
+  elsif p_tip->>'type' = 'fixed' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 500 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_tip_value, 2);
+  else
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  end if;
+
+  v_amount_due := round(v_total + v_tip_amount, 2);
 
   v_pickup_estimate := now()
     + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
@@ -304,6 +431,7 @@ begin
         subtotal,
         tax,
         total,
+        tip_amount,
         notes,
         pickup_time_estimate
       )
@@ -313,10 +441,11 @@ begin
         auth.uid(),                        -- null for guests
         btrim(p_customer_name),
         v_order_number,
-        'confirmed'::public.order_status,  -- payment is Phase 6; order is placed
+        'pending'::public.order_status,  -- unpaid until the Stripe webhook confirms it
         v_subtotal,
         v_tax,
         v_total,
+        v_tip_amount,
         nullif(btrim(coalesce(p_notes, '')), ''),
         v_pickup_estimate
       )
@@ -332,6 +461,8 @@ begin
     end;
   end loop;
 
+  -- Each priced line carries its own modifier snapshots; `returning id`
+  -- ties every snapshot row to the order_item it belongs to.
   for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
   loop
     insert into public.order_items (
@@ -370,10 +501,12 @@ begin
     'order_id',            v_order_id,
     'order_number',        v_order_number,
     'tracking_token',      v_tracking_token,
-    'status',              'confirmed',
+    'status',              'pending',
     'subtotal',            v_subtotal,
     'tax',                 v_tax,
     'total',               v_total,
+    'tip_amount',          v_tip_amount,
+    'amount_due',          v_amount_due,
     'currency',            v_currency,
     'restaurant_name',     v_restaurant_name,
     'table_number',        v_table_number,
@@ -383,6 +516,16 @@ begin
   );
 end;
 $$;
+
+-- ---------------------------------------------------------------------
+-- Grants + comment (unchanged from 0024)
+-- ---------------------------------------------------------------------
+revoke all on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) from public;
+grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb)
+  to anon, authenticated;
+
+comment on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) is
+  'Atomic guest/staff order placement with server-side GST-inclusive pricing, validated tips and server-validated modifier pricing/snapshots. Orders start pending until the Stripe webhook confirms payment.';
 
 create or replace function public.get_order_tracking(p_token text)
 returns jsonb
@@ -405,6 +548,7 @@ begin
     'subtotal',             o.subtotal,
     'tax',                  o.tax,
     'total',                o.total,
+    'tip_amount',           o.tip_amount,
     'currency',             r.currency,
     'created_at',           o.created_at,
     'pickup_time_estimate', o.pickup_time_estimate,
@@ -467,8 +611,18 @@ begin
 end;
 $$;
 
-revoke all on function public.place_order(text, text, text, text, jsonb, double precision, double precision) from public;
-grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision) to anon, authenticated;
-
 revoke all on function public.get_order_tracking(text) from public;
-grant execute on function public.get_order_tracking(text) to anon, authenticated;
+grant execute on function public.get_order_tracking(text)
+  to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Safety assertion: exactly one `place_order` overload must remain.
+-- ---------------------------------------------------------------------
+do $$
+declare n int;
+begin
+  select count(*) into n from pg_proc where proname = 'place_order';
+  if n <> 1 then
+    raise exception 'expected exactly one place_order, found %', n;
+  end if;
+end $$;
