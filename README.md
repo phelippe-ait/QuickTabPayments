@@ -323,6 +323,11 @@ only as a documented development fallback.
   control of freeing or cleaning the table. Additional orders are still allowed
   on an occupied table, and the floor plan shows the latest order's customer
   name.
+- Every restaurant has one permanent **Counter / Pick-up** system table. It is
+  created with the restaurant, listed first, cannot be edited structurally or
+  deleted, and can only be enabled/disabled in Admin → Tables. Staff order entry
+  defaults to it for counter/pick-up orders; owners manage all other tables
+  normally.
 - Customers can view their Stripe receipt and see whether an order was
   **partially refunded** or **fully refunded** in order history and on the
   public tracking page.
@@ -528,6 +533,11 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119010000_staff_place_order.sql` adds the active-staff-only
   `staff_place_order(...)` RPC for counter/table orders, with server-side
   pricing/modifier validation and an optional counter payment record.
+- `20261119040000_orders_mark_table_occupied.sql` marks a table occupied when
+  an order becomes confirmed, while leaving staff in control of freeing it.
+- `20261119050000_pickup_table.sql` adds the permanent non-deletable
+  Counter / Pick-up system table, backfills existing restaurants, and creates
+  it automatically during onboarding.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

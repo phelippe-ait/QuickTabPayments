@@ -11,6 +11,7 @@ export async function fetchTables(restaurantId: string): Promise<CafeTable[]> {
     .from("tables")
     .select("*")
     .eq("restaurant_id", restaurantId)
+    .order("is_system", { ascending: false })
     .order("table_number", { ascending: true });
 
   if (error) throw new Error(error.message);

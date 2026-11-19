@@ -9,6 +9,7 @@ export type StaffTableRow = {
   table_number: string
   location_label: string | null
   is_active: boolean
+  is_system: boolean
   seats: number | null
   status: StaffTableStatus
 }
@@ -28,7 +29,7 @@ export async function fetchStaffTables(
   const { data, error } = await supabase
     .from("tables")
     .select(
-      "id, restaurant_id, table_number, location_label, is_active, seats, status",
+      "id, restaurant_id, table_number, location_label, is_active, is_system, seats, status",
     )
     .eq("restaurant_id", restaurantId)
     .eq("is_active", true)
@@ -38,8 +39,10 @@ export async function fetchStaffTables(
     throw error
   }
 
-  return ((data ?? []) as StaffTableRow[]).sort((a, b) =>
-    naturalSortTableNumber(a.table_number, b.table_number),
+  return ((data ?? []) as StaffTableRow[]).sort(
+    (a, b) =>
+      Number(b.is_system) - Number(a.is_system) ||
+      naturalSortTableNumber(a.table_number, b.table_number),
   )
 }
 

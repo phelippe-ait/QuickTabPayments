@@ -17,6 +17,7 @@ import {
 } from "./tableStatus"
 
 function tableLabel(table: Table): string {
+  if (table.isSystem) return "Counter / Pick-up"
   return table.tableNumber ?? String(table.id).padStart(2, "0")
 }
 
@@ -44,6 +45,7 @@ export function TableCard({
   const { status } = table
   const occupied = status === "occupied"
   const label = tableLabel(table)
+  const locationLabel = table.isSystem ? label : `table ${label}`
   const actionLabel = tableStatusActionLabels[status]
   const nextStatus = nextTableStatus(status)
 
@@ -62,13 +64,15 @@ export function TableCard({
     >
       <button
         type="button"
-        aria-label={`Open table ${label} details (${tableStatusLabels[status]})`}
+        aria-label={`Open ${locationLabel} details (${tableStatusLabels[status]})`}
         className="flex w-full flex-1 flex-col text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
         onClick={() => onSelect(table)}
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className={`${styles["eyebrow"]}`}>Table</p>
+            <p className={`${styles["eyebrow"]}`}>
+              {table.isSystem ? "Service point" : "Table"}
+            </p>
             <p className="mt-0.5 font-serif text-4xl">{label}</p>
           </div>
           <StatusPill tone={tableStatusTone(status)}>
@@ -127,7 +131,7 @@ export function TableCard({
 
       <button
         type="button"
-        aria-label={`${actionLabel} at table ${label}`}
+        aria-label={`${actionLabel} at ${locationLabel}`}
         aria-busy={isUpdating}
         className={cn(
           "mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:opacity-60",

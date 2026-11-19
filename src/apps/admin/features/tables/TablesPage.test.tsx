@@ -64,6 +64,7 @@ const occupied: TableVM = {
   locationLabel: "Indoors",
   seats: 4,
   isActive: true,
+  isSystem: false,
   qrToken: "9f3ab12c7d44e0a8",
   status: "occupied",
   openOrder: {
@@ -79,6 +80,7 @@ const free: TableVM = {
   locationLabel: "Pick-up",
   seats: null,
   isActive: true,
+  isSystem: false,
   qrToken: "aaaaaaaaaaaaaaaa",
   status: "available",
   openOrder: null,
@@ -90,6 +92,7 @@ const seatedWithoutOrder: TableVM = {
   locationLabel: "Indoors",
   seats: 2,
   isActive: true,
+  isSystem: false,
   qrToken: "bbbbbbbbbbbbbbbb",
   status: "occupied",
   openOrder: null,
@@ -101,8 +104,21 @@ const needsCleaning: TableVM = {
   locationLabel: "Indoors",
   seats: 4,
   isActive: true,
+  isSystem: false,
   qrToken: "cccccccccccccccc",
   status: "needs_cleaning",
+  openOrder: null,
+}
+
+const pickup: TableVM = {
+  id: "pickup-1",
+  number: "Pick-up",
+  locationLabel: "Counter",
+  seats: null,
+  isActive: true,
+  isSystem: true,
+  qrToken: "eeeeeeeeeeeeeeee",
+  status: "available",
   openOrder: null,
 }
 
@@ -112,6 +128,7 @@ const freedByStaff: TableVM = {
   locationLabel: "Indoors",
   seats: 4,
   isActive: true,
+  isSystem: false,
   qrToken: "dddddddddddddddd",
   status: "available",
   openOrder: {
@@ -174,6 +191,21 @@ describe("TablesPage", () => {
 
     expect(screen.getByText("Free")).toBeInTheDocument()
     expect(screen.queryByText("#1003")).not.toBeInTheDocument()
+  })
+
+  it("shows the pickup table as a system table with no edit or delete", () => {
+    mocks.rows = [pickup]
+    render(<TablesPage />)
+
+    expect(screen.getAllByText("Counter").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Pick-up").length).toBeGreaterThan(0)
+    expect(screen.getByText("System")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /disable counter \/ pick-up/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument()
   })
 
   it("offers deactivation instead of deleting a table with past orders", async () => {

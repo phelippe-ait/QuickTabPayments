@@ -133,6 +133,25 @@ describe("TablesWorkspace table status", () => {
     expect(button).toHaveTextContent("Updating…")
   })
 
+  it("labels the system table as the counter / pick-up point", () => {
+    renderTables([
+      table({
+        id: "pickup-1",
+        tableNumber: "Pick-up",
+        isSystem: true,
+        status: "available",
+      }),
+    ])
+
+    expect(screen.getByText("Service point")).toBeInTheDocument()
+    expect(screen.getByText("Counter / Pick-up")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", {
+        name: "Seat guests at Counter / Pick-up",
+      }),
+    ).toBeInTheDocument()
+  })
+
   it("shows the open order's guest, seated time and total without fabricated counts", () => {
     renderTables([
       table({

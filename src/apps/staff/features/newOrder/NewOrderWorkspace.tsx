@@ -31,6 +31,7 @@ function tableLabel(table: Table): string {
 }
 
 function tableOptionLabel(table: Table): string {
+  if (table.isSystem) return "Counter / Pick-up"
   const label = `Table ${tableLabel(table)}`
   return table.locationLabel ? `${label} · ${table.locationLabel}` : label
 }
@@ -66,6 +67,12 @@ export function NewOrderWorkspace({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<StaffPlacedOrder | null>(null)
+  const systemTable = tables.find((table) => table.isSystem)
+
+  // Counter/pick-up is the default service point for staff-entered orders.
+  useEffect(() => {
+    if (!tableId && systemTable) setTableId(String(systemTable.id))
+  }, [systemTable, tableId])
 
   useEffect(() => {
     let cancelled = false
@@ -144,11 +151,15 @@ export function NewOrderWorkspace({
       setError("Add at least one item before sending the order.")
       return
     }
+    if (!tableId) {
+      setError("Choose a table or the counter / pick-up point.")
+      return
+    }
 
     setSubmitting(true)
     try {
       const placed = await createStaffOrder({
-        tableId: tableId || null,
+        tableId,
         customerName: trimmedName,
         notes,
         items: toStaffOrderItems(lines),
@@ -157,7 +168,7 @@ export function NewOrderWorkspace({
       setSuccess(placed)
       setLines([])
       setCustomerName("")
-      setTableId("")
+      setTableId(systemTable ? String(systemTable.id) : "")
       setNotes("")
       setPaid(false)
       onOrderCreated()
@@ -378,14 +389,13 @@ export function NewOrderWorkspace({
           </label>
 
           <label className="mt-4 block">
-            <span className={`${styles["detail-label"]}`}>Table</span>
+            <span className={`${styles["detail-label"]}`}>Table or counter</span>
             <select
               aria-label="Table"
               className="mt-2 w-full rounded-xl border border-line-strong bg-white px-4 py-3 text-sm outline-none transition focus:border-berry focus:ring-2 focus:ring-berry/10"
               value={tableId}
               onChange={(event) => setTableId(event.target.value)}
             >
-              <option value="">Counter / no table</option>
               {tables.map((table) => (
                 <option key={table.id} value={String(table.id)}>
                   {tableOptionLabel(table)}

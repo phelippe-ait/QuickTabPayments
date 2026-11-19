@@ -43,6 +43,7 @@ export function toStaffTable(
     id: row.id,
     tableNumber: row.table_number,
     locationLabel: row.location_label,
+    isSystem: row.is_system,
     seats: row.seats ?? undefined,
     occupants: 0,
     status: row.status,

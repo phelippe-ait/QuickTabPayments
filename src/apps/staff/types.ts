@@ -12,6 +12,8 @@ export type Table = {
   id: string | number
   tableNumber?: string
   locationLabel?: string | null
+  /** Permanent counter/pick-up table. */
+  isSystem?: boolean
   seats?: number
   occupants: number
   status: TableStatus

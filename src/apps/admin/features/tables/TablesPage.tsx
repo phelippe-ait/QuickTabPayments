@@ -15,6 +15,10 @@ import { formatElapsed, tableOccupancyState } from "./table.utils"
 import { TableModal } from "./TableDialog"
 import type { TableVM } from "../../viewModels"
 
+function tableDisplayName(table: TableVM): string {
+  return table.isSystem ? "Counter / Pick-up" : `Table ${table.number}`
+}
+
 export function TablesPage() {
   const { restaurant } = useRestaurant()
   const { notify, notifyError, confirm } = useAdminUi()
@@ -51,6 +55,11 @@ export function TablesPage() {
   const closeTableModal = () => setTableModal({ open: false, table: null })
 
   const requestDelete = async (table: TableVM) => {
+    if (table.isSystem) {
+      notifyError("The counter / pick-up table cannot be deleted. Disable it instead.")
+      return
+    }
+
     let counts: Record<string, number>
     try {
       counts = await countOrdersForTables([table.id])
@@ -82,6 +91,15 @@ export function TablesPage() {
   }
 
   const requestBulkDelete = async () => {
+    if (
+      tables.tables.some(
+        (table) => table.isSystem && selected.includes(table.id),
+      )
+    ) {
+      notifyError("The counter / pick-up table cannot be deleted. Disable it instead.")
+      return
+    }
+
     let counts: Record<string, number>
     try {
       counts = await countOrdersForTables(selected)
@@ -116,7 +134,8 @@ export function TablesPage() {
   const downloadQrSheet = async () => {
     const cards = await Promise.all(tables.tables.map(async (table) => {
       const source = await QRCode.toDataURL(buildTableQrUrl({ slug, qrToken: table.qrToken }), { width: 360, margin: 2 })
-      return `<article><img src="${source}" alt=""><h2>Table ${escapeHtml(table.number)}</h2><p>${escapeHtml(table.locationLabel ?? "")}</p></article>`
+      const name = table.isSystem ? "Counter / Pick-up" : `Table ${table.number}`
+      return `<article><img src="${source}" alt=""><h2>${escapeHtml(name)}</h2><p>${escapeHtml(table.locationLabel ?? "")}</p></article>`
     }))
     const safeName = escapeHtml(restaurantName)
     const sheet = `<!doctype html><html><head><meta charset="utf-8"><title>${safeName} table QR codes</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#37333a}header{text-align:center;margin-bottom:28px}main{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}article{break-inside:avoid;text-align:center;border:1px solid #ddd;border-radius:16px;padding:24px}img{width:220px;height:220px}h2{margin:12px 0 4px}p{margin:0;color:#777}@media print{body{margin:12mm}article{border-color:#bbb}}</style></head><body><header><h1>${safeName}</h1><p>Scan to order</p></header><main>${cards.join("")}</main></body></html>`
@@ -178,29 +197,37 @@ export function TablesPage() {
               return (
               <article className={`${styles["table-card-item"]} ${selected.includes(table.id) ? styles["selected"] : ""}`} key={table.id}>
                 <div className={`${styles["table-card-top"]}`}>
-                  <label className={`${styles["inline-select"]}`}><input type="checkbox" aria-label={`Select table ${table.number}`} checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
+                  {table.isSystem ? (
+                    <span aria-hidden="true" />
+                  ) : (
+                    <label className={`${styles["inline-select"]}`}><input type="checkbox" aria-label={`Select table ${table.number}`} checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
+                  )}
                   <button
                     type="button"
                     className={`${styles["table-state"]} ${table.isActive ? styles["available"] : styles["occupied"]}`}
-                    aria-label={`${table.isActive ? "Disable" : "Enable"} table ${table.number}`}
+                    aria-label={`${table.isActive ? "Disable" : "Enable"} ${tableDisplayName(table)}`}
                     aria-pressed={table.isActive}
                     onClick={() => void tables.setActive([table.id], !table.isActive)}
-                    title={table.isActive ? `Disable table ${table.number}` : `Enable table ${table.number}`}
+                    title={table.isActive ? `Disable ${tableDisplayName(table)}` : `Enable ${tableDisplayName(table)}`}
                   >
                     <i />{table.isActive ? "Enabled" : "Disabled"}
                   </button>
-                  <div className={`${styles["row-actions"]}`}>
-                    <button aria-label={`Edit table ${table.number}`} onClick={() => setTableModal({ open: true, table })}><Icon name="edit" size={16} /></button>
-                    <button aria-label={`Delete table ${table.number}`} onClick={() => void requestDelete(table)}><Icon name="trash" size={16} /></button>
-                  </div>
+                  {table.isSystem ? (
+                    <StatusPill tone="neutral" withDot={false}>System</StatusPill>
+                  ) : (
+                    <div className={`${styles["row-actions"]}`}>
+                      <button aria-label={`Edit table ${table.number}`} onClick={() => setTableModal({ open: true, table })}><Icon name="edit" size={16} /></button>
+                      <button aria-label={`Delete table ${table.number}`} onClick={() => void requestDelete(table)}><Icon name="trash" size={16} /></button>
+                    </div>
+                  )}
                 </div>
                 <div className={`${styles["table-card-content"]}`}>
                   <div className={`${styles["table-illustration"]}`}>
                     <span><Icon name="tables" size={28} /></span>
-                    <small>Table</small>
-                    <strong>{table.number}</strong>
+                    <small>{table.isSystem ? "Counter" : "Table"}</small>
+                    <strong>{table.isSystem ? "Pick-up" : table.number}</strong>
                   </div>
-                  <TableQrCode tableNumber={table.number} slug={slug} qrToken={table.qrToken} onNotify={notify} />
+                  <TableQrCode tableName={tableDisplayName(table)} slug={slug} qrToken={table.qrToken} onNotify={notify} />
                 </div>
                 {occupancy === "occupied" ? (
                   <div className={`${styles["active-seating"]}`}>
@@ -248,7 +275,7 @@ export function TablesPage() {
   )
 }
 
-function TableQrCode({ tableNumber, slug, qrToken, onNotify }: { tableNumber: string; slug: string; qrToken: string; onNotify: (message: string) => void }) {
+function TableQrCode({ tableName, slug, qrToken, onNotify }: { tableName: string; slug: string; qrToken: string; onNotify: (message: string) => void }) {
   const [source, setSource] = useState("")
   const [previewOpen, setPreviewOpen] = useState(false)
   const url = buildTableQrUrl({ slug, qrToken })
@@ -270,14 +297,14 @@ function TableQrCode({ tableNumber, slug, qrToken, onNotify }: { tableNumber: st
   const downloadQrCode = () => {
     const link = document.createElement("a")
     link.href = source
-    link.download = `table-${tableNumber}-qr.png`
+    link.download = `${tableName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-qr.png`
     link.click()
-    onNotify(`Table ${tableNumber} QR code downloaded`)
+    onNotify(`${tableName} QR code downloaded`)
   }
 
   return (
     <div className={`${styles["table-qr"]}`}>
-      {source ? <button type="button" className={`${styles["qr-preview-trigger"]}`} onClick={() => setPreviewOpen(true)}><img src={source} alt={`QR code for table ${tableNumber}`} /></button> : <span className={`${styles["qr-placeholder"]}`} />}
+      {source ? <button type="button" className={`${styles["qr-preview-trigger"]}`} onClick={() => setPreviewOpen(true)}><img src={source} alt={`QR code for ${tableName}`} /></button> : <span className={`${styles["qr-placeholder"]}`} />}
       <small>Scan to order</small>
       <button className={`${styles["qr-download"]}`} type="button" disabled={!source} onClick={downloadQrCode}>
         <Icon name="download" size={12} />
@@ -285,10 +312,10 @@ function TableQrCode({ tableNumber, slug, qrToken, onNotify }: { tableNumber: st
       </button>
       {previewOpen && (
         <AdminModal labelledBy="qr-preview-title" describedBy="qr-preview-description" onClose={() => setPreviewOpen(false)} panelClassName={styles["qr-modal"]}>
-          <p className={`${styles["modal-kicker"]}`}>Table ordering</p>
-          <h2 id="qr-preview-title">Table {tableNumber}</h2>
+          <p className={`${styles["modal-kicker"]}`}>Ordering point</p>
+          <h2 id="qr-preview-title">{tableName}</h2>
           <p className={`${styles["modal-description"]}`} id="qr-preview-description">Guests can scan this code to start an order assigned to this table.</p>
-          <img src={source} alt={`Large QR code for table ${tableNumber}`} />
+          <img src={source} alt={`Large QR code for ${tableName}`} />
           <code>{url}</code>
           <div className={`${styles["modal-actions"]}`}>
             <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={async () => {

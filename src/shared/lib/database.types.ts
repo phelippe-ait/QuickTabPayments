@@ -805,6 +805,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_system: boolean
           location_label: string | null
           qr_token: string
           restaurant_id: string
@@ -816,6 +817,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_system?: boolean
           location_label?: string | null
           qr_token?: string
           restaurant_id: string
@@ -827,6 +829,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_system?: boolean
           location_label?: string | null
           qr_token?: string
           restaurant_id?: string
@@ -954,6 +957,10 @@ export type Database = {
       get_order_tracking: {
         Args: { p_token: string }
         Returns: Json
+      }
+      ensure_pickup_table: {
+        Args: { p_restaurant_id: string }
+        Returns: string
       }
       get_sales_report: {
         Args: { p_from: string | null; p_to: string | null }
