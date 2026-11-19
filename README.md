@@ -556,6 +556,10 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119110000_checkout_idempotency.sql` adds `orders.idempotency_key` and
   makes `place_order` return the original order when a checkout retries with
   the same key, so a lost response cannot create a duplicate pending order.
+- `20261119120000_order_number_counters.sql` replaces the daily `count(*) + 1`
+  numbering in `place_order`/`staff_place_order` with an atomic
+  `order_counters` row per restaurant and day. Numbers stay four digits up to
+  9999 and grow past it instead of truncating.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

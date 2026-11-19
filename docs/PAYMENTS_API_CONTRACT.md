@@ -47,6 +47,10 @@ Response `200`:
 `paymentStatus` mirrors the `payments` row (`pending`, `succeeded`, `failed`,
 `refunded`).
 
+Order numbers are `QT-YYMMDD-NNNN` in the restaurant's timezone. The suffix is
+allocated from an atomic per-restaurant/day counter: at least four digits,
+growing to five after order 9999 rather than truncating.
+
 Errors: `400 invalid_request`, `400 <place_order error>` (for example
 `menu_item_unavailable`), `405`, `500 could_not_record_payment`.
 

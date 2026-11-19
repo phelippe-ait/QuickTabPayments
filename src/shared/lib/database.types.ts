@@ -286,6 +286,32 @@ export type Database = {
           },
         ]
       }
+      order_counters: {
+        Row: {
+          day: string
+          last_number: number
+          restaurant_id: string
+        }
+        Insert: {
+          day: string
+          last_number: number
+          restaurant_id: string
+        }
+        Update: {
+          day?: string
+          last_number?: number
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_counters_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           id: string
