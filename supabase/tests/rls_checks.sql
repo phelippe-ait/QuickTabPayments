@@ -3294,3 +3294,101 @@ begin
   raise notice 'P30 kitchen cannot write storage assets ok';
 end $$;
 rollback;
+
+-- ---------------------------------------------------------------------
+-- Staff-assisted ordering (`staff_place_order`)
+-- ---------------------------------------------------------------------
+-- <manager-user-uuid>  active manager of restaurant A
+-- <customer-user-uuid> signed-in user with no staff role
+
+-- (bw) Function grants. Expected: anon false, authenticated true.
+select
+  has_function_privilege(
+    'anon', 'public.staff_place_order(uuid, text, text, jsonb, boolean)', 'execute'
+  ) as anon_can_staff_order,
+  has_function_privilege(
+    'authenticated', 'public.staff_place_order(uuid, text, text, jsonb, boolean)', 'execute'
+  ) as authenticated_can_staff_order;
+
+-- (bx) Staff can create a counter (no table) order. Expected: confirmed order.
+-- Rolls back so the check does not leave data behind.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_restaurant_id uuid;
+  v_item_id uuid;
+  v_order jsonb;
+begin
+  select r.id into v_restaurant_id
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+
+  select m.id into v_item_id
+    from public.menu_items m
+   where m.restaurant_id = v_restaurant_id
+     and m.is_available
+   order by m.created_at
+   limit 1;
+
+  v_order := public.staff_place_order(
+    null,
+    'Counter Guest',
+    'RLS check',
+    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+    false
+  );
+
+  if v_order->>'status' is distinct from 'confirmed' then
+    raise exception 'staff order status: expected confirmed, got %', v_order->>'status';
+  end if;
+
+  raise notice 'staff_place_order counter order ok';
+end $$;
+rollback;
+
+-- (by) A signed-in customer without staff access is rejected.
+-- Expected: ERROR not_authorised.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_restaurant_id uuid;
+  v_item_id uuid;
+begin
+  select r.id into v_restaurant_id
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+
+  select m.id into v_item_id
+    from public.menu_items m
+   where m.restaurant_id = v_restaurant_id
+     and m.is_available
+   order by m.created_at
+   limit 1;
+
+  perform public.staff_place_order(
+    null,
+    'Not Staff',
+    null,
+    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+    false
+  );
+
+  raise exception 'staff_place_order accepted a non-staff caller';
+end $$;
+rollback;

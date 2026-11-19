@@ -126,7 +126,7 @@ The demo Supabase project has three staff accounts. The passwords are in
 | --- | --- | --- |
 | Owner | `owner@quicktab.demo` | Full `/admin` access, plus `/staff` |
 | Manager / staff | `manager@quicktab.demo` | `/admin` catalog, tables, users, orders, settings, plus `/staff` |
-| Kitchen | `kitchen@quicktab.demo` | `/admin/orders` and `/staff` kitchen view |
+| Kitchen | `kitchen@quicktab.demo` | `/admin/orders` and the `/staff` workspace, including new orders |
 
 The customer app works as a guest, so the reviewer can test the menu, cart,
 checkout (when Stripe test keys are configured), and guest tracking without
@@ -155,6 +155,9 @@ Useful things to try:
   restaurant settings.
 - Sign in as the kitchen account and use `/staff` or `/admin/orders` to move an
   order through its statuses.
+- In `/staff`, open **New order** to take a counter or table order on a guest's
+  behalf. Choose a table (or leave it as a counter order), add items, and send
+  it straight to the kitchen.
 - Open Admin → Tables and use a QR code, or open
   `/?r=quicktab-demo-cafe&t=<table-token>` directly to simulate a table scan.
 
@@ -311,6 +314,11 @@ only as a documented development fallback.
   `POST /api/create-payment-intent`; the Stripe webhook then confirms the order
   and stores the receipt. If `VITE_STRIPE_PUBLISHABLE_KEY` is empty, checkout
   shows an honest "Payments are not configured" notice.
+- Staff can create an order in person from `/staff` → **New order**. The order
+  is priced by `staff_place_order(...)`, inserted as `confirmed`, and appears on
+  the kitchen board immediately. A table is optional (counter/takeaway); staff
+  can optionally record payment collected at the counter. Without that flag no
+  payment row is written, so the app never reports money it did not capture.
 - Customers can view their Stripe receipt and see whether an order was
   **partially refunded** or **fully refunded** in order history and on the
   public tracking page.
@@ -513,6 +521,9 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
   paid and refunded total to the token-scoped tracking RPC.
 - `20261105025454_add_menu_item_dietary_tags.sql` adds dietary tags to menu
   items.
+- `20261119010000_staff_place_order.sql` adds the active-staff-only
+  `staff_place_order(...)` RPC for counter/table orders, with server-side
+  pricing/modifier validation and an optional counter payment record.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 
@@ -592,8 +603,8 @@ npm run test        # Run the suite once
 npm run test:watch  # Re-run on change while developing
 ```
 
-The suite covers the customer QR/menu/cart/checkout/tracking data layer, admin
-mappers, and shared helpers. Playwright covers a customer smoke test and a
+The suite covers the customer QR/menu/cart/checkout/tracking data layer, staff
+order creation, admin mappers, and shared helpers. Playwright covers a customer smoke test and a
 gated payment lifecycle spec (`npm run test:e2e`).
 
 ### End-to-end (Playwright)

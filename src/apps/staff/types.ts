@@ -1,7 +1,12 @@
 /** Mirrors the public.table_status enum added in migration 0025 (P06). */
 export type TableStatus = "available" | "occupied" | "needs_cleaning"
 export type KitchenStatus = "New" | "Preparing" | "Ready" | "Completed" | "Cancelled"
-export type View = "tables" | "kitchen" | "history" | "reservations"
+export type View =
+  | "tables"
+  | "new-order"
+  | "kitchen"
+  | "history"
+  | "reservations"
 
 export type Table = {
   id: string | number

@@ -77,6 +77,7 @@ vi.mock("./hooks/useStaffWorkspace", () => ({
     createReservation: vi.fn(),
     cancelReservation: vi.fn(),
     updateKitchenStatus: vi.fn(),
+    refreshWorkspace: vi.fn(),
   }),
 }));
 

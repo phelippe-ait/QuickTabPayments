@@ -1011,6 +1011,16 @@ export type Database = {
           revenue: number
         }[]
       }
+      staff_place_order: {
+        Args: {
+          p_customer_name?: string | null
+          p_items?: Json
+          p_notes?: string | null
+          p_paid?: boolean
+          p_table_id?: string | null
+        }
+        Returns: Json
+      }
       storage_folder_restaurant_id: {
         Args: { p_name: string }
         Returns: string

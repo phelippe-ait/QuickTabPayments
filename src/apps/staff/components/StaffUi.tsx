@@ -45,7 +45,7 @@ export function MobileNav({
     <button
       type="button"
       aria-current={active ? "page" : undefined}
-      className={`flex min-w-20 flex-col items-center gap-1 text-[10px] font-bold ${
+      className={`flex min-w-0 flex-1 flex-col items-center gap-1 text-[10px] font-bold ${
         active ? "text-berry" : "text-muted"
       }`}
       onClick={onClick}
