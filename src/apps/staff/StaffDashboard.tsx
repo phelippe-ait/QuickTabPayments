@@ -16,7 +16,7 @@ import { RequireStaff } from "@shared/auth/RequireStaff"
 import { roleLabels } from "@shared/restaurant/restaurantHelpers"
 import { RESERVATIONS_ENABLED } from "./flags"
 
-const ANY_STAFF = ["owner", "manager", "kitchen"] as const
+const ANY_STAFF = ["owner", "manager", "staff", "kitchen"] as const
 
 export default function App() {
   return (
@@ -39,7 +39,9 @@ export default function App() {
 function StaffWorkspace() {
   const { membership, restaurant, role } = useRestaurant()
   const { user, profile, signOut } = useAuth()
-  const [view, setView] = useState<View>("tables")
+  const [view, setView] = useState<View>(() =>
+    role === "kitchen" ? "kitchen" : "tables",
+  )
   const [filter, setFilter] = useState<"all" | TableStatus>("all")
   const [selectedTable, setSelectedTable] = useState<Table | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -69,6 +71,17 @@ function StaffWorkspace() {
   useEffect(() => {
     if (!RESERVATIONS_ENABLED && view === "reservations") setView("tables")
   }, [view])
+
+  // Kitchen accounts only get the kitchen board and order history.
+  useEffect(() => {
+    if (
+      role === "kitchen" &&
+      view !== "kitchen" &&
+      view !== "history"
+    ) {
+      setView("kitchen")
+    }
+  }, [role, view])
 
   // The counter / pick-up point is a service point, not a seat. It stays
   // available to New order but never appears on the floor plan.
@@ -114,6 +127,7 @@ function StaffWorkspace() {
       onViewChange={setView}
       userName={userName}
       restaurantName={restaurant?.name ?? "Your restaurant"}
+      role={role ?? "staff"}
       roleLabel={role ? roleLabels[role] : ""}
       onSignOut={() => void signOut()}
       connectionState={workspace.connectionState}

@@ -47,7 +47,7 @@ const order: OrderVM = {
 }
 
 const mocks = vi.hoisted(() => ({
-  role: "owner" as "owner" | "manager" | "kitchen",
+  role: "owner" as "owner" | "manager" | "staff" | "kitchen",
   order: null as OrderVM | null,
   isLoading: false,
   error: null as Error | null,

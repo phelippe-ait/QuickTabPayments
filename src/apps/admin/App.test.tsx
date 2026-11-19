@@ -47,7 +47,7 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
 }));
 
 vi.mock("@shared/restaurant/restaurantHelpers", () => ({
-  roleLabels: { owner: "Owner", manager: "Manager", kitchen: "Kitchen" },
+  roleLabels: { owner: "Owner", manager: "Manager", staff: "Staff", kitchen: "Kitchen" },
   getProfileName: () => "Test Manager",
   getInitials: () => "TM",
 }));
@@ -147,7 +147,7 @@ describe("Admin app access gate", () => {
     expect(screen.getByText("Test Manager")).toBeInTheDocument();
   });
 
-  it("redirects kitchen staff from /admin to order history", async () => {
+  it("blocks kitchen staff from the admin app", async () => {
     mocks.auth.user = { id: "user-2", email: "kitchen@example.com" };
     mocks.restaurant.membership = { id: "staff-2", role: "kitchen" };
     mocks.restaurant.restaurant = { name: "Test Café" };
@@ -155,20 +155,19 @@ describe("Admin app access gate", () => {
 
     renderAdminApp();
     expect(
-      await screen.findByRole("heading", { name: /order history/i }),
+      await screen.findByRole("heading", {
+        name: /not available for your role/i,
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /go to staff workspace/i }),
+    ).toHaveAttribute("href", "/staff");
     expect(
       screen.queryByRole("link", { name: /catalog/i }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /users/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /reports/i }),
-    ).not.toBeInTheDocument();
   });
 
-  it("blocks a kitchen deep link to an owner/manager section", async () => {
+  it("blocks a kitchen deep link to an admin section", async () => {
     mocks.auth.user = { id: "user-2", email: "kitchen@example.com" };
     mocks.restaurant.membership = { id: "staff-2", role: "kitchen" };
     mocks.restaurant.restaurant = { name: "Test Café" };
@@ -180,6 +179,29 @@ describe("Admin app access gate", () => {
         name: /not available for your role/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("gives managers every admin section", async () => {
+    mocks.auth.user = { id: "user-3", email: "manager@example.com" };
+    mocks.restaurant.membership = { id: "staff-3", role: "manager" };
+    mocks.restaurant.restaurant = { name: "Test Café", plan: "standard" };
+    mocks.restaurant.role = "manager";
+
+    renderAdminApp();
+    expect(
+      await screen.findByRole("heading", { name: /^catalog$/i }),
+    ).toBeInTheDocument();
+
+    for (const section of [
+      "Catalog",
+      "Tables",
+      "Users",
+      "Order history",
+      "Reports",
+      "Settings",
+    ]) {
+      expect(screen.getByRole("link", { name: section })).toBeInTheDocument();
+    }
   });
 
   it("marks the active nav link with aria-current", async () => {

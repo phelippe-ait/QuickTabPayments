@@ -1046,7 +1046,7 @@ export type Database = {
       payment_status: "pending" | "succeeded" | "failed" | "refunded"
       refund_status: "requested" | "succeeded" | "failed"
       restaurant_plan: "basic" | "standard" | "premium"
-      staff_role: "owner" | "manager" | "kitchen"
+      staff_role: "owner" | "manager" | "staff" | "kitchen"
       table_status: "available" | "occupied" | "needs_cleaning"
     }
     CompositeTypes: {

@@ -1,17 +1,9 @@
 import { Navigate } from "react-router"
-import { useRestaurant } from "@shared/restaurant/useRestaurant"
 
 /**
- * `/admin` has no page of its own: owners/managers land on the catalog, kitchen
- * staff land on the only section they can use.
+ * `/admin` has no page of its own. The admin app is owner/manager only, so the
+ * catalog is always the landing section.
  */
 export function AdminIndexRedirect() {
-  const { role } = useRestaurant()
-
-  return (
-    <Navigate
-      to={role === "kitchen" ? "/admin/orders" : "/admin/catalog"}
-      replace
-    />
-  )
+  return <Navigate to="/admin/catalog" replace />
 }

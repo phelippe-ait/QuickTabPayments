@@ -125,8 +125,9 @@ The demo Supabase project has three staff accounts. The passwords are in
 | Role | Email | Where to use it |
 | --- | --- | --- |
 | Owner | `owner@quicktab.demo` | Full `/admin` access, plus `/staff` |
-| Manager / staff | `manager@quicktab.demo` | `/admin` catalog, tables, users, orders, settings, plus `/staff` |
-| Kitchen | `kitchen@quicktab.demo` | `/admin/orders` and the `/staff` workspace, including new orders |
+| Manager | `manager@quicktab.demo` | Full `/admin` access, plus `/staff`. Cannot manage owners or managers. |
+| Kitchen | `kitchen@quicktab.demo` | `/staff` only, limited to the kitchen board and order history |
+| Staff | created by an owner/manager | Full `/staff` access; no `/admin` or role management |
 
 The customer app works as a guest, so the reviewer can test the menu, cart,
 checkout (when Stripe test keys are configured), and guest tracking without
@@ -134,6 +135,8 @@ signing in.
 
 `/staff` has its own sign-in screen. Staff accounts are created by an owner or
 manager; signed-in users without an active membership see a no-access state.
+Owners can grant every role. Managers can only add/manage staff and kitchen
+accounts. Kitchen and staff accounts cannot manage roles.
 
 ### Routes
 
@@ -542,6 +545,11 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119060000_pickup_table_no_status.sql` keeps the pickup point out of
   table occupancy: confirmed orders never change its status and the guard
   freezes it.
+- `20261119080000_add_staff_role.sql` adds the `staff` role used by the staff
+  workspace.
+- `20261119090000_role_permissions.sql` narrows manager grants: owners and
+  managers are owner-managed, while managers may add/manage staff and kitchen
+  accounts.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

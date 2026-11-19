@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { SettingsPage } from "./SettingsPage";
 
 const mocks = vi.hoisted(() => ({
-  role: "owner" as "owner" | "manager" | "kitchen",
+  role: "owner" as "owner" | "manager" | "staff" | "kitchen",
   save: vi.fn(),
   uploadBranding: vi.fn(),
   notify: vi.fn(),

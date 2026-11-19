@@ -23,6 +23,15 @@ export function staffPermissions({
   member: StaffVM
   activeOwnerCount: number
 }): StaffPermissions {
+  if (viewerRole !== "owner" && viewerRole !== "manager") {
+    return {
+      canChangeRole: false,
+      canToggleActive: false,
+      canRemove: false,
+      lockedReason: "Only owners and managers can manage team access.",
+    }
+  }
+
   if (member.userId === viewerUserId) {
     return {
       canChangeRole: false,
@@ -67,9 +76,12 @@ export function staffPermissions({
   }
 }
 
-/** Only owners may grant owner access. */
+/**
+ * Owners can grant every role. Managers can grant staff/kitchen only; manager
+ * and owner grants stay owner-only. Kitchen/staff cannot grant roles.
+ */
 export function assignableRoles(viewerRole: StaffRole): StaffRole[] {
-  return viewerRole === "owner"
-    ? ["owner", "manager", "kitchen"]
-    : ["manager", "kitchen"]
+  if (viewerRole === "owner") return ["owner", "manager", "staff", "kitchen"]
+  if (viewerRole === "manager") return ["staff", "kitchen"]
+  return []
 }

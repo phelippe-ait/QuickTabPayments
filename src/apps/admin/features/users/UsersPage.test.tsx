@@ -4,7 +4,7 @@ import { UsersPage } from "./UsersPage"
 import type { StaffVM } from "../../viewModels"
 
 const mocks = vi.hoisted(() => ({
-  viewerRole: "owner" as "owner" | "manager" | "kitchen",
+  viewerRole: "owner" as "owner" | "manager" | "staff" | "kitchen",
   notify: vi.fn(),
   confirm: vi.fn(),
   refetch: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
     restaurant: { id: "restaurant-1", name: "Test Café" },
     role: mocks.viewerRole,
   }),
-  roleLabels: { owner: "Owner", manager: "Manager", kitchen: "Kitchen" },
+  roleLabels: { owner: "Owner", manager: "Manager", staff: "Staff", kitchen: "Kitchen" },
 }))
 
 vi.mock("@shared/auth/AuthContext", () => ({
