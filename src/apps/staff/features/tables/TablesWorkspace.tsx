@@ -20,6 +20,12 @@ function tableLabel(table: Table): string {
   return table.tableNumber ?? String(table.id).padStart(2, "0")
 }
 
+function seatedTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+}
+
 export function TableCard({
   table,
   selected,
@@ -71,20 +77,32 @@ export function TableCard({
         </div>
         {occupied ? (
           <div className="mt-7 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold">{table.guest}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted">
-                <span className="flex items-center gap-1">
-                  <Icon name="clock" size={14} /> {table.since}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Icon name="users" size={14} /> {table.occupants} guests
-                </span>
-              </div>
-            </div>
-            <span className="shrink-0 font-serif text-xl">
-              {formatMoney(table.total ?? 0, currency)}
-            </span>
+            {table.since != null ? (
+              <>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold">
+                    {table.guest || "Guest"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted">
+                    <span className="flex items-center gap-1">
+                      <Icon name="clock" size={14} /> {seatedTime(table.since)}
+                    </span>
+                    {table.occupants > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Icon name="users" size={14} /> {table.occupants} guests
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {table.total != null && (
+                  <span className="shrink-0 font-serif text-xl">
+                    {formatMoney(table.total, currency)}
+                  </span>
+                )}
+              </>
+            ) : (
+              <p className="text-sm font-bold text-muted">No open order</p>
+            )}
           </div>
         ) : status === "needs_cleaning" ? (
           <div className="mt-7">

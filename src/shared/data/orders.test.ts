@@ -76,8 +76,47 @@ describe("reduceOpenOrdersByTable", () => {
       orderNumber: "1002",
       status: "preparing",
       createdAt: "2026-10-21T09:00:00Z",
+      customerName: null,
+      total: 0,
+      items: 0,
     })
     expect(byTable["table-2"]?.orderNumber).toBe("1003")
+  })
+
+  it("carries guest name, total and item quantity for occupancy", () => {
+    const byTable = reduceOpenOrdersByTable([
+      {
+        id: "order-1",
+        table_id: "table-1",
+        order_number: "1001",
+        status: "preparing",
+        created_at: "2026-10-21T08:00:00Z",
+        customer_name_snapshot: "Olivia",
+        total: 24.5,
+        order_items: [{ quantity: 2 }, { quantity: 1 }],
+      },
+      {
+        id: "order-2",
+        table_id: "table-2",
+        order_number: "1002",
+        status: "ready",
+        created_at: "2026-10-21T08:30:00Z",
+        customer_name_snapshot: null,
+        total: null,
+        order_items: null,
+      },
+    ])
+
+    expect(byTable["table-1"]).toMatchObject({
+      customerName: "Olivia",
+      total: 24.5,
+      items: 3,
+    })
+    expect(byTable["table-2"]).toMatchObject({
+      customerName: null,
+      total: 0,
+      items: 0,
+    })
   })
 
   it("strips PostgREST syntax characters from search terms", () => {

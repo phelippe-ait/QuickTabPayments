@@ -6,7 +6,12 @@ import { toHistoryOrder } from "../data/orderHistory"
 import {
   fetchStaffTables,
   updateStaffTableStatus,
+  type StaffTableRow,
 } from "../services/staffTables"
+import {
+  fetchOpenOrdersByTable,
+  type OpenTableOrder,
+} from "@shared/data/orders"
 import {
   canKitchenTransition,
   fetchStaffOrders,
@@ -25,6 +30,32 @@ import { useOrderSound } from "./useOrderSound"
 
 /** REST refresh cadence while the Realtime socket is down. */
 export const STAFF_POLL_INTERVAL_MS = 10_000
+
+/**
+ * Merge table metadata with its latest open order. Derived occupancy fields
+ * exist only when an open order does — never as fabricated zeros.
+ */
+export function toStaffTable(
+  row: StaffTableRow,
+  openOrder: OpenTableOrder | undefined,
+): Table {
+  return {
+    id: row.id,
+    tableNumber: row.table_number,
+    locationLabel: row.location_label,
+    seats: row.seats ?? undefined,
+    occupants: 0,
+    status: row.status,
+    ...(openOrder
+      ? {
+          guest: openOrder.customerName ?? undefined,
+          since: openOrder.createdAt,
+          total: openOrder.total,
+          items: openOrder.items,
+        }
+      : {}),
+  }
+}
 
 /**
  * Staff workspace data. The signed-in member's restaurant id comes from the
@@ -179,16 +210,17 @@ export function useStaffWorkspace(restaurantId: string | null) {
     async function loadTables(id: string) {
       try {
         const rows = await fetchStaffTables(id)
+        let openByTable: Record<string, OpenTableOrder> = {}
+        try {
+          openByTable = await fetchOpenOrdersByTable(id)
+        } catch (error) {
+          // Occupancy is secondary: keep the table list usable without it and
+          // hide the derived fields rather than showing fabricated zeros.
+          console.error("Failed to load staff table occupancy:", error)
+        }
         if (cancelled) return
         setTableList(
-          rows.map((row) => ({
-            id: row.id,
-            tableNumber: row.table_number,
-            locationLabel: row.location_label,
-            seats: row.seats ?? undefined,
-            occupants: 0,
-            status: row.status,
-          })),
+          rows.map((row) => toStaffTable(row, openByTable[row.id])),
         )
         setTablesError(null)
       } catch (error) {
