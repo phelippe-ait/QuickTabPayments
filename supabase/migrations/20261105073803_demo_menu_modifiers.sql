@@ -1,3 +1,4 @@
+-- Version aligned to the hosted project's applied migration (was 20261105060000); see deepseek_plan/DB_STATE_EVIDENCE.md.
 -- Give the demo menu real option data so the customer item dialog can show
 -- and price customizations. Scoped to the demo restaurant and safe to rerun.
 do $$
