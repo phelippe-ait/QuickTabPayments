@@ -38,7 +38,7 @@ export function OrdersScreen({
   const [reorderError, setReorderError] = useState("");
   const [reorderNotice, setReorderNotice] = useState("");
   const [skipped, setSkipped] = useState<SkippedItem[] | null>(null);
-  const skippedPanelRef = useDialogFocus<HTMLDivElement>(() => setSkipped(null));
+  const skippedPanelRef = useDialogFocus<HTMLDivElement>(() => setSkipped(null), Boolean(skipped));
   useBodyScrollLock(Boolean(skipped));
 
   const loadOrders = useCallback(async () => {
