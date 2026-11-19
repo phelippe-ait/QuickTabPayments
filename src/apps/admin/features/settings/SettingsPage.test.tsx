@@ -124,4 +124,50 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
   });
+
+  it("refuses to save a cleared web address", () => {
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/web address/i), {
+      target: { value: "" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: /save changes/i }).closest("form")!,
+    );
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/lowercase letters, numbers and single hyphens/i),
+    ).toBeInTheDocument();
+  });
+
+  it("refuses to save an invalid web address", () => {
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/web address/i), {
+      target: { value: "Bad Slug!" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: /save changes/i }).closest("form")!,
+    );
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/lowercase letters, numbers and single hyphens/i),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a valid changed web address", () => {
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/web address/i), {
+      target: { value: "test-cafe-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "test-cafe-2" }),
+      undefined,
+    );
+  });
 });

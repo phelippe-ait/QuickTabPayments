@@ -15,6 +15,9 @@ import { findAddressMatches, type AddressMatch } from "./geocodeAddress";
 
 type LocationPoint = AddressMatch & { geofence_enabled: boolean };
 
+const SLUG_PATTERN = "[a-z0-9]+(-[a-z0-9]+)*";
+const SLUG_TITLE = "Lowercase letters, numbers and single hyphens only";
+
 const currencies = [
   "AUD",
   "NZD",
@@ -68,6 +71,7 @@ export function SettingsPage() {
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [brandingError, setBrandingError] = useState("");
   const [taxError, setTaxError] = useState("");
+  const [slugError, setSlugError] = useState("");
   const [locationPoint, setLocationPoint] = useState<LocationPoint | null>(null);
   const [addressMatches, setAddressMatches] = useState<AddressMatch[]>([]);
   const [isLookingUpAddress, setIsLookingUpAddress] = useState(false);
@@ -194,6 +198,7 @@ export function SettingsPage() {
     event.preventDefault();
     setTaxError("");
     setTimezoneError("");
+    setSlugError("");
 
     const taxRate = percentToTaxRate(form.taxPercent);
     if (Number.isNaN(taxRate) || taxRate < 0 || taxRate > 1) {
@@ -209,6 +214,13 @@ export function SettingsPage() {
 
     if (!form.name.trim()) return;
 
+    const slug = form.slug.trim();
+    const slugChanged = isOwner && slug !== source.slug;
+    if (slugChanged && !new RegExp(`^${SLUG_PATTERN}$`).test(slug)) {
+      setSlugError(SLUG_TITLE);
+      return;
+    }
+
     if (geofenceEnabled && !locationPoint) {
       setGeofenceError("Find and select the restaurant address before enabling the 500 m check.");
       return;
@@ -223,9 +235,7 @@ export function SettingsPage() {
       currency: form.currency.trim() || "AUD",
       timezone: timezone,
       tax_rate: taxRate,
-      ...(isOwner && form.slug.trim() !== source.slug
-        ? { slug: form.slug.trim() }
-        : {}),
+      ...(slugChanged ? { slug } : {}),
     }, locationPoint
       ? {
           latitude: locationPoint.latitude,
@@ -265,14 +275,30 @@ export function SettingsPage() {
             <label className={styles["wide"]}>
               Web address
               <input
+                required
                 value={form.slug}
-                onChange={(event) => update({ slug: event.target.value })}
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                title="Lowercase letters, numbers and single hyphens only"
+                onChange={(event) => {
+                  update({ slug: event.target.value });
+                  setSlugError("");
+                }}
+                pattern={SLUG_PATTERN}
+                title={SLUG_TITLE}
                 readOnly={!isOwner}
                 disabled={!isOwner}
-                aria-describedby="settings-slug-hint"
+                aria-invalid={Boolean(slugError)}
+                aria-describedby={
+                  slugError ? "settings-slug-hint settings-slug-error" : "settings-slug-hint"
+                }
               />
+              {slugError && (
+                <small
+                  className={`${styles["field-error"]}`}
+                  id="settings-slug-error"
+                  role="alert"
+                >
+                  {slugError}
+                </small>
+              )}
               <small
                 className="mt-1.5 block text-[10px] font-normal text-muted"
                 id="settings-slug-hint"
