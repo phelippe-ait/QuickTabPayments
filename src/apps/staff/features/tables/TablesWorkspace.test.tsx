@@ -133,6 +133,24 @@ describe("TablesWorkspace table status", () => {
     expect(button).toHaveTextContent("Updating…")
   })
 
+  it("hides the system pickup point from the floor plan", () => {
+    renderTables([
+      table({
+        id: "pickup-1",
+        tableNumber: "Pick-up",
+        isSystem: true,
+        status: "available",
+      }),
+      table({ id: "table-1", tableNumber: "1", status: "available" }),
+    ])
+
+    expect(screen.queryByText("Counter / Pick-up")).not.toBeInTheDocument()
+    expect(screen.queryByText("Service point")).not.toBeInTheDocument()
+    const card = screen.getByRole("article")
+    expect(within(card).getByText("Table")).toBeInTheDocument()
+    expect(within(card).getByText("1")).toBeInTheDocument()
+  })
+
   it("shows the open order's guest, seated time and total without fabricated counts", () => {
     renderTables([
       table({

@@ -29,6 +29,10 @@ const payload = {
     { hour: 8, orders: 2 },
     { hour: 9, orders: 5 },
   ],
+  busy_days: [
+    { day: 1, orders: 4 },
+    { day: 5, orders: 7 },
+  ],
 }
 
 describe("fetchSalesReport", () => {
@@ -68,6 +72,10 @@ describe("fetchSalesReport", () => {
       busy_hours: [
         { hour: 8, orders: 2 },
         { hour: 9, orders: 5 },
+      ],
+      busy_days: [
+        { day: 1, orders: 4 },
+        { day: 5, orders: 7 },
       ],
     })
   })
@@ -125,6 +133,7 @@ describe("parseSalesReport", () => {
     expect(report.top_items).toEqual([])
     expect(report.popular_items).toEqual([])
     expect(report.busy_hours).toEqual([])
+    expect(report.busy_days).toEqual([])
   })
 
   it("tolerates a null payload", () => {
@@ -135,6 +144,7 @@ describe("parseSalesReport", () => {
       top_items: [],
       popular_items: [],
       busy_hours: [],
+      busy_days: [],
     })
   })
 })

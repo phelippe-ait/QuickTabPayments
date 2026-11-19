@@ -16,7 +16,7 @@ import { RequireStaff } from "@shared/auth/RequireStaff"
 import { roleLabels } from "@shared/restaurant/restaurantHelpers"
 import { RESERVATIONS_ENABLED } from "./flags"
 
-const ANY_STAFF = ["owner", "manager", "kitchen"] as const
+const ANY_STAFF = ["owner", "manager", "staff", "kitchen"] as const
 
 export default function App() {
   return (
@@ -39,7 +39,9 @@ export default function App() {
 function StaffWorkspace() {
   const { membership, restaurant, role } = useRestaurant()
   const { user, profile, signOut } = useAuth()
-  const [view, setView] = useState<View>("tables")
+  const [view, setView] = useState<View>(() =>
+    role === "kitchen" ? "kitchen" : "tables",
+  )
   const [filter, setFilter] = useState<"all" | TableStatus>("all")
   const [selectedTable, setSelectedTable] = useState<Table | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -70,12 +72,29 @@ function StaffWorkspace() {
     if (!RESERVATIONS_ENABLED && view === "reservations") setView("tables")
   }, [view])
 
+  // Kitchen accounts only get the kitchen board and order history.
+  useEffect(() => {
+    if (
+      role === "kitchen" &&
+      view !== "kitchen" &&
+      view !== "history"
+    ) {
+      setView("kitchen")
+    }
+  }, [role, view])
+
+  // The counter / pick-up point is a service point, not a seat. It stays
+  // available to New order but never appears on the floor plan.
+  const staffTables = useMemo(
+    () => workspace.tableList.filter((table) => !table.isSystem),
+    [workspace.tableList],
+  )
   const filteredTables = useMemo(
     () =>
-      workspace.tableList.filter(
+      staffTables.filter(
         (table) => filter === "all" || table.status === filter,
       ),
-    [filter, workspace.tableList],
+    [filter, staffTables],
   )
   const filteredOrders = useMemo(() => {
     const term = query.toLowerCase()
@@ -85,7 +104,7 @@ function StaffWorkspace() {
       ),
     )
   }, [workspace.historyOrders, query])
-  const occupied = workspace.tableList.filter(
+  const occupied = staffTables.filter(
     (table) => table.status === "occupied",
   ).length
   const currency = restaurant?.currency ?? "AUD"
@@ -94,9 +113,8 @@ function StaffWorkspace() {
     const statusChanged =
       selectedTable !== null && table.status !== selectedTable.status
     workspace.updateTable(table)
-    // The editor's guest/occupant fields are local-only, but the operational
-    // status is real state: persist it through the same scoped mutation the
-    // one-tap card button uses so a reload doesn't undo the change.
+    // The guest name is derived from the table's latest open order; only the
+    // operational status is a staff-owned field that needs persisting here.
     if (statusChanged) {
       void workspace.updateTableStatus(String(table.id), table.status)
     }
@@ -109,6 +127,7 @@ function StaffWorkspace() {
       onViewChange={setView}
       userName={userName}
       restaurantName={restaurant?.name ?? "Your restaurant"}
+      role={role ?? "staff"}
       roleLabel={role ? roleLabels[role] : ""}
       onSignOut={() => void signOut()}
       connectionState={workspace.connectionState}
@@ -116,7 +135,7 @@ function StaffWorkspace() {
       {view === "tables" && (
         <TablesWorkspace
           userName={userName}
-          tableList={workspace.tableList}
+          tableList={staffTables}
           filteredTables={filteredTables}
           occupied={occupied}
           filter={filter}

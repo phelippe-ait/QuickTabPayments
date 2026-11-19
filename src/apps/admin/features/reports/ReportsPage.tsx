@@ -12,6 +12,7 @@ import {
 import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { PageHeader } from "../../components/AdminUi"
 import { useSalesReport } from "../../hooks/useSalesReport"
+import { BusyDaysCard } from "./BusyDaysCard"
 import { BusyHoursCard } from "./BusyHoursCard"
 import { ExportCsvButton } from "./ExportCsvButton"
 import { PopularItemsCard } from "./PopularItemsCard"
@@ -45,7 +46,7 @@ export function ReportsPage() {
         <PageHeader
           eyebrow="Business insights"
           title="Reports"
-          description="Track sales, top items, and busy hours for your restaurant."
+          description="Track sales, top items, and busy hours and days for your restaurant."
         />
         <div
           className="grid gap-4 py-8"
@@ -169,6 +170,12 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
                 timezone={restaurant.timezone}
               />
             </div>
+            <div className="min-w-0 lg:col-span-2">
+              <BusyDaysCard
+                days={report.busy_days}
+                timezone={restaurant.timezone}
+              />
+            </div>
             <TopItemsCard
               items={report.top_items}
               currency={report.currency}
@@ -231,6 +238,12 @@ function LoadingCards() {
         <Card className="lg:col-span-2">
           <div className="flex flex-col gap-3 p-6">
             <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        </Card>
+        <Card className="lg:col-span-2">
+          <div className="flex flex-col gap-3 p-6">
+            <Skeleton className="h-4 w-28" />
             <Skeleton className="h-40 w-full" />
           </div>
         </Card>

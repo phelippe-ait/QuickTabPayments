@@ -46,6 +46,11 @@ export function useTables(
     queryKey: tableKeys.all(restaurantId),
     queryFn: () => fetchTables(restaurantId),
     enabled: Boolean(restaurantId),
+    // Staff change `tables.status` from the floor plan. There is no tables
+    // Realtime subscription (same scoping decision as the staff workspace), so
+    // refresh periodically and whenever the admin returns to the tab.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
   const openOrdersQuery = useQuery({
     queryKey: orderKeys.openTables(restaurantId),

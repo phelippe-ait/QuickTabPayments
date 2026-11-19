@@ -50,6 +50,7 @@ const report: SalesReport = {
   top_items: [],
   popular_items: [],
   busy_hours: [],
+  busy_days: [],
 }
 
 describe("ReportsPage", () => {
@@ -122,6 +123,10 @@ describe("ReportsPage", () => {
           hour,
           orders: hour === 13 ? 5 : 0,
         })),
+        busy_days: Array.from({ length: 7 }, (_, day) => ({
+          day,
+          orders: day === 5 ? 5 : 0,
+        })),
       },
     }
 
@@ -134,9 +139,13 @@ describe("ReportsPage", () => {
       screen.getByRole("heading", { name: "Busy hours" }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole("heading", { name: "Busy days" }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole("heading", { name: "Popular items" }),
     ).toBeInTheDocument()
     expect(screen.getByText("Busiest: 1pm")).toBeInTheDocument()
+    expect(screen.getByText("Busiest: Friday")).toBeInTheDocument()
     expect(screen.getAllByText("Flat White")).toHaveLength(2)
     expect(
       screen.getByRole("region", { name: "Top items by revenue" }),

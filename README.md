@@ -125,8 +125,9 @@ The demo Supabase project has three staff accounts. The passwords are in
 | Role | Email | Where to use it |
 | --- | --- | --- |
 | Owner | `owner@quicktab.demo` | Full `/admin` access, plus `/staff` |
-| Manager / staff | `manager@quicktab.demo` | `/admin` catalog, tables, users, orders, settings, plus `/staff` |
-| Kitchen | `kitchen@quicktab.demo` | `/admin/orders` and the `/staff` workspace, including new orders |
+| Manager | `manager@quicktab.demo` | Full `/admin` access, plus `/staff`. Cannot manage owners or managers. |
+| Kitchen | `kitchen@quicktab.demo` | `/staff` only, limited to the kitchen board and order history |
+| Staff | created by an owner/manager | Full `/staff` access; no `/admin` or role management |
 
 The customer app works as a guest, so the reviewer can test the menu, cart,
 checkout (when Stripe test keys are configured), and guest tracking without
@@ -134,6 +135,8 @@ signing in.
 
 `/staff` has its own sign-in screen. Staff accounts are created by an owner or
 manager; signed-in users without an active membership see a no-access state.
+Owners can grant every role. Managers can only add/manage staff and kitchen
+accounts. Kitchen and staff accounts cannot manage roles.
 
 ### Routes
 
@@ -319,6 +322,16 @@ only as a documented development fallback.
   the kitchen board immediately. A table is optional (counter/takeaway); staff
   can optionally record payment collected at the counter. Without that flag no
   payment row is written, so the app never reports money it did not capture.
+- A confirmed order marks its table `occupied` automatically. Staff remain in
+  control of freeing or cleaning the table. Additional orders are still allowed
+  on an occupied table, and the floor plan shows the latest order's customer
+  name.
+- Every restaurant has one permanent **Counter / Pick-up** system table. It is
+  created with the restaurant, listed first, cannot be edited structurally or
+  deleted, and can only be enabled/disabled in Admin → Tables. It has no
+  occupied/free/cleaning status and is hidden from the staff floor plan, but
+  remains available in staff New order and customer QR ordering. Owners manage
+  all other tables normally.
 - Customers can view their Stripe receipt and see whether an order was
   **partially refunded** or **fully refunded** in order history and on the
   public tracking page.
@@ -524,6 +537,19 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119010000_staff_place_order.sql` adds the active-staff-only
   `staff_place_order(...)` RPC for counter/table orders, with server-side
   pricing/modifier validation and an optional counter payment record.
+- `20261119040000_orders_mark_table_occupied.sql` marks a table occupied when
+  an order becomes confirmed, while leaving staff in control of freeing it.
+- `20261119050000_pickup_table.sql` adds the permanent non-deletable
+  Counter / Pick-up system table, backfills existing restaurants, and creates
+  it automatically during onboarding.
+- `20261119060000_pickup_table_no_status.sql` keeps the pickup point out of
+  table occupancy: confirmed orders never change its status and the guard
+  freezes it.
+- `20261119080000_add_staff_role.sql` adds the `staff` role used by the staff
+  workspace.
+- `20261119090000_role_permissions.sql` narrows manager grants: owners and
+  managers are owner-managed, while managers may add/manage staff and kitchen
+  accounts.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

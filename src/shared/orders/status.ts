@@ -43,7 +43,7 @@ export const orderStatusTones: Record<OrderStatus, StatusTone> = {
   pending: "neutral",
   confirmed: "info",
   preparing: "warning",
-  ready: "primary",
+  ready: "success",
   completed: "success",
   cancelled: "danger",
 }

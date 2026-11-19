@@ -13,7 +13,13 @@ import type { StaffVM } from "../../viewModels";
 import { UserModal } from "./UserDialog";
 import { staffPermissions } from "./staff.utils";
 
-const roleFilters: Array<StaffRole | "all"> = ["all", "owner", "manager", "kitchen"];
+const roleFilters: Array<StaffRole | "all"> = [
+  "all",
+  "owner",
+  "manager",
+  "staff",
+  "kitchen",
+];
 
 export function UsersPage() {
   const { notify, notifyError, confirm } = useAdminUi();

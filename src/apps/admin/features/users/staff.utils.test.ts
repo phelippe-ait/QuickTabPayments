@@ -48,24 +48,35 @@ describe("staffPermissions", () => {
     ).toBe(true)
   })
 
-  it("allows managers to manage kitchen rows", () => {
-    const kitchenMember: StaffVM = {
-      ...member,
-      staffId: "staff-3",
-      userId: "user-3b",
-      role: "kitchen",
+  it("allows managers to manage kitchen and staff rows", () => {
+    for (const role of ["kitchen", "staff"] as const) {
+      const permissions = staffPermissions({
+        viewerRole: "manager",
+        viewerUserId: "user-3",
+        member: { ...member, staffId: `staff-${role}`, userId: "user-3b", role },
+        activeOwnerCount: 1,
+      })
+
+      expect(permissions.canChangeRole).toBe(true)
+      expect(permissions.canToggleActive).toBe(true)
+      expect(permissions.canRemove).toBe(true)
     }
+  })
 
-    const permissions = staffPermissions({
-      viewerRole: "manager",
-      viewerUserId: "user-3",
-      member: kitchenMember,
-      activeOwnerCount: 1,
-    })
+  it("blocks kitchen and staff roles from managing team access", () => {
+    for (const viewerRole of ["kitchen", "staff"] as const) {
+      const permissions = staffPermissions({
+        viewerRole,
+        viewerUserId: "user-3",
+        member: { ...member, role: "kitchen" },
+        activeOwnerCount: 1,
+      })
 
-    expect(permissions.canChangeRole).toBe(true)
-    expect(permissions.canToggleActive).toBe(true)
-    expect(permissions.canRemove).toBe(true)
+      expect(permissions.canChangeRole).toBe(false)
+      expect(permissions.canToggleActive).toBe(false)
+      expect(permissions.canRemove).toBe(false)
+      expect(permissions.lockedReason).toMatch(/owners and managers/i)
+    }
   })
 
   it("blocks managers from managing peer managers", () => {
@@ -127,9 +138,15 @@ describe("staffPermissions", () => {
 })
 
 describe("assignableRoles", () => {
-  it("only owners can grant owner access", () => {
-    expect(assignableRoles("owner")).toEqual(["owner", "manager", "kitchen"])
-    expect(assignableRoles("manager")).toEqual(["manager", "kitchen"])
-    expect(assignableRoles("kitchen")).toEqual(["manager", "kitchen"])
+  it("limits managers to staff/kitchen and owners to every role", () => {
+    expect(assignableRoles("owner")).toEqual([
+      "owner",
+      "manager",
+      "staff",
+      "kitchen",
+    ])
+    expect(assignableRoles("manager")).toEqual(["staff", "kitchen"])
+    expect(assignableRoles("kitchen")).toEqual([])
+    expect(assignableRoles("staff")).toEqual([])
   })
 })

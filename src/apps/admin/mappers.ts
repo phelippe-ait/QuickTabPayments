@@ -153,7 +153,9 @@ export function toTableVM(
     locationLabel: row.location_label,
     seats: row.seats,
     isActive: row.is_active,
+    isSystem: row.is_system,
     qrToken: row.qr_token,
+    status: row.status,
     openOrder: openOrder
       ? {
           orderNumber: openOrder.orderNumber,

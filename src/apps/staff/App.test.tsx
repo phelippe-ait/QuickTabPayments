@@ -6,7 +6,7 @@ import StaffApp from "./StaffDashboard";
 const state = vi.hoisted(() => ({
   user: null as null | { id: string; email: string; user_metadata?: object },
   membership: null as null | { restaurantId: string; role: string },
-  role: null as null | "owner" | "manager" | "kitchen",
+  role: null as null | "owner" | "manager" | "staff" | "kitchen",
 }));
 
 vi.mock("@shared/lib/supabase", () => ({
@@ -111,27 +111,36 @@ describe("Staff app auth gate", () => {
     expect(screen.queryByText(/good evening/i)).not.toBeInTheDocument();
   });
 
-  it("renders the workspace for a signed-in kitchen member", () => {
+  it("limits kitchen members to the kitchen and order history", () => {
     state.user = { id: "u1", email: "chef@example.com" };
     state.membership = { restaurantId: "r1", role: "kitchen" };
     state.role = "kitchen";
+    render(<StaffApp />);
+
+    expect(
+      screen.getByRole("heading", { name: /active orders/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Developed by QuickTab Payments Team"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Table overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("New order")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reservations")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bookings")).not.toBeInTheDocument();
+  })
+
+  it("gives the staff role the full workspace", () => {
+    state.user = { id: "u1", email: "server@example.com" };
+    state.membership = { restaurantId: "r1", role: "staff" };
+    state.role = "staff";
     render(<StaffApp />);
 
     expect(
       screen.getByRole("heading", { name: /good evening/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Developed by QuickTab Payments Team"),
-    ).toBeInTheDocument();
-  });
-
-  it("hides the deferred reservations nav", () => {
-    state.user = { id: "u1", email: "chef@example.com" };
-    state.membership = { restaurantId: "r1", role: "kitchen" };
-    state.role = "kitchen";
-    render(<StaffApp />);
-
-    expect(screen.queryByText("Reservations")).not.toBeInTheDocument();
-    expect(screen.queryByText("Bookings")).not.toBeInTheDocument();
+    expect(screen.getByText("Table overview")).toBeInTheDocument();
+    expect(screen.getAllByText("New order").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Kitchen").length).toBeGreaterThan(0);
+    expect(screen.getByText("Order history")).toBeInTheDocument();
   });
 });

@@ -189,6 +189,7 @@ function staffTable(overrides: Record<string, unknown> = {}) {
     table_number: "1",
     location_label: null,
     is_active: true,
+    is_system: false,
     seats: 4,
     status: "available",
     ...overrides,

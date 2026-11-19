@@ -16,10 +16,11 @@ const baseReport: SalesReport = {
   top_items: [{ name: "Flat White", quantity: 8, revenue: 40 }],
   popular_items: [],
   busy_hours: [{ hour: 13, orders: 5 }],
+  busy_days: [{ day: 5, orders: 5 }],
 }
 
 describe("buildReportCsv", () => {
-  it("renders a deterministic header, summary, and both sections", () => {
+  it("renders a deterministic header, summary, and all sections", () => {
     const csv = buildReportCsv(baseReport, {
       restaurantName: "Test Café",
       generatedAt,
@@ -49,6 +50,10 @@ describe("buildReportCsv", () => {
         "Busy hours",
         "Hour,Orders",
         "13,5",
+        "",
+        "Busy days",
+        "Day,Orders",
+        "Friday,5",
       ].join("\n"),
     )
   })
@@ -73,7 +78,7 @@ describe("buildReportCsv", () => {
     expect(csv).toContain('4,"The ""Big"" One",1,5.00')
   })
 
-  it("sorts top items by revenue and busy hours by hour", () => {
+  it("sorts top items by revenue, busy hours, and busy days", () => {
     const csv = buildReportCsv(
       {
         ...baseReport,
@@ -85,6 +90,10 @@ describe("buildReportCsv", () => {
           { hour: 18, orders: 2 },
           { hour: 9, orders: 4 },
         ],
+        busy_days: [
+          { day: 6, orders: 2 },
+          { day: 1, orders: 4 },
+        ],
       },
       { restaurantName: "Test Café", generatedAt },
     )
@@ -94,6 +103,8 @@ describe("buildReportCsv", () => {
     )
     expect(csv.indexOf("Hour,Orders\n9,4")).toBeGreaterThan(-1)
     expect(csv.indexOf("9,4")).toBeLessThan(csv.indexOf("18,2"))
+    expect(csv.indexOf("Day,Orders\nMonday,4")).toBeGreaterThan(-1)
+    expect(csv.indexOf("Monday,4")).toBeLessThan(csv.indexOf("Saturday,2"))
   })
 
   it("renders section headers only for an empty report", () => {
@@ -107,12 +118,13 @@ describe("buildReportCsv", () => {
         aov: 0,
         top_items: [],
         busy_hours: [],
+        busy_days: [],
       },
       { restaurantName: "Test Café", generatedAt },
     )
 
     expect(csv).toContain("Top items\nRank,Name,Quantity,Revenue")
-    expect(csv.endsWith("Busy hours\nHour,Orders")).toBe(true)
+    expect(csv.endsWith("Busy days\nDay,Orders")).toBe(true)
     expect(csv).toContain("Orders,0")
     expect(csv).toContain("Gross revenue,0.00")
   })

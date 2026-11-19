@@ -18,7 +18,7 @@
 -- demo accounts, or any menu/order data. See README.md → "Database setup" for
 -- the data import steps.
 --
--- Generated from 36 migrations:
+-- Generated from 42 migrations:
 --   - 0001_profiles.sql
 --   - 0002_roles.sql
 --   - 0003_schema.sql
@@ -46,6 +46,12 @@
 --   - 20261105094127_order_geofence_toggle.sql
 --   - 20261119000000_restore_place_order_contract.sql
 --   - 20261119010000_staff_place_order.sql
+--   - 20261119040000_orders_mark_table_occupied.sql
+--   - 20261119050000_pickup_table.sql
+--   - 20261119060000_pickup_table_no_status.sql
+--   - 20261119070000_sales_report_busy_days.sql
+--   - 20261119080000_add_staff_role.sql
+--   - 20261119090000_role_permissions.sql
 --   - 0020_restaurant_plans.sql
 --   - 0021_sales_reporting.sql
 --   - 0022_order_status_transition_guard.sql
@@ -5910,6 +5916,944 @@ grant execute on function public.staff_place_order(uuid, text, text, jsonb, bool
 
 comment on function public.staff_place_order(uuid, text, text, jsonb, boolean) is
   'Staff-facing counter/table order creation: active-staff only, server-priced, validated modifiers, confirmed immediately, optional counter payment record.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119040000_orders_mark_table_occupied.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Confirmed orders occupy their table
+-- ---------------------------------------------------------------------
+-- Staff asked for the floor plan to reflect service automatically:
+--   * when a customer order is confirmed (payment succeeded) the table
+--     becomes occupied;
+--   * when staff create an order it is confirmed immediately, so the same
+--     rule applies;
+--   * staff still own the reverse transition — nothing auto-frees a table.
+--
+-- The trigger keeps this out of `place_order` / `staff_place_order` bodies
+-- (and away from the Stripe webhook), so every confirmation path behaves the
+-- same. Pending/unpaid checkouts do not occupy a table.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.mark_table_occupied_for_order()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.table_id is not null
+     and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.tables
+       set status = 'occupied'
+     where id = new.table_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_orders_mark_table_occupied on public.orders;
+create trigger trg_orders_mark_table_occupied
+  after insert or update of status on public.orders
+  for each row execute function public.mark_table_occupied_for_order();
+
+comment on function public.mark_table_occupied_for_order() is
+  'Marks a table occupied when an order becomes confirmed. Staff still mark tables free/cleaning; orders never auto-free a table.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119050000_pickup_table.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- System counter / pick-up table
+-- ---------------------------------------------------------------------
+-- Every restaurant gets one permanent service table for counter and pick-up
+-- orders. It is created with the restaurant, appears first on the floor plan,
+-- and can only be enabled/disabled or moved through its operational status.
+-- It cannot be edited structurally or deleted.
+--
+-- Existing restaurants: an existing Pick-up/Counter table is promoted, or a
+-- new one is inserted. New restaurants created through the onboarding RPCs get
+-- one automatically.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+alter table public.tables
+  add column if not exists is_system boolean not null default false;
+
+comment on column public.tables.is_system is
+  'True for the permanent counter/pick-up table. System tables cannot be edited structurally or deleted.';
+
+-- ---------------------------------------------------------------------
+-- 1. Idempotent creation/promotion helper
+-- ---------------------------------------------------------------------
+create or replace function public.ensure_pickup_table(p_restaurant_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_table_id uuid;
+begin
+  select t.id
+    into v_table_id
+  from public.tables t
+  where t.restaurant_id = p_restaurant_id
+    and t.is_system
+  limit 1;
+
+  if v_table_id is not null then
+    return v_table_id;
+  end if;
+
+  select t.id
+    into v_table_id
+  from public.tables t
+  where t.restaurant_id = p_restaurant_id
+    and (
+      lower(t.table_number) in ('pick-up', 'pickup', 'counter', 'counter / pick-up')
+      or lower(coalesce(t.location_label, '')) in ('pick-up', 'pickup', 'counter')
+    )
+  order by t.created_at, t.id
+  limit 1;
+
+  if v_table_id is not null then
+    update public.tables
+       set is_system = true,
+           location_label = 'Counter'
+     where id = v_table_id;
+    return v_table_id;
+  end if;
+
+  insert into public.tables (
+    restaurant_id,
+    table_number,
+    location_label,
+    is_active,
+    is_system
+  )
+  values (
+    p_restaurant_id,
+    'Pick-up',
+    'Counter',
+    true,
+    true
+  )
+  returning id into v_table_id;
+
+  return v_table_id;
+end;
+$$;
+
+revoke all on function public.ensure_pickup_table(uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 2. Backfill every existing restaurant
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_restaurant record;
+begin
+  for v_restaurant in select id from public.restaurants loop
+    perform public.ensure_pickup_table(v_restaurant.id);
+  end loop;
+end;
+$$;
+
+create unique index if not exists uq_tables_one_system_per_restaurant
+  on public.tables(restaurant_id)
+  where is_system;
+
+-- ---------------------------------------------------------------------
+-- 3. Protect the system table
+-- ---------------------------------------------------------------------
+create or replace function public.guard_system_table()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_system then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.is_system and not public.is_privileged_caller() then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.is_system is distinct from old.is_system
+     and not public.is_privileged_caller() then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  if old.is_system and (
+    new.restaurant_id  is distinct from old.restaurant_id
+    or new.table_number  is distinct from old.table_number
+    or new.qr_token      is distinct from old.qr_token
+    or new.location_label is distinct from old.location_label
+    or new.seats         is distinct from old.seats
+    or new.created_at    is distinct from old.created_at
+  ) then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_system_table on public.tables;
+create trigger guard_system_table
+  before insert or update or delete on public.tables
+  for each row execute function public.guard_system_table();
+
+comment on function public.guard_system_table() is
+  'System counter/pick-up tables may only change is_active/status; deletion and structural edits are rejected.';
+
+-- ---------------------------------------------------------------------
+-- 4. Onboarding RPCs create the system table
+-- ---------------------------------------------------------------------
+create or replace function public.create_restaurant_with_owner(
+  p_name text,
+  p_slug text
+)
+returns public.restaurants
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_name       text := btrim(coalesce(p_name, ''));
+  v_slug       text := btrim(coalesce(p_slug, ''));
+  v_restaurant public.restaurants;
+begin
+  if v_user_id is null then
+    raise exception 'You must be signed in to create a restaurant'
+      using errcode = '42501';
+  end if;
+
+  if v_name = '' then
+    raise exception 'Restaurant name is required'
+      using errcode = '22023';
+  end if;
+
+  if v_slug = '' then
+    raise exception 'Restaurant web address is required'
+      using errcode = '22023';
+  end if;
+
+  if not exists (select 1 from public.profiles p where p.id = v_user_id) then
+    raise exception 'Your profile is not ready yet. Please try again.'
+      using errcode = 'P0002';
+  end if;
+
+  begin
+    insert into public.restaurants (owner_id, slug, name)
+    values (v_user_id, v_slug, v_name)
+    returning * into v_restaurant;
+  exception when unique_violation then
+    raise exception 'That web address is already taken. Choose another one.'
+      using errcode = '23505';
+  end;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (v_restaurant.id, v_user_id, 'owner', true)
+  on conflict (restaurant_id, user_id) do update
+    set role = 'owner', is_active = true;
+
+  perform public.ensure_pickup_table(v_restaurant.id);
+
+  return v_restaurant;
+end;
+$$;
+
+revoke all on function public.create_restaurant_with_owner(text, text)
+  from public, anon, authenticated;
+
+create or replace function public.claim_restaurant_invite(
+  p_name text default null,
+  p_slug text default null
+)
+returns public.restaurants
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user       uuid := auth.uid();
+  v_email      text;
+  v_invite     public.restaurant_invites;
+  v_name       text;
+  v_slug       text;
+  v_restaurant public.restaurants;
+begin
+  if v_user is null then
+    raise exception 'Sign in before claiming a restaurant invitation'
+      using errcode = '42501';
+  end if;
+
+  select u.email
+    into v_email
+  from auth.users u
+  where u.id = v_user
+    and u.email_confirmed_at is not null;
+
+  if v_email is null then
+    raise exception 'Verify your email address before claiming a restaurant invitation'
+      using errcode = '42501';
+  end if;
+
+  if exists (
+    select 1 from public.restaurant_staff
+    where user_id = v_user and is_active
+  ) then
+    raise exception 'This account already has an active restaurant'
+      using errcode = '23505';
+  end if;
+
+  select i.*
+    into v_invite
+  from public.restaurant_invites i
+  where i.status = 'pending'
+    and lower(i.email) = lower(v_email)
+    and i.expires_at > now()
+  order by i.created_at desc
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'No pending restaurant invitation found for this email'
+      using errcode = 'P0002';
+  end if;
+
+  v_name := btrim(coalesce(nullif(p_name, ''), v_invite.restaurant_name));
+  v_slug := lower(btrim(coalesce(nullif(p_slug, ''), v_invite.restaurant_slug)));
+
+  if v_name = '' then
+    raise exception 'Restaurant name is required'
+      using errcode = '22023';
+  end if;
+
+  if v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or length(v_slug) > 60 then
+    raise exception 'Web address must use lowercase letters, numbers and single hyphens (max 60 characters)'
+      using errcode = '22023';
+  end if;
+
+  begin
+    insert into public.restaurants (owner_id, slug, name)
+    values (v_user, v_slug, v_name)
+    returning * into v_restaurant;
+  exception
+    when unique_violation then
+      raise exception 'That web address is already taken. Choose another one.'
+        using errcode = '23505';
+  end;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (v_restaurant.id, v_user, 'owner', true)
+  on conflict (restaurant_id, user_id) do update
+    set role = 'owner', is_active = true;
+
+  perform public.ensure_pickup_table(v_restaurant.id);
+
+  update public.restaurant_invites
+     set status = 'accepted',
+         accepted_at = now(),
+         accepted_restaurant_id = v_restaurant.id
+   where id = v_invite.id;
+
+  return v_restaurant;
+end;
+$$;
+
+revoke all on function public.claim_restaurant_invite(text, text)
+  from public, anon;
+grant execute on function public.claim_restaurant_invite(text, text)
+  to authenticated;
+
+comment on function public.ensure_pickup_table(uuid) is
+  'Returns the permanent counter/pick-up table for a restaurant, promoting an existing Pick-up/Counter row or creating one.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119060000_pickup_table_no_status.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Pickup table has no occupancy status
+-- ---------------------------------------------------------------------
+-- The counter / pick-up point is not a seat. It should never show or change
+-- occupied/available/needs-cleaning, and it is hidden from the staff floor
+-- plan. It remains selectable in staff New order and by customer QR.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+-- Confirmed orders only occupy real tables.
+create or replace function public.mark_table_occupied_for_order()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.table_id is not null
+     and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.tables
+       set status = 'occupied'
+     where id = new.table_id
+       and not is_system;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Reset any status the pickup point picked up before this rule.
+update public.tables
+   set status = 'available'
+ where is_system
+   and status <> 'available';
+
+-- Freeze status on system tables. is_active remains changeable so owners can
+-- enable/disable the pickup point.
+create or replace function public.guard_system_table()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_system then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.is_system and not public.is_privileged_caller() then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.is_system is distinct from old.is_system
+     and not public.is_privileged_caller() then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  if old.is_system and (
+    new.restaurant_id  is distinct from old.restaurant_id
+    or new.table_number  is distinct from old.table_number
+    or new.qr_token      is distinct from old.qr_token
+    or new.location_label is distinct from old.location_label
+    or new.seats         is distinct from old.seats
+    or new.created_at    is distinct from old.created_at
+    or new.status        is distinct from old.status
+  ) then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119070000_sales_report_busy_days.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Sales report: busy days
+-- ---------------------------------------------------------------------
+-- Adds `busy_days` to `get_sales_report`, mirroring `busy_hours` but grouped
+-- by day-of-week in the restaurant timezone. The array is zero-filled for all
+-- seven days (0 = Sunday … 6 = Saturday) so the chart never shifts.
+--
+-- No tables, policies or grants change; access stays owner/manager only.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.get_sales_report(
+  p_from timestamptz default null,
+  p_to   timestamptz default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_currency      text;
+  v_timezone      text;
+  v_from          timestamptz;
+  v_to            timestamptz;
+  v_order_count   int;
+  v_gross_revenue numeric;
+  v_paid_revenue  numeric;
+  v_refunded      numeric;
+  v_aov           numeric;
+  v_top_items     jsonb;
+  v_popular_items jsonb;
+  v_busy_hours    jsonb;
+  v_busy_days     jsonb;
+begin
+  -- -----------------------------------------------------------------
+  -- Caller verification: active owner/manager of exactly one restaurant
+  -- (single-restaurant site). Everyone else gets `not_authorised`.
+  -- -----------------------------------------------------------------
+  select r.id, r.currency, r.timezone
+    into v_restaurant_id, v_currency, v_timezone
+  from public.restaurant_staff rs
+  join public.restaurants r on r.id = rs.restaurant_id
+  where rs.user_id = auth.uid()
+    and rs.is_active
+    and rs.role in ('owner', 'manager')
+  order by r.created_at, r.id
+  limit 1;
+
+  if v_restaurant_id is null then
+    raise exception 'not_authorised' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Date range: defaults, validation, and a hard 366-day cap.
+  -- -----------------------------------------------------------------
+  v_to   := coalesce(p_to, now());
+  v_from := coalesce(p_from, v_to - interval '30 days');
+
+  if v_from >= v_to then
+    raise exception 'invalid_date_range' using errcode = 'P0001';
+  end if;
+
+  if v_to - v_from > interval '366 days' then
+    v_from := v_to - interval '366 days';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Order count + gross revenue (created in range, not cancelled)
+  -- -----------------------------------------------------------------
+  select count(*), coalesce(sum(o.total), 0)
+    into v_order_count, v_gross_revenue
+  from public.orders o
+  where o.restaurant_id = v_restaurant_id
+    and o.created_at >= v_from
+    and o.created_at <  v_to
+    and o.status <> 'cancelled';
+
+  v_gross_revenue := round(v_gross_revenue, 2);
+
+  -- Average order value (0 when there are no orders).
+  if v_order_count = 0 then
+    v_aov := 0;
+  else
+    v_aov := round(v_gross_revenue / v_order_count, 2);
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Paid revenue: succeeded payments whose paid_at falls in range.
+  -- -----------------------------------------------------------------
+  select coalesce(sum(p.amount), 0)
+    into v_paid_revenue
+  from public.payments p
+  join public.orders o on o.id = p.order_id
+  where o.restaurant_id = v_restaurant_id
+    and p.status = 'succeeded'
+    and p.paid_at >= v_from
+    and p.paid_at <  v_to;
+
+  v_paid_revenue := round(v_paid_revenue, 2);
+
+  -- -----------------------------------------------------------------
+  -- Refunded amount: succeeded refunds created in range.
+  -- -----------------------------------------------------------------
+  select coalesce(sum(rf.amount), 0)
+    into v_refunded
+  from public.refunds rf
+  join public.orders o on o.id = rf.order_id
+  where o.restaurant_id = v_restaurant_id
+    and rf.status = 'succeeded'
+    and rf.created_at >= v_from
+    and rf.created_at <  v_to;
+
+  v_refunded := round(v_refunded, 2);
+
+  -- -----------------------------------------------------------------
+  -- Top 10 items by revenue (snapshot name), not cancelled, in range.
+  -- -----------------------------------------------------------------
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'name',     t.item_name_snapshot,
+        'quantity', t.quantity,
+        'revenue',  round(t.revenue, 2)::text
+      )
+      order by t.revenue desc, t.item_name_snapshot
+    ),
+    '[]'::jsonb
+  )
+  into v_top_items
+  from (
+    select
+      oi.item_name_snapshot,
+      sum(oi.quantity)::int as quantity,
+      sum(oi.subtotal)      as revenue
+    from public.order_items oi
+    join public.orders o on o.id = oi.order_id
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by oi.item_name_snapshot
+    order by revenue desc, oi.item_name_snapshot
+    limit 10
+  ) t;
+
+  -- -----------------------------------------------------------------
+  -- Popular items: top 10 by quantity sold for kitchen prep. Revenue
+  -- breaks quantity ties so the order is deterministic.
+  -- -----------------------------------------------------------------
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'name',     t.item_name_snapshot,
+        'quantity', t.quantity,
+        'revenue',  round(t.revenue, 2)::text
+      )
+      order by t.quantity desc, t.revenue desc, t.item_name_snapshot
+    ),
+    '[]'::jsonb
+  )
+  into v_popular_items
+  from (
+    select
+      oi.item_name_snapshot,
+      sum(oi.quantity)::int as quantity,
+      sum(oi.subtotal)      as revenue
+    from public.order_items oi
+    join public.orders o on o.id = oi.order_id
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by oi.item_name_snapshot
+    order by quantity desc, revenue desc, oi.item_name_snapshot
+    limit 10
+  ) t;
+
+  -- -----------------------------------------------------------------
+  -- Busy hours: orders per hour-of-day in the restaurant timezone,
+  -- zero-filled for all 24 hours so the chart never shifts.
+  -- -----------------------------------------------------------------
+  select jsonb_agg(
+    jsonb_build_object(
+      'hour',   gs.hr,
+      'orders', coalesce(h.orders, 0)
+    )
+    order by gs.hr
+  )
+  into v_busy_hours
+  from generate_series(0, 23) as gs(hr)
+  left join (
+    select
+      extract(hour from (o.created_at at time zone v_timezone))::int as hr,
+      count(*)::int as orders
+    from public.orders o
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by 1
+  ) h on h.hr = gs.hr;
+
+  -- -----------------------------------------------------------------
+  -- Busy days: orders per day-of-week in the restaurant timezone,
+  -- zero-filled for Sunday..Saturday so the chart never shifts.
+  -- -----------------------------------------------------------------
+  select jsonb_agg(
+    jsonb_build_object(
+      'day',    gs.dow,
+      'orders', coalesce(d.orders, 0)
+    )
+    order by gs.dow
+  )
+  into v_busy_days
+  from generate_series(0, 6) as gs(dow)
+  left join (
+    select
+      extract(dow from (o.created_at at time zone v_timezone))::int as dow,
+      count(*)::int as orders
+    from public.orders o
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by 1
+  ) d on d.dow = gs.dow;
+
+  return jsonb_build_object(
+    'currency',        v_currency,
+    'from',            v_from,
+    'to',              v_to,
+    'order_count',     v_order_count,
+    'gross_revenue',   v_gross_revenue::text,
+    'paid_revenue',    v_paid_revenue::text,
+    'refunded_amount', v_refunded::text,
+    'aov',             v_aov::text,
+    'top_items',       v_top_items,
+    'popular_items',   v_popular_items,
+    'busy_hours',      v_busy_hours,
+    'busy_days',       v_busy_days
+  );
+end;
+$$;
+
+-- Owners/managers only. On Supabase the default privileges grant EXECUTE
+-- directly to anon/authenticated, so revoke from those roles explicitly
+-- (same lesson as 0018) as well as PUBLIC.
+revoke all on function public.get_sales_report(timestamptz, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.get_sales_report(timestamptz, timestamptz)
+  to authenticated;
+
+comment on function public.get_sales_report(timestamptz, timestamptz) is
+  'Admin sales report for the caller''s restaurant. Owner/manager only; aggregates orders, payments, refunds, top items (revenue-led), popular items (quantity-led), busy hours and busy days server-side.';
+
+-- ---------------------------------------------------------------------
+-- End of migration
+-- ---------------------------------------------------------------------
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119080000_add_staff_role.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Add the staff role
+-- ---------------------------------------------------------------------
+-- New front-of-house role: full access to the staff workspace, but no admin
+-- or team-management access. Kept in its own migration because PostgreSQL
+-- enum values cannot be used reliably in the same transaction that adds them.
+-- =====================================================================
+
+alter type public.staff_role
+  add value if not exists 'staff';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119090000_role_permissions.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Role management rules
+-- ---------------------------------------------------------------------
+-- owner   : everything, including managers and owners.
+-- manager : everything except creating/editing/deleting managers or owners.
+-- staff   : full staff-app access; no admin or role management.
+-- kitchen : staff-app kitchen + order history only; no role management.
+--
+-- RLS already routes management through is_manager_of() (owner/manager only).
+-- These guards close the remaining role-granting holes.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.add_staff_by_email(
+  p_restaurant_id uuid,
+  p_email text,
+  p_role public.staff_role default 'staff'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_staff_id uuid;
+begin
+  if not public.is_manager_of(p_restaurant_id) then
+    raise exception 'Only an owner or manager can add team members'
+      using errcode = '42501';
+  end if;
+
+  if p_role = 'owner' then
+    raise exception 'Owner access cannot be granted from this screen'
+      using errcode = '42501';
+  end if;
+
+  if p_role = 'manager' and not public.is_owner_of(p_restaurant_id) then
+    raise exception 'Only the owner can add managers'
+      using errcode = '42501';
+  end if;
+
+  select p.id into v_user_id
+  from public.profiles p
+  where lower(p.email) = lower(btrim(p_email));
+
+  if v_user_id is null then
+    raise exception 'No account found for %. Ask them to sign up to QuickTab first.', btrim(p_email)
+      using errcode = 'P0002';
+  end if;
+
+  if v_user_id = auth.uid() then
+    raise exception 'You cannot change your own membership from this screen'
+      using errcode = '42501';
+  end if;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (p_restaurant_id, v_user_id, p_role, true)
+  on conflict (restaurant_id, user_id) do update
+    set role = excluded.role,
+        is_active = true
+  returning id into v_staff_id;
+
+  return v_staff_id;
+end;
+$$;
+
+revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from public;
+revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from anon;
+grant execute on function public.add_staff_by_email(uuid, text, public.staff_role) to authenticated;
+
+-- Direct INSERT guard: managers may only add kitchen/staff rows.
+create or replace function public.guard_staff_insert()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if public.is_privileged_caller() then
+    return new;
+  end if;
+
+  if new.role = 'owner' and not public.is_owner_of(new.restaurant_id) then
+    raise exception 'Only the restaurant owner can grant owner access'
+      using errcode = '42501';
+  end if;
+
+  if new.role = 'manager' and not public.is_owner_of(new.restaurant_id) then
+    raise exception 'Only the restaurant owner can grant manager access'
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_staff_insert on public.restaurant_staff;
+create trigger guard_staff_insert
+  before insert on public.restaurant_staff
+  for each row execute function public.guard_staff_insert();
+
+-- UPDATE/DELETE guard: owners are owner-only, managers are owner-only, and
+-- kitchen/staff cannot manage anyone (RLS blocks them first).
+create or replace function public.guard_staff_management()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_privileged      boolean;
+  v_active_owners   int;
+begin
+  v_privileged :=
+    auth.role() = 'service_role'
+    or session_user in ('postgres', 'supabase_admin');
+
+  if v_privileged then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  -- Owner rows may only be managed by the owner.
+  if (tg_op = 'DELETE' and old.role = 'owner')
+     or (tg_op = 'UPDATE' and (old.role = 'owner' or new.role = 'owner')) then
+    if not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Only the restaurant owner can change or remove an owner row'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    -- The last active owner must remain active and keep the owner role.
+    if old.role = 'owner'
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
+      select count(*)
+        into v_active_owners
+      from public.restaurant_staff
+      where restaurant_id = old.restaurant_id
+        and role = 'owner'
+        and is_active;
+
+      if v_active_owners <= 1 then
+        raise exception 'The last active owner cannot be deactivated or demoted'
+          using errcode = '42501';
+      end if;
+    end if;
+
+    -- Nobody changes their own role or active status through the API.
+    if old.user_id = auth.uid()
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
+      raise exception 'You cannot change your own access'
+        using errcode = '42501';
+    end if;
+
+    -- Managers cannot manage peer managers.
+    if old.role = 'manager'
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active)
+       and not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Managers cannot manage other managers'
+        using errcode = '42501';
+    end if;
+
+    -- Managers cannot promote kitchen/staff members into manager.
+    if new.role = 'manager'
+       and old.role is distinct from 'manager'
+       and not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Only the restaurant owner can grant manager access'
+        using errcode = '42501';
+    end if;
+
+    return new;
+  end if;
+
+  -- DELETE: managers cannot remove peer managers.
+  if old.role = 'manager' and not public.is_owner_of(old.restaurant_id) then
+    raise exception 'Managers cannot manage other managers'
+      using errcode = '42501';
+  end if;
+
+  return old;
+end;
+$$;
+
+drop trigger if exists guard_staff_management on public.restaurant_staff;
+create trigger guard_staff_management
+  before update or delete on public.restaurant_staff
+  for each row execute function public.guard_staff_management();
+
+comment on function public.guard_staff_management() is
+  'Owner rows and manager grants are owner-only; managers may manage staff/kitchen rows, while staff/kitchen cannot manage roles.';
 
 -- ===========================================================================
 -- Source: supabase/migrations/0020_restaurant_plans.sql

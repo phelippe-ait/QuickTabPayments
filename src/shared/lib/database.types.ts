@@ -805,6 +805,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_system: boolean
           location_label: string | null
           qr_token: string
           restaurant_id: string
@@ -816,6 +817,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_system?: boolean
           location_label?: string | null
           qr_token?: string
           restaurant_id: string
@@ -827,6 +829,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_system?: boolean
           location_label?: string | null
           qr_token?: string
           restaurant_id?: string
@@ -955,6 +958,10 @@ export type Database = {
         Args: { p_token: string }
         Returns: Json
       }
+      ensure_pickup_table: {
+        Args: { p_restaurant_id: string }
+        Returns: string
+      }
       get_sales_report: {
         Args: { p_from: string | null; p_to: string | null }
         Returns: Json
@@ -1039,7 +1046,7 @@ export type Database = {
       payment_status: "pending" | "succeeded" | "failed" | "refunded"
       refund_status: "requested" | "succeeded" | "failed"
       restaurant_plan: "basic" | "standard" | "premium"
-      staff_role: "owner" | "manager" | "kitchen"
+      staff_role: "owner" | "manager" | "staff" | "kitchen"
       table_status: "available" | "occupied" | "needs_cleaning"
     }
     CompositeTypes: {
@@ -1074,6 +1081,7 @@ export type Order = Tables<"orders">;
 export type OrderItem = Tables<"order_items">;
 export type Payment = Tables<"payments">;
 export type OrderStatus = Enums<"order_status">;
+export type TableStatus = Enums<"table_status">;
 export type PaymentStatus = Enums<"payment_status">;
 export type PaymentMethodType = Enums<"payment_method_type">;
 export type Refund = Tables<"refunds">;

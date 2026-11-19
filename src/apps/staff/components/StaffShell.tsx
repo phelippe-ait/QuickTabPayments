@@ -6,6 +6,7 @@ import { ConnectionBanner } from "./ConnectionBanner"
 import { RESERVATIONS_ENABLED } from "../flags"
 import type { ConnectionState } from "../hooks/connectionState"
 import type { View } from "../types"
+import type { StaffRole } from "@shared/lib/database.types"
 
 type StaffShellProps = {
   view: View
@@ -14,6 +15,7 @@ type StaffShellProps = {
   overlays?: ReactNode
   userName?: string
   restaurantName?: string
+  role: StaffRole
   roleLabel?: string
   onSignOut?: () => void
   connectionState: ConnectionState
@@ -39,10 +41,12 @@ export function StaffShell({
   overlays,
   userName = "Staff member",
   restaurantName = "Your restaurant",
+  role,
   roleLabel = "",
   onSignOut,
   connectionState,
 }: StaffShellProps) {
+  const kitchenOnly = role === "kitchen"
   const initials = userName
     .trim()
     .split(/\s+/)
@@ -72,11 +76,15 @@ export function StaffShell({
           </div>
         </div>
         <nav className="mt-12 space-y-1.5" aria-label="Staff sections">
-          <NavButton active={view === "tables"} icon="grid" label="Table overview" onClick={() => onViewChange("tables")} />
-          <NavButton active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
+          {!kitchenOnly && (
+            <>
+              <NavButton active={view === "tables"} icon="grid" label="Table overview" onClick={() => onViewChange("tables")} />
+              <NavButton active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
+            </>
+          )}
           <NavButton active={view === "kitchen"} icon="kitchen" label="Kitchen" onClick={() => onViewChange("kitchen")} />
           <NavButton active={view === "history"} icon="receipt" label="Order history" onClick={() => onViewChange("history")} />
-          {RESERVATIONS_ENABLED && (
+          {!kitchenOnly && RESERVATIONS_ENABLED && (
             <NavButton active={view === "reservations"} icon="calendar" label="Reservations" onClick={() => onViewChange("reservations")} />
           )}
         </nav>
@@ -135,11 +143,15 @@ export function StaffShell({
           Developed by QuickTab Payments Team
         </footer>
         <nav aria-label="Staff sections" className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-line bg-paper lg:hidden">
-          <MobileNav active={view === "tables"} icon="grid" label="Tables" onClick={() => onViewChange("tables")} />
-          <MobileNav active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
+          {!kitchenOnly && (
+            <>
+              <MobileNav active={view === "tables"} icon="grid" label="Tables" onClick={() => onViewChange("tables")} />
+              <MobileNav active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
+            </>
+          )}
           <MobileNav active={view === "kitchen"} icon="kitchen" label="Kitchen" onClick={() => onViewChange("kitchen")} />
           <MobileNav active={view === "history"} icon="receipt" label="History" onClick={() => onViewChange("history")} />
-          {RESERVATIONS_ENABLED && (
+          {!kitchenOnly && RESERVATIONS_ENABLED && (
             <MobileNav active={view === "reservations"} icon="calendar" label="Bookings" onClick={() => onViewChange("reservations")} />
           )}
         </nav>

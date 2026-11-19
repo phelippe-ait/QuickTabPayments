@@ -11,6 +11,7 @@ import {
 import { AdminErrorBoundary } from "./components/AdminErrorBoundary"
 import { AdminShell } from "./components/layout/AdminShell"
 import { RequireStaff } from "./features/auth/AdminGate"
+import { RequireRole } from "./components/RequireRole"
 import { ProfileDialog } from "./features/profile/ProfileDialog"
 import { AdminUiProvider, useAdminUi } from "./hooks/AdminUiProvider"
 import type { Section } from "./types"
@@ -20,7 +21,13 @@ export default function App() {
     <AdminErrorBoundary>
       <RestaurantProvider>
         <RequireStaff>
-          <AdminLayout />
+          <RequireRole
+            roles={["owner", "manager"]}
+            fallbackTo="/staff"
+            fallbackLabel="Go to staff workspace"
+          >
+            <AdminLayout />
+          </RequireRole>
         </RequireStaff>
       </RestaurantProvider>
     </AdminErrorBoundary>
@@ -46,10 +53,14 @@ function AdminLayoutContent() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
 
-  const sections: Section[] =
-    role === "kitchen"
-      ? ["orders"]
-      : ["catalog", "tables", "users", "orders", "reports", "settings"]
+  const sections: Section[] = [
+    "catalog",
+    "tables",
+    "users",
+    "orders",
+    "reports",
+    "settings",
+  ]
   const userName = getProfileName(profile, user?.email)
 
   const requestSignOut = () => {

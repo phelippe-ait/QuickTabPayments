@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   countOrdersForTables,
+  fetchOpenOrdersByTable,
   reduceOpenOrdersByTable,
   sanitiseOrderSearch,
 } from "./orders"
@@ -17,7 +18,7 @@ const mocks = vi.hoisted(() => {
   function builder(table: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {}
-    for (const method of ["select", "in"]) {
+    for (const method of ["select", "in", "eq", "order"]) {
       chain[method] = (...args: unknown[]) => {
         calls.push({ table, method, args })
         return chain
@@ -135,6 +136,22 @@ describe("reduceOpenOrdersByTable", () => {
     ])
 
     expect(byTable).toEqual({})
+  })
+})
+
+describe("fetchOpenOrdersByTable", () => {
+  beforeEach(() => mocks.reset())
+
+  it("only counts paid/confirmed orders, never pending checkouts", async () => {
+    mocks.enqueue({ data: [], error: null })
+
+    await fetchOpenOrdersByTable("restaurant-1")
+
+    expect(mocks.calls).toContainEqual({
+      table: "orders",
+      method: "in",
+      args: ["status", ["confirmed", "preparing", "ready"]],
+    })
   })
 })
 

@@ -102,7 +102,6 @@ function HomeRoute() {
 }
 
 const ownerOrManager = ["owner", "manager"] as const;
-const anyStaff = ["owner", "manager", "kitchen"] as const;
 
 /**
  * Admin route tree. Exported so tests can build a memory router from the same
@@ -141,7 +140,7 @@ export const adminRoutes: RouteObject[] = [
       {
         path: "orders",
         element: withSuspense(
-          <RequireRole roles={[...anyStaff]}>
+          <RequireRole roles={[...ownerOrManager]}>
             <AdminOrdersPage />
           </RequireRole>,
         ),
@@ -149,7 +148,7 @@ export const adminRoutes: RouteObject[] = [
       {
         path: "orders/:id",
         element: withSuspense(
-          <RequireRole roles={[...anyStaff]}>
+          <RequireRole roles={[...ownerOrManager]}>
             <AdminOrderDetailPage />
           </RequireRole>,
         ),

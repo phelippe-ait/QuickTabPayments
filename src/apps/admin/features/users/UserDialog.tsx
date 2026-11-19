@@ -39,10 +39,12 @@ export function UserModal({
       })
     : null
   const roleChoices = (
-    editing ? assignableRoles(viewerRole) : assignableRoles(viewerRole).filter((role) => role !== "owner")
+    editing
+      ? [...new Set([...assignableRoles(viewerRole), ...(member ? [member.role] : [])])]
+      : assignableRoles(viewerRole).filter((role) => role !== "owner")
   ) as StaffRole[]
 
-  const [role, setRole] = useState<StaffRole>(member?.role ?? "manager")
+  const [role, setRole] = useState<StaffRole>(member?.role ?? "staff")
   const [isActive, setIsActive] = useState(member?.isActive ?? true)
   const [email, setEmail] = useState("")
   const [pending, setPending] = useState(false)

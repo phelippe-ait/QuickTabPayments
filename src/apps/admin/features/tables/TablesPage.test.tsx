@@ -64,7 +64,9 @@ const occupied: TableVM = {
   locationLabel: "Indoors",
   seats: 4,
   isActive: true,
+  isSystem: false,
   qrToken: "9f3ab12c7d44e0a8",
+  status: "occupied",
   openOrder: {
     orderNumber: "1002",
     status: "preparing",
@@ -78,8 +80,62 @@ const free: TableVM = {
   locationLabel: "Pick-up",
   seats: null,
   isActive: true,
+  isSystem: false,
   qrToken: "aaaaaaaaaaaaaaaa",
+  status: "available",
   openOrder: null,
+}
+
+const seatedWithoutOrder: TableVM = {
+  id: "table-3",
+  number: "T03",
+  locationLabel: "Indoors",
+  seats: 2,
+  isActive: true,
+  isSystem: false,
+  qrToken: "bbbbbbbbbbbbbbbb",
+  status: "occupied",
+  openOrder: null,
+}
+
+const needsCleaning: TableVM = {
+  id: "table-4",
+  number: "T04",
+  locationLabel: "Indoors",
+  seats: 4,
+  isActive: true,
+  isSystem: false,
+  qrToken: "cccccccccccccccc",
+  status: "needs_cleaning",
+  openOrder: null,
+}
+
+const pickup: TableVM = {
+  id: "pickup-1",
+  number: "Pick-up",
+  locationLabel: "Counter",
+  seats: null,
+  isActive: true,
+  isSystem: true,
+  qrToken: "eeeeeeeeeeeeeeee",
+  status: "available",
+  openOrder: null,
+}
+
+const freedByStaff: TableVM = {
+  id: "table-5",
+  number: "T05",
+  locationLabel: "Indoors",
+  seats: 4,
+  isActive: true,
+  isSystem: false,
+  qrToken: "dddddddddddddddd",
+  status: "available",
+  openOrder: {
+    orderNumber: "1003",
+    status: "confirmed",
+    startedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+  },
 }
 
 describe("TablesPage", () => {
@@ -105,7 +161,7 @@ describe("TablesPage", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument()
   })
 
-  it("derives occupancy from open orders and keeps seats real", async () => {
+  it("shows the staff-managed occupancy and keeps seats real", async () => {
     mocks.rows = [occupied, free]
     render(<TablesPage />)
 
@@ -117,6 +173,42 @@ describe("TablesPage", () => {
 
     const seats = screen.getAllByText("—")
     expect(seats.length).toBeGreaterThan(0)
+  })
+
+  it("shows staff-seated and cleaning tables without an open order", () => {
+    mocks.rows = [seatedWithoutOrder, needsCleaning]
+    render(<TablesPage />)
+
+    expect(screen.getByText("Occupied")).toBeInTheDocument()
+    expect(screen.getByText("Seated by staff · no order yet")).toBeInTheDocument()
+    expect(screen.getByText("Needs cleaning")).toBeInTheDocument()
+    expect(screen.getByText("Awaiting cleaning")).toBeInTheDocument()
+  })
+
+  it("lets a staff-marked free table win over an old open order", () => {
+    mocks.rows = [freedByStaff]
+    render(<TablesPage />)
+
+    expect(screen.getByText("Free")).toBeInTheDocument()
+    expect(screen.queryByText("#1003")).not.toBeInTheDocument()
+  })
+
+  it("shows the pickup table as a system table with no edit or delete", () => {
+    mocks.rows = [pickup]
+    render(<TablesPage />)
+
+    expect(screen.getAllByText("Counter").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Pick-up").length).toBeGreaterThan(0)
+    expect(screen.getByText("System")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /disable counter \/ pick-up/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.queryByText("Free")).not.toBeInTheDocument()
+    expect(screen.queryByText("Occupied")).not.toBeInTheDocument()
+    expect(screen.queryByText("Needs cleaning")).not.toBeInTheDocument()
   })
 
   it("offers deactivation instead of deleting a table with past orders", async () => {

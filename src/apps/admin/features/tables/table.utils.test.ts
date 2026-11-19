@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { formatElapsed, normaliseSeats } from "./table.utils"
+import {
+  formatElapsed,
+  normaliseSeats,
+  tableOccupancyState,
+} from "./table.utils"
 
 describe("formatElapsed", () => {
   const now = new Date("2026-10-21T10:00:00Z").getTime()
@@ -12,6 +16,14 @@ describe("formatElapsed", () => {
 
   it("copes with an invalid timestamp", () => {
     expect(formatElapsed("not-a-date", now)).toBe("just now")
+  })
+})
+
+describe("tableOccupancyState", () => {
+  it("maps the staff-managed table status directly", () => {
+    expect(tableOccupancyState("occupied")).toBe("occupied")
+    expect(tableOccupancyState("needs_cleaning")).toBe("needs_cleaning")
+    expect(tableOccupancyState("available")).toBe("free")
   })
 })
 

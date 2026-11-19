@@ -2,6 +2,7 @@ import type {
   OrderStatus,
   PaymentStatus,
   StaffRole,
+  TableStatus,
 } from "@shared/lib/database.types";
 
 /**
@@ -36,7 +37,11 @@ export type TableVM = {
   locationLabel: string | null;
   seats: number | null;
   isActive: boolean;
+  /** Permanent counter/pick-up table: enable/disable only. */
+  isSystem: boolean;
   qrToken: string;
+  /** Staff-managed operational state from `public.tables.status`. */
+  status: TableStatus;
   openOrder: {
     orderNumber: string;
     status: OrderStatus;

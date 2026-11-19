@@ -47,6 +47,13 @@ const menu: OrderingMenuCategory[] = [
 
 const tables = [
   {
+    id: "pickup-1",
+    tableNumber: "Pick-up",
+    isSystem: true,
+    status: "available" as const,
+    occupants: 0,
+  },
+  {
     id: "table-1",
     tableNumber: "1",
     status: "available" as const,
@@ -122,7 +129,7 @@ describe("NewOrderWorkspace", () => {
 
     await waitFor(() =>
       expect(mocks.createStaffOrder).toHaveBeenCalledWith({
-        tableId: null,
+        tableId: "pickup-1",
         customerName: "Ada",
         notes: "Soy milk allergy",
         items: [{ menu_item_id: "latte", quantity: 1 }],

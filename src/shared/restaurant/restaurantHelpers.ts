@@ -3,6 +3,7 @@ import type { Profile, StaffRole } from "@shared/lib/database.types";
 export const roleLabels: Record<StaffRole, string> = {
   owner: "Owner",
   manager: "Manager",
+  staff: "Staff",
   kitchen: "Kitchen",
 };
 

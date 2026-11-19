@@ -17,6 +17,7 @@ import {
 } from "./tableStatus"
 
 function tableLabel(table: Table): string {
+  if (table.isSystem) return "Counter / Pick-up"
   return table.tableNumber ?? String(table.id).padStart(2, "0")
 }
 
@@ -44,6 +45,7 @@ export function TableCard({
   const { status } = table
   const occupied = status === "occupied"
   const label = tableLabel(table)
+  const locationLabel = table.isSystem ? label : `table ${label}`
   const actionLabel = tableStatusActionLabels[status]
   const nextStatus = nextTableStatus(status)
 
@@ -62,13 +64,15 @@ export function TableCard({
     >
       <button
         type="button"
-        aria-label={`Open table ${label} details (${tableStatusLabels[status]})`}
+        aria-label={`Open ${locationLabel} details (${tableStatusLabels[status]})`}
         className="flex w-full flex-1 flex-col text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
         onClick={() => onSelect(table)}
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className={`${styles["eyebrow"]}`}>Table</p>
+            <p className={`${styles["eyebrow"]}`}>
+              {table.isSystem ? "Service point" : "Table"}
+            </p>
             <p className="mt-0.5 font-serif text-4xl">{label}</p>
           </div>
           <StatusPill tone={tableStatusTone(status)}>
@@ -127,7 +131,7 @@ export function TableCard({
 
       <button
         type="button"
-        aria-label={`${actionLabel} at table ${label}`}
+        aria-label={`${actionLabel} at ${locationLabel}`}
         aria-busy={isUpdating}
         className={cn(
           "mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:opacity-60",
@@ -157,7 +161,6 @@ export function TableEditor({
   onSave: (table: Table) => void
 }) {
   const [status, setStatus] = useState<TableStatus>(table.status)
-  const [guest, setGuest] = useState(table.guest ?? "")
   const [occupants, setOccupants] = useState(table.occupants)
   const occupied = status === "occupied"
   const panelRef = useDialogFocus<HTMLElement>(onClose)
@@ -167,7 +170,7 @@ export function TableEditor({
     onSave({
       ...table,
       status,
-      guest: occupied ? guest.trim() || "Walk-in guest" : undefined,
+      guest: occupied ? table.guest : undefined,
       occupants: occupied ? Math.max(1, Math.min(table.seats ?? Infinity, occupants)) : 0,
       since: occupied ? (table.since ?? "Just now") : undefined,
       total: occupied ? (table.total ?? 0) : undefined,
@@ -246,16 +249,16 @@ export function TableEditor({
             occupied ? "" : "pointer-events-none opacity-40"
           }`}
         >
-          <label className="block">
-            <span className={`${styles["detail-label"]}`}>Guest name</span>
-            <input
-              className="mt-2.5 w-full rounded-xl border border-line-strong bg-white px-4 py-3 text-sm outline-none transition placeholder:text-placeholder focus:border-berry focus:ring-2 focus:ring-berry/10"
-              disabled={!occupied}
-              onChange={(event) => setGuest(event.target.value)}
-              placeholder="Enter guest or party name"
-              value={guest}
-            />
-          </label>
+          <div>
+            <span className={`${styles["detail-label"]}`}>Guest</span>
+            <p className="mt-2.5 rounded-xl border border-line bg-cream-2 px-4 py-3 text-sm">
+              {table.guest || "No open order"}
+            </p>
+            <span className="mt-1.5 block text-[11px] leading-relaxed text-muted">
+              Guest names come from the table&apos;s latest order and update
+              automatically when a new order is placed.
+            </span>
+          </div>
 
           <div>
             <div className="flex items-center justify-between">
@@ -349,7 +352,10 @@ export function TablesWorkspace({
 }) {
   const [announcement, setAnnouncement] = useState("")
   const firstName = userName.trim().split(/\s+/)[0] || "there"
-  const available = tableList.filter(
+  // Never render the counter / pick-up service point on the floor plan.
+  const floorTables = tableList.filter((table) => !table.isSystem)
+  const visibleTables = filteredTables.filter((table) => !table.isSystem)
+  const available = floorTables.filter(
     (table) => table.status === "available",
   ).length
 
@@ -414,14 +420,14 @@ export function TablesWorkspace({
               >
                 {item === "all" ? "All" : tableStatusLabels[item]}{" "}
                 {item !== "all" &&
-                  `(${tableList.filter((table) => table.status === item).length})`}
+                  `(${floorTables.filter((table) => table.status === item).length})`}
               </button>
             ),
           )}
         </div>
         <p className="text-xs font-bold uppercase tracking-[0.13em] text-muted">
-          Main dining room · {tableList.length}{" "}
-          {tableList.length === 1 ? "table" : "tables"}
+          Main dining room · {floorTables.length}{" "}
+          {floorTables.length === 1 ? "table" : "tables"}
         </p>
       </div>
 
@@ -443,18 +449,18 @@ export function TablesWorkspace({
             <Skeleton key={row} className="h-[210px] rounded-[22px]" />
           ))}
         </div>
-      ) : filteredTables.length === 0 ? (
+      ) : visibleTables.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-line bg-cream-3 px-6 py-20 text-center">
           <h2 className="font-serif text-2xl">No tables to show</h2>
           <p className="mt-1 text-sm text-muted">
-            {tableList.length === 0
+            {floorTables.length === 0
               ? "Add tables in the admin workspace to start taking orders."
               : "No tables match this filter."}
           </p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredTables.map((table) => (
+          {visibleTables.map((table) => (
             <TableCard
               key={table.id}
               currency={currency}
