@@ -78,6 +78,56 @@ export function menuItemImagePath(
   return `${restaurantId}/${itemId}.${extensionFor(file)}`;
 }
 
+const PUBLIC_OBJECT_MARKER = "/storage/v1/object/public/";
+
+/**
+ * Recover the bucket + object path from a Supabase public URL so the admin can
+ * clean up the stored file when the image is removed or replaced. Returns null
+ * for external or malformed URLs (nothing to delete in those cases).
+ */
+export function storageObjectFromPublicUrl(
+  url: string,
+): { bucket: "restaurant-assets" | "menu-items"; path: string } | null {
+  try {
+    const parsed = new URL(url);
+    const index = parsed.pathname.indexOf(PUBLIC_OBJECT_MARKER);
+    if (index < 0) return null;
+
+    const remainder = parsed.pathname.slice(
+      index + PUBLIC_OBJECT_MARKER.length,
+    );
+    const [bucket, ...segments] = remainder.split("/");
+    if (
+      (bucket !== "restaurant-assets" && bucket !== "menu-items") ||
+      segments.length === 0
+    ) {
+      return null;
+    }
+
+    return {
+      bucket,
+      path: segments.map((segment) => decodeURIComponent(segment)).join("/"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort deletion: a stale object must never block saving the form. */
+export async function removeStoredImage(
+  publicUrl: string | null | undefined,
+): Promise<void> {
+  if (!publicUrl) return;
+  const target = storageObjectFromPublicUrl(publicUrl);
+  if (!target) return;
+
+  const client = requireSupabase();
+  const { error } = await client.storage.from(target.bucket).remove([target.path]);
+  if (error) {
+    console.error("Could not remove the stored image", error);
+  }
+}
+
 async function uploadPublicObject(
   bucket: "restaurant-assets" | "menu-items",
   path: string,

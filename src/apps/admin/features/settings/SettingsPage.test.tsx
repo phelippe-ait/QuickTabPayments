@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   role: "owner" as "owner" | "manager" | "staff" | "kitchen",
   save: vi.fn(),
   uploadBranding: vi.fn(),
+  removeBranding: vi.fn(),
   notify: vi.fn(),
+  confirm: vi.fn(),
   refetch: vi.fn(),
   saveError: null as Error | null,
   findAddressMatches: vi.fn(),
@@ -40,7 +42,11 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
 }));
 
 vi.mock("../../hooks/AdminUiProvider", () => ({
-  useAdminUi: () => ({ notify: mocks.notify, notifyError: vi.fn(), confirm: vi.fn() }),
+  useAdminUi: () => ({
+    notify: mocks.notify,
+    notifyError: vi.fn(),
+    confirm: mocks.confirm,
+  }),
 }));
 
 vi.mock("../../hooks/useRestaurantSettings", () => ({
@@ -51,10 +57,13 @@ vi.mock("../../hooks/useRestaurantSettings", () => ({
     refetch: mocks.refetch,
     save: mocks.save,
     uploadBranding: mocks.uploadBranding,
+    removeBranding: mocks.removeBranding,
     isSaving: false,
     isUploading: false,
+    isRemoving: false,
     saveError: mocks.saveError,
     uploadError: null,
+    removeError: null,
     location: mocks.location,
     isLocationPending: false,
     locationError: null,
@@ -70,7 +79,9 @@ describe("SettingsPage", () => {
     mocks.role = "owner";
     mocks.save.mockClear();
     mocks.uploadBranding.mockClear();
+    mocks.removeBranding.mockClear();
     mocks.notify.mockClear();
+    mocks.confirm.mockClear();
     mocks.saveError = null;
     mocks.location = null;
     mocks.findAddressMatches.mockReset();
@@ -84,6 +95,21 @@ describe("SettingsPage", () => {
       writable: true,
       value: vi.fn(),
     });
+  });
+
+  it("removes the current logo after confirmation", () => {
+    mocks.restaurant.logo_url = "https://cdn.test/logo.webp";
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove logo/i }));
+
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+    const confirmation = mocks.confirm.mock.calls[0][0] as {
+      onConfirm: () => void;
+    };
+    confirmation.onConfirm();
+
+    expect(mocks.removeBranding).toHaveBeenCalledWith("logo");
   });
 
   it("opens the cropper instead of uploading the raw file", () => {

@@ -60,7 +60,7 @@ type SettingsForm = {
 
 export function SettingsPage() {
   const { restaurant, role } = useRestaurant();
-  const { notify, notifyError } = useAdminUi();
+  const { notify, notifyError, confirm } = useAdminUi();
   const restaurantId = restaurant?.id ?? "";
   const settings = useRestaurantSettings(restaurantId, {
     onSaved: notify,
@@ -172,6 +172,16 @@ export function SettingsPage() {
     }
     setBrandingError("");
     setCropRequest({ kind, file });
+  };
+
+  const handleRemoveBranding = (kind: RestaurantAssetKind) => {
+    confirm({
+      title: `Remove ${kind === "logo" ? "logo" : "cover image"}?`,
+      description:
+        "The current image will be removed and the default will show until you upload another.",
+      actionLabel: "Remove image",
+      onConfirm: () => settings.removeBranding(kind),
+    });
   };
 
   const removeSavedLocation = () => {
@@ -568,8 +578,10 @@ export function SettingsPage() {
               imageUrl={source.logo_url}
               alt="Current restaurant logo"
               accept={IMAGE_ACCEPT}
-              disabled={settings.isUploading}
+              disabled={settings.isUploading || settings.isRemoving}
+              removing={settings.isRemoving}
               onFile={(file) => handleUpload("logo", file)}
+              onRemove={() => handleRemoveBranding("logo")}
             />
             <BrandingField
               label="Cover image"
@@ -578,14 +590,18 @@ export function SettingsPage() {
               imageUrl={source.cover_image_url}
               alt="Current restaurant cover"
               accept={IMAGE_ACCEPT}
-              disabled={settings.isUploading}
+              disabled={settings.isUploading || settings.isRemoving}
+              removing={settings.isRemoving}
               onFile={(file) => handleUpload("cover", file)}
+              onRemove={() => handleRemoveBranding("cover")}
             />
           </div>
 
-          {(brandingError || settings.uploadError) && (
+          {(brandingError || settings.uploadError || settings.removeError) && (
             <p className="mt-4 text-[12px] text-danger" role="alert">
-              {brandingError || settings.uploadError?.message}
+              {brandingError ||
+                settings.uploadError?.message ||
+                settings.removeError?.message}
             </p>
           )}
           {settings.isUploading && (
@@ -633,8 +649,10 @@ function BrandingField({
   alt,
   accept,
   disabled,
+  removing,
   variant,
   onFile,
+  onRemove,
 }: {
   label: string;
   description: string;
@@ -642,8 +660,10 @@ function BrandingField({
   alt: string;
   accept: string;
   disabled: boolean;
+  removing: boolean;
   variant: "logo" | "cover";
   onFile: (file: File | undefined) => void;
+  onRemove: () => void;
 }) {
   const isCover = variant === "cover";
 
@@ -683,21 +703,34 @@ function BrandingField({
           <small className="mb-3 block text-[10px] leading-[1.5] text-muted">
             {description}
           </small>
-          <label className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
-            {imageUrl ? "Replace" : "Upload"}
-            <input
-              className="sr-only"
-              type="file"
-              accept={accept}
-              aria-label={`${imageUrl ? "Replace" : "Upload"} ${label.toLowerCase()}`}
-              disabled={disabled}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                onFile(file);
-              }}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
+              {imageUrl ? "Replace" : "Upload"}
+              <input
+                className="sr-only"
+                type="file"
+                accept={accept}
+                aria-label={`${imageUrl ? "Replace" : "Upload"} ${label.toLowerCase()}`}
+                disabled={disabled}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  onFile(file);
+                }}
+              />
+            </label>
+            {imageUrl && (
+              <button
+                type="button"
+                className="inline-flex min-h-9 items-center justify-center rounded-lg px-2 text-[11px] font-bold text-danger transition-colors hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Remove ${label.toLowerCase()}`}
+                disabled={disabled || removing}
+                onClick={onRemove}
+              >
+                {removing ? "Removing…" : "Remove"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

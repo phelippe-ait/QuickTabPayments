@@ -5,7 +5,11 @@ import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
 import { ImageCropDialog } from "../../components/ImageCropDialog"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
-import { uploadMenuItemImage, validateImageSourceFile } from "@shared/lib/storage"
+import {
+  removeStoredImage,
+  uploadMenuItemImage,
+  validateImageSourceFile,
+} from "@shared/lib/storage"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import type { NewMenuItemInput } from "../../hooks/useMenu"
@@ -67,6 +71,7 @@ export function ItemModal({
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl ?? null)
   const [cropFile, setCropFile] = useState<File | null>(null)
+  const [removeImage, setRemoveImage] = useState(false)
   const [imageError, setImageError] = useState("")
   const [formError, setFormError] = useState("")
   const [pending, setPending] = useState(false)
@@ -91,7 +96,15 @@ export function ItemModal({
   const acceptCroppedImage = (cropped: File) => {
     setImageFile(cropped)
     setImagePreview(URL.createObjectURL(cropped))
+    setRemoveImage(false)
     setCropFile(null)
+  }
+
+  const handleRemoveImage = () => {
+    setImageError("")
+    setImageFile(null)
+    setImagePreview(null)
+    setRemoveImage(true)
   }
 
   const submit = async (event: FormEvent) => {
@@ -127,7 +140,7 @@ export function ItemModal({
     const savedAllergens = withCustomTags(allergens, customAllergens)
     const savedDietaryTags = withCustomTags(dietaryTags, customDietaryTags)
     const id = item?.id ?? crypto.randomUUID()
-    let imageUrl = item?.imageUrl ?? null
+    let imageUrl = removeImage ? null : (item?.imageUrl ?? null)
 
     try {
       if (imageFile) {
@@ -159,7 +172,13 @@ export function ItemModal({
             dietaryTags: savedDietaryTags,
           })
 
-      if (ok) onClose()
+      if (ok) {
+        // Removed or replaced with a different format: clean up the old file.
+        if (item?.imageUrl && item.imageUrl !== imageUrl) {
+          await removeStoredImage(item.imageUrl)
+        }
+        onClose()
+      }
     } catch (error) {
       setImageError(
         error instanceof Error ? error.message : "That image could not be uploaded.",
@@ -192,19 +211,36 @@ export function ItemModal({
                 <span className="mb-3 block text-[10px] leading-[1.5] font-normal text-muted">
                   Any photo works. You&apos;ll crop it to a square before upload; JPG, PNG, or WebP up to 20 MB.
                 </span>
-                <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
-                  Choose image
-                  <input
-                    className="sr-only"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    aria-label="Choose item image"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      event.target.value = ""
-                      chooseImage(file)
-                    }}
-                  />
+                <span className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
+                    Choose image
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      aria-label="Choose item image"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ""
+                        chooseImage(file)
+                      }}
+                    />
+                  </span>
+                  {imagePreview && (
+                    <button
+                      type="button"
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg px-2 text-[11px] font-bold text-danger transition-colors hover:bg-danger-soft"
+                      onClick={(event) => {
+                        // The whole image block is inside a <label>; keep the
+                        // remove action from also opening the file picker.
+                        event.preventDefault()
+                        event.stopPropagation()
+                        handleRemoveImage()
+                      }}
+                    >
+                      Remove image
+                    </button>
+                  )}
                 </span>
               </span>
             </span>

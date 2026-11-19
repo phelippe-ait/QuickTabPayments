@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import { ItemModal, SectionsModal } from "./CatalogDialogs"
+
+const storageMocks = vi.hoisted(() => ({
+  validateImageSourceFile: vi.fn(),
+  uploadMenuItemImage: vi.fn(),
+  removeStoredImage: vi.fn(async () => undefined),
+}))
+
+vi.mock("@shared/lib/storage", () => ({
+  validateImageSourceFile: storageMocks.validateImageSourceFile,
+  uploadMenuItemImage: storageMocks.uploadMenuItemImage,
+  removeStoredImage: storageMocks.removeStoredImage,
+}))
 
 vi.mock("../../hooks/AdminUiProvider", () => ({
   useAdminUi: () => ({
@@ -38,6 +50,10 @@ function submitForm() {
     .closest("form")
   fireEvent.submit(form!)
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 describe("ItemModal", () => {
   it("requires a name before creating an item", () => {
@@ -155,6 +171,40 @@ describe("ItemModal", () => {
     expect(
       screen.getByRole("heading", { name: /crop item image/i }),
     ).toBeInTheDocument()
+  })
+
+  it("removes the current image and cleans up the stored file", async () => {
+    const onUpdate = vi.fn(async () => true)
+    const onClose = vi.fn()
+    const itemWithImage = {
+      ...item,
+      imageUrl: "https://cdn.test/item.webp",
+    }
+
+    render(
+      <ItemModal
+        item={itemWithImage}
+        categories={categories}
+        restaurantId="restaurant-1"
+        onClose={onClose}
+        onCreate={vi.fn(async () => true)}
+        onUpdate={onUpdate}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: /remove image/i }))
+    submitForm()
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith(
+        "item-1",
+        expect.objectContaining({ image_url: null }),
+      ),
+    )
+    expect(storageMocks.removeStoredImage).toHaveBeenCalledWith(
+      "https://cdn.test/item.webp",
+    )
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
   it("rejects an invalid prep time", () => {

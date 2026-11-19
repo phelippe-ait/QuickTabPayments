@@ -4,6 +4,7 @@ import {
   IMAGE_SOURCE_MAX_BYTES,
   menuItemImagePath,
   restaurantAssetPath,
+  storageObjectFromPublicUrl,
   validateImageFile,
   validateImageSourceFile,
 } from "./storage";
@@ -70,6 +71,39 @@ describe("validateImageSourceFile", () => {
     ).toThrow(/empty/);
   });
 });
+
+describe("storageObjectFromPublicUrl", () => {
+  it("recovers the bucket and object path", () => {
+    expect(
+      storageObjectFromPublicUrl(
+        "https://abc.supabase.co/storage/v1/object/public/menu-items/r1/item-1.webp",
+      ),
+    ).toEqual({ bucket: "menu-items", path: "r1/item-1.webp" })
+    expect(
+      storageObjectFromPublicUrl(
+        "https://abc.supabase.co/storage/v1/object/public/restaurant-assets/r1/logo.png",
+      ),
+    ).toEqual({ bucket: "restaurant-assets", path: "r1/logo.png" })
+  })
+
+  it("ignores external and malformed URLs", () => {
+    expect(storageObjectFromPublicUrl("https://cdn.example.com/logo.png")).toBeNull()
+    expect(storageObjectFromPublicUrl("not a url")).toBeNull()
+    expect(
+      storageObjectFromPublicUrl(
+        "https://abc.supabase.co/storage/v1/object/public/other-bucket/logo.png",
+      ),
+    ).toBeNull()
+  })
+
+  it("decodes URL-encoded object names", () => {
+    expect(
+      storageObjectFromPublicUrl(
+        "https://abc.supabase.co/storage/v1/object/public/menu-items/r1/flat%20white.webp",
+      ),
+    ).toEqual({ bucket: "menu-items", path: "r1/flat white.webp" })
+  })
+})
 
 describe("storage paths", () => {
   it("derives the extension from the MIME type", () => {

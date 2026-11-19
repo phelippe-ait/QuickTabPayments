@@ -6,7 +6,11 @@ import {
   saveRestaurantLocation,
   updateRestaurant,
 } from "@shared/data/restaurants"
-import { uploadRestaurantAsset, type RestaurantAssetKind } from "@shared/lib/storage"
+import {
+  removeStoredImage,
+  uploadRestaurantAsset,
+  type RestaurantAssetKind,
+} from "@shared/lib/storage"
 import type { TablesUpdate } from "@shared/lib/database.types"
 
 type UseRestaurantSettingsOptions = {
@@ -81,17 +85,40 @@ export function useRestaurantSettings(
       kind: RestaurantAssetKind
       file: File
     }) => {
+      const previous =
+        kind === "logo" ? query.data?.logo_url : query.data?.cover_image_url
       const url = await uploadRestaurantAsset(restaurantId, kind, file)
-      return updateRestaurant(
+      const updated = await updateRestaurant(
         restaurantId,
         kind === "logo" ? { logo_url: url } : { cover_image_url: url },
       )
+      // Replacing with a different format leaves the old object behind.
+      if (previous && previous !== url) await removeStoredImage(previous)
+      return updated
     },
     onSuccess: (_data, variables) => {
       invalidate()
       options.onSaved?.(
         variables.kind === "logo" ? "Logo updated" : "Cover image updated",
       )
+    },
+    onError: (error: Error) => options.onError?.(error.message),
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: async (kind: RestaurantAssetKind) => {
+      const previous =
+        kind === "logo" ? query.data?.logo_url : query.data?.cover_image_url
+      const updated = await updateRestaurant(
+        restaurantId,
+        kind === "logo" ? { logo_url: null } : { cover_image_url: null },
+      )
+      await removeStoredImage(previous)
+      return updated
+    },
+    onSuccess: (_data, kind) => {
+      invalidate()
+      options.onSaved?.(kind === "logo" ? "Logo removed" : "Cover image removed")
     },
     onError: (error: Error) => options.onError?.(error.message),
   })
@@ -115,9 +142,12 @@ export function useRestaurantSettings(
     locationError: locationQuery.error,
     uploadBranding: (kind: RestaurantAssetKind, file: File) =>
       uploadMutation.mutate({ kind, file }),
+    removeBranding: (kind: RestaurantAssetKind) => removeMutation.mutate(kind),
     isSaving: saveMutation.isPending,
     isUploading: uploadMutation.isPending,
+    isRemoving: removeMutation.isPending,
     saveError: saveMutation.error,
     uploadError: uploadMutation.error,
+    removeError: removeMutation.error,
   }
 }
