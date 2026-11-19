@@ -28,6 +28,7 @@ vi.mock("./_lib/supabaseAdmin", () => {
   function tableResult(
     table: string,
     columns?: string,
+    statuses?: string[],
   ): { data: unknown; error: unknown } {
     if (table === "orders") {
       return { data: { id: "order-1", restaurant_id: "r1" }, error: null };
@@ -65,12 +66,15 @@ vi.mock("./_lib/supabaseAdmin", () => {
       return { data: mocks.state.line, error: null };
     }
     if (table === "refunds") {
-      return {
-        data: columns?.includes("quantity")
-          ? mocks.state.lineRefunds
-          : mocks.state.existingRefunds,
-        error: null,
-      };
+      const rows = columns?.includes("quantity")
+        ? mocks.state.lineRefunds
+        : mocks.state.existingRefunds;
+      // Mirror the SQL status filter so the cap check is exercised for real.
+      const filtered =
+        statuses && statuses.length > 0
+          ? rows.filter((row) => statuses.includes(String(row.status)))
+          : rows;
+      return { data: filtered, error: null };
     }
     return { data: null, error: null };
   }
@@ -78,15 +82,21 @@ vi.mock("./_lib/supabaseAdmin", () => {
   function readChain(table: string) {
     const chain = {
       columns: undefined as string | undefined,
+      statuses: undefined as string[] | undefined,
       select: (columns?: string) => {
         chain.columns = columns;
         return chain;
       },
       eq: () => chain,
-      in: () => chain,
-      maybeSingle: async () => tableResult(table, chain.columns),
+      in: (_column: string, values?: string[]) => {
+        chain.statuses = values;
+        return chain;
+      },
+      maybeSingle: async () => tableResult(table, chain.columns, chain.statuses),
       then: (resolve: (value: unknown) => unknown) =>
-        Promise.resolve(tableResult(table, chain.columns)).then(resolve),
+        Promise.resolve(tableResult(table, chain.columns, chain.statuses)).then(
+          resolve,
+        ),
     };
     return chain;
   }
@@ -277,7 +287,7 @@ describe("POST /api/refunds", () => {
 
   it("rejects a refund above the remaining payment balance", async () => {
     mocks.state.paymentAmount = 10;
-    mocks.state.existingRefunds = [{ amount: 8 }];
+    mocks.state.existingRefunds = [{ amount: 8, status: "succeeded" }];
     const res = makeRes();
     await handler(
       makeReq({ orderId: "order-1", paymentId: "payment-1", amount: 3 }),
@@ -286,6 +296,31 @@ describe("POST /api/refunds", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({ error: "refund_exceeds_balance" });
     expect(mocks.refundsCreate).not.toHaveBeenCalled();
+  });
+
+  it("counts in-flight requested refunds against the payment balance", async () => {
+    mocks.state.paymentAmount = 10;
+    mocks.state.existingRefunds = [{ amount: 6, status: "requested" }];
+    const res = makeRes();
+    await handler(
+      makeReq({ orderId: "order-1", paymentId: "payment-1", amount: 5 }),
+      res as never,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "refund_exceeds_balance" });
+    expect(mocks.refundsCreate).not.toHaveBeenCalled();
+  });
+
+  it("ignores failed refunds when checking the payment balance", async () => {
+    mocks.state.paymentAmount = 10;
+    mocks.state.existingRefunds = [{ amount: 6, status: "failed" }];
+    const res = makeRes();
+    await handler(
+      makeReq({ orderId: "order-1", paymentId: "payment-1", amount: 5 }),
+      res as never,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(mocks.refundsCreate).toHaveBeenCalledTimes(1);
   });
 
   it("creates a Stripe refund in minor units and stores the refund id", async () => {

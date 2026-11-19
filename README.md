@@ -550,6 +550,9 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119090000_role_permissions.sql` narrows manager grants: owners and
   managers are owner-managed, while managers may add/manage staff and kitchen
   accounts.
+- `20261119100000_refund_guards_inflight.sql` counts in-flight (`requested`)
+  refunds in the amount/quantity guards and locks the payment/order-item rows,
+  so concurrent refunds cannot both pass the cap.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

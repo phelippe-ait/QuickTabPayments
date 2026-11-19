@@ -147,11 +147,16 @@ export function OrderDetailPage() {
       payment.status === "succeeded" && Boolean(payment.stripePaymentIntentId),
   )
   const refundsUnavailable = Boolean(refundsQuery.error)
+  // Succeeded and in-flight ('requested') refunds both consume the payment
+  // balance: Stripe has already reserved the in-flight amount.
   const refundedToDate =
     refundsQuery.isLoading || refundsUnavailable
       ? order.refundedTotal
       : refundsQuery.refunds
-          .filter((refund) => refund.status === "succeeded")
+          .filter(
+            (refund) =>
+              refund.status === "succeeded" || refund.status === "requested",
+          )
           .reduce((total, refund) => total + refund.amount, 0)
   // Succeeded and in-flight ('requested') refunds both consume line quantity;
   // counting them closes the double-submit race.
