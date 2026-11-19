@@ -17,6 +17,7 @@ import {
   type PaymentFlowStatus,
 } from "@shared/orders/paymentLabels";
 import { trackingUrl } from "../../data/tracking";
+import { clearPendingOrder, rememberPendingOrder } from "../../hooks/useCart";
 import {
   createPaymentIntent,
   getStripePromise,
@@ -173,6 +174,10 @@ function PaymentForm({
         tip: tip ?? null,
       });
 
+      // Redirect-based methods navigate away before `onPaid`, so remember the
+      // token now; the tracking page clears this context's cart on return.
+      rememberPendingOrder({ slug: restaurantSlug, tableToken }, intent.trackingToken);
+
       const returnUrl = new URL(
         trackingUrl(intent.orderNumber, intent.trackingToken),
         window.location.origin,
@@ -191,6 +196,10 @@ function PaymentForm({
         setError(mapStripeError(result.error).message);
         return;
       }
+
+      // In-page success clears the cart in `onPaid`; the marker is only needed
+      // when the browser navigates away before the promise resolves.
+      clearPendingOrder({ slug: restaurantSlug, tableToken });
 
       // Announce success before handing off; the confirmation screen may mount
       // immediately afterwards.

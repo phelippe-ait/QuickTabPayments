@@ -1,7 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { act, renderHook } from "@testing-library/react"
-import type { MenuItem, ModifierChoice } from "../types"
-import { cartLineId, cartStorageKey, parseCart, useCart } from "./useCart"
+import type { CartItem, MenuItem, ModifierChoice } from "../types"
+import { persistQrSource } from "../data/qrContext"
+import {
+  cartLineId,
+  cartStorageKey,
+  parseCart,
+  pendingOrderStorageKey,
+  readPendingOrderToken,
+  readStoredCart,
+  reconcilePaidOrderCart,
+  rememberPendingOrder,
+  useCart,
+  writeStoredCart,
+} from "./useCart"
 
 const coffee: MenuItem = {
   id: "item-1",
@@ -240,5 +252,47 @@ describe("parseCart", () => {
         }),
       ),
     ).toEqual([{ menuItemId: "a", name: "A", unitPrice: 1, quantity: 1 }])
+  })
+})
+
+describe("reconcilePaidOrderCart", () => {
+  const line: CartItem = {
+    menuItemId: "item-1",
+    name: "Flat White",
+    unitPrice: 4.7,
+    quantity: 1,
+  }
+
+  beforeEach(() => {
+    window.sessionStorage.clear()
+    persistQrSource(tableA)
+    writeStoredCart(cartStorageKey(tableA), [line])
+    rememberPendingOrder(tableA, "tracking-1")
+  })
+
+  it("clears the cart for the matching paid order and forgets the token", () => {
+    expect(reconcilePaidOrderCart("tracking-1", "succeeded")).toBe(true)
+    expect(readStoredCart(cartStorageKey(tableA))).toEqual([])
+    expect(readPendingOrderToken(tableA)).toBeNull()
+    expect(
+      window.sessionStorage.getItem(pendingOrderStorageKey(tableA)),
+    ).toBeNull()
+  })
+
+  it("leaves the cart untouched while the order is not paid", () => {
+    expect(reconcilePaidOrderCart("tracking-1", "pending")).toBe(false)
+    expect(readStoredCart(cartStorageKey(tableA))).toEqual([line])
+    expect(readPendingOrderToken(tableA)).toBe("tracking-1")
+  })
+
+  it("leaves the cart untouched for a different tracking token", () => {
+    expect(reconcilePaidOrderCart("tracking-2", "succeeded")).toBe(false)
+    expect(readStoredCart(cartStorageKey(tableA))).toEqual([line])
+    expect(readPendingOrderToken(tableA)).toBe("tracking-1")
+  })
+
+  it("is a no-op when there is no stored QR context", () => {
+    window.sessionStorage.clear()
+    expect(reconcilePaidOrderCart("tracking-1", "succeeded")).toBe(false)
   })
 })

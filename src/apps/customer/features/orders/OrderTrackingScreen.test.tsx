@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { OrderTrackingScreen } from "./OrderTrackingScreen"
+import { persistQrSource } from "../../data/qrContext"
+import {
+  cartStorageKey,
+  readStoredCart,
+  rememberPendingOrder,
+  writeStoredCart,
+} from "../../hooks/useCart"
 
 const mocks = vi.hoisted(() => ({ fetchOrderTracking: vi.fn() }))
 
@@ -43,6 +50,7 @@ function renderTracking(url = "/order/QT-261025-0001?token=token-1") {
 describe("OrderTrackingScreen", () => {
   beforeEach(() => {
     mocks.fetchOrderTracking.mockReset()
+    window.sessionStorage.clear()
   })
 
   it("renders the status timeline and item summary for a valid token", async () => {
@@ -195,5 +203,43 @@ describe("OrderTrackingScreen", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("clears the paid cart when returning from a redirect payment", async () => {
+    const source = { slug: "cafe", tableToken: "table-1" }
+    persistQrSource(source)
+    writeStoredCart(cartStorageKey(source), [
+      { menuItemId: "item-1", name: "Flat White", unitPrice: 4.7, quantity: 1 },
+    ])
+    rememberPendingOrder(source, "token-1")
+    mocks.fetchOrderTracking.mockResolvedValue(trackedOrder)
+
+    renderTracking()
+
+    expect(await screen.findByText("QT-261025-0001")).toBeInTheDocument()
+    await waitFor(() => expect(readStoredCart(cartStorageKey(source))).toEqual([]))
+  })
+
+  it("keeps the stored cart when the returned order is not paid yet", async () => {
+    const source = { slug: "cafe", tableToken: "table-1" }
+    persistQrSource(source)
+    const line = {
+      menuItemId: "item-1",
+      name: "Flat White",
+      unitPrice: 4.7,
+      quantity: 1,
+    }
+    writeStoredCart(cartStorageKey(source), [line])
+    rememberPendingOrder(source, "token-1")
+    mocks.fetchOrderTracking.mockResolvedValue({
+      ...trackedOrder,
+      status: "pending" as const,
+      paymentStatus: "pending" as const,
+    })
+
+    renderTracking()
+
+    expect(await screen.findByText("QT-261025-0001")).toBeInTheDocument()
+    expect(readStoredCart(cartStorageKey(source))).toEqual([line])
   })
 })

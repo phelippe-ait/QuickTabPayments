@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { TipSelection } from "@shared/lib/money";
+import { pendingOrderStorageKey } from "../../hooks/useCart";
 import { StripeCheckout } from "./StripeCheckout";
 
 const mocks = vi.hoisted(() => {
@@ -83,6 +84,7 @@ function setup(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   mocks.calls.length = 0;
   mocks.submit.mockImplementation(async () => {
     mocks.calls.push("submit");
@@ -113,6 +115,19 @@ describe("StripeCheckout", () => {
 
     await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
     expect(mocks.calls).toEqual(["submit", "intent", "confirm"]);
+  });
+
+  it("remembers the pending order before confirming, then clears it on in-page success", async () => {
+    const key = pendingOrderStorageKey({ slug: "cafe", tableToken: "table" });
+    mocks.confirmPayment.mockImplementationOnce(async () => {
+      expect(window.sessionStorage.getItem(key)).toBe("tok");
+      return { error: null };
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+    expect(window.sessionStorage.getItem(key)).toBeNull();
   });
 
   it("does not create an order when element validation fails", async () => {
