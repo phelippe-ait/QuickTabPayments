@@ -107,6 +107,69 @@ describe("useStaffWorkspace realtime scoping", () => {
 
     await waitFor(() => expect(fetchOrders).toHaveBeenCalledTimes(2))
   })
+
+  it("runs a queued refresh when one arrives during an in-flight fetch (H9)", async () => {
+    const fetchOrders = vi.mocked(fetchStaffOrders)
+    let resolveFirst:
+      | ((rows: Awaited<ReturnType<typeof fetchStaffOrders>>) => void)
+      | undefined
+    fetchOrders.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+    )
+
+    renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(fetchOrders).toHaveBeenCalledTimes(1))
+
+    const onStatus = mocks.channel.subscribe.mock.calls[0][0] as (
+      status: string,
+    ) => void
+    act(() => onStatus("SUBSCRIBED"))
+    act(() => onStatus("CHANNEL_ERROR"))
+    act(() => onStatus("SUBSCRIBED"))
+
+    // The queued refresh waits for the in-flight fetch instead of starting a
+    // second concurrent one or being dropped.
+    expect(fetchOrders).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveFirst?.([])
+    })
+
+    await waitFor(() => expect(fetchOrders).toHaveBeenCalledTimes(2))
+  })
+
+  it("does not run a trailing refresh after unmount", async () => {
+    const fetchOrders = vi.mocked(fetchStaffOrders)
+    let resolveFirst:
+      | ((rows: Awaited<ReturnType<typeof fetchStaffOrders>>) => void)
+      | undefined
+    fetchOrders.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+    )
+
+    const { unmount } = renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(fetchOrders).toHaveBeenCalledTimes(1))
+
+    const onStatus = mocks.channel.subscribe.mock.calls[0][0] as (
+      status: string,
+    ) => void
+    act(() => onStatus("SUBSCRIBED"))
+    act(() => onStatus("CHANNEL_ERROR"))
+    act(() => onStatus("SUBSCRIBED"))
+
+    unmount()
+    await act(async () => {
+      resolveFirst?.([])
+    })
+
+    expect(fetchOrders).toHaveBeenCalledTimes(1)
+  })
 })
 
 function staffTable(overrides: Record<string, unknown> = {}) {

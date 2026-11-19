@@ -132,12 +132,19 @@ export function useStaffWorkspace(restaurantId: string | null) {
 
     let cancelled = false
     let loading = false
+    let refreshPending = false
 
     // A restaurant switch must not merge the previous tenant's board in.
     setOrders([])
 
     async function loadOrders(id: string) {
-      if (cancelled || loading) return
+      if (cancelled) return
+      // Realtime/reconnect can arrive while a fetch is in flight. Queue one
+      // trailing refresh instead of dropping it.
+      if (loading) {
+        refreshPending = true
+        return
+      }
       loading = true
       try {
         const rows = await fetchStaffOrders(id)
@@ -157,7 +164,13 @@ export function useStaffWorkspace(restaurantId: string | null) {
         }
       } finally {
         loading = false
-        if (!cancelled) setOrdersLoading(false)
+        if (!cancelled) {
+          setOrdersLoading(false)
+          if (refreshPending) {
+            refreshPending = false
+            void loadOrders(id)
+          }
+        }
       }
     }
 
