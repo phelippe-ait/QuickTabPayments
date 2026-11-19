@@ -167,13 +167,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Never refund more than the payment's remaining balance. The DB trigger
-    // enforces this too, but only after Stripe has already moved the money.
+    // Never refund more than the payment's remaining balance. Count in-flight
+    // ('requested') refunds too: Stripe has already reserved that amount, so
+    // excluding them would let a doomed request through to Stripe and only
+    // fail after the money moved. The DB trigger enforces the same cap, but
+    // only after Stripe has already moved the money.
     const { data: existingRefunds, error: refundsError } = await admin
       .from("refunds")
       .select("amount")
       .eq("payment_id", paymentId)
-      .eq("status", "succeeded");
+      .in("status", ["succeeded", "requested"]);
     if (refundsError) return json(res, 500, { error: refundsError.message });
 
     const alreadyRefunded = roundMoney(

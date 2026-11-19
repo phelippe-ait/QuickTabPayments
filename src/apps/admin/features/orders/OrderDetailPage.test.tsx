@@ -261,6 +261,33 @@ describe("OrderDetailPage", () => {
     expect(add).toBeDisabled()
   })
 
+  it("counts in-flight requested refunds against the refundable balance", () => {
+    mocks.order = { ...order, status: "completed" }
+    mocks.refunds = [
+      {
+        id: "refund-1",
+        order_id: "order-1",
+        payment_id: "payment-1",
+        order_item_id: null,
+        quantity: null,
+        amount: 14.84,
+        reason: "Full refund",
+        status: "requested",
+        stripe_refund_id: "re_pending",
+        created_by: "user-1",
+        created_at: "2026-10-21T09:00:00Z",
+      },
+    ]
+    renderPage()
+
+    // The in-flight refund already reserves the whole payment.
+    expect(
+      screen.queryByRole("button", { name: /^refund full order$/i }),
+    ).toBeNull()
+    expect(screen.queryByRole("button", { name: /^other amount$/i })).toBeNull()
+    expect(screen.getByText(/refunded to date/i)).toBeInTheDocument()
+  })
+
   it("does not offer a partial refund when the refunds query failed", () => {
     mocks.refundsError = new Error("Could not load refunds")
     renderPage()

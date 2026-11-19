@@ -52,7 +52,11 @@ Request: `{ orderId, paymentId, amount, reason, orderItemId?, quantity? }`
 Response `200`: the created `refunds` row.
 
 Errors: `401 unauthorized`, `403 forbidden`, `404 order_not_found`,
-`400 no_stripe_payment`, `400 invalid_amount`, `405`.
+`400 no_stripe_payment`, `400 invalid_amount`, `400 amount_mismatch`,
+`400 quantity_exceeds_remaining`, `400 refund_exceeds_balance`, `405`.
+
+`refund_exceeds_balance` counts both `succeeded` and in-flight `requested`
+refunds, because Stripe has already reserved the in-flight amount.
 
 ## `POST /api/webhooks/stripe`
 
