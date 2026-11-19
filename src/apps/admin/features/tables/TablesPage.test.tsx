@@ -206,6 +206,9 @@ describe("TablesPage", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.queryByText("Free")).not.toBeInTheDocument()
+    expect(screen.queryByText("Occupied")).not.toBeInTheDocument()
+    expect(screen.queryByText("Needs cleaning")).not.toBeInTheDocument()
   })
 
   it("offers deactivation instead of deleting a table with past orders", async () => {

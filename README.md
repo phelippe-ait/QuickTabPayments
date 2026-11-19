@@ -325,9 +325,10 @@ only as a documented development fallback.
   name.
 - Every restaurant has one permanent **Counter / Pick-up** system table. It is
   created with the restaurant, listed first, cannot be edited structurally or
-  deleted, and can only be enabled/disabled in Admin → Tables. Staff order entry
-  defaults to it for counter/pick-up orders; owners manage all other tables
-  normally.
+  deleted, and can only be enabled/disabled in Admin → Tables. It has no
+  occupied/free/cleaning status and is hidden from the staff floor plan, but
+  remains available in staff New order and customer QR ordering. Owners manage
+  all other tables normally.
 - Customers can view their Stripe receipt and see whether an order was
   **partially refunded** or **fully refunded** in order history and on the
   public tracking page.
@@ -538,6 +539,9 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119050000_pickup_table.sql` adds the permanent non-deletable
   Counter / Pick-up system table, backfills existing restaurants, and creates
   it automatically during onboarding.
+- `20261119060000_pickup_table_no_status.sql` keeps the pickup point out of
+  table occupancy: confirmed orders never change its status and the guard
+  freezes it.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

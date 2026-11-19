@@ -70,12 +70,18 @@ function StaffWorkspace() {
     if (!RESERVATIONS_ENABLED && view === "reservations") setView("tables")
   }, [view])
 
+  // The counter / pick-up point is a service point, not a seat. It stays
+  // available to New order but never appears on the floor plan.
+  const staffTables = useMemo(
+    () => workspace.tableList.filter((table) => !table.isSystem),
+    [workspace.tableList],
+  )
   const filteredTables = useMemo(
     () =>
-      workspace.tableList.filter(
+      staffTables.filter(
         (table) => filter === "all" || table.status === filter,
       ),
-    [filter, workspace.tableList],
+    [filter, staffTables],
   )
   const filteredOrders = useMemo(() => {
     const term = query.toLowerCase()
@@ -85,7 +91,7 @@ function StaffWorkspace() {
       ),
     )
   }, [workspace.historyOrders, query])
-  const occupied = workspace.tableList.filter(
+  const occupied = staffTables.filter(
     (table) => table.status === "occupied",
   ).length
   const currency = restaurant?.currency ?? "AUD"
@@ -115,7 +121,7 @@ function StaffWorkspace() {
       {view === "tables" && (
         <TablesWorkspace
           userName={userName}
-          tableList={workspace.tableList}
+          tableList={staffTables}
           filteredTables={filteredTables}
           occupied={occupied}
           filter={filter}

@@ -352,7 +352,10 @@ export function TablesWorkspace({
 }) {
   const [announcement, setAnnouncement] = useState("")
   const firstName = userName.trim().split(/\s+/)[0] || "there"
-  const available = tableList.filter(
+  // Never render the counter / pick-up service point on the floor plan.
+  const floorTables = tableList.filter((table) => !table.isSystem)
+  const visibleTables = filteredTables.filter((table) => !table.isSystem)
+  const available = floorTables.filter(
     (table) => table.status === "available",
   ).length
 
@@ -417,14 +420,14 @@ export function TablesWorkspace({
               >
                 {item === "all" ? "All" : tableStatusLabels[item]}{" "}
                 {item !== "all" &&
-                  `(${tableList.filter((table) => table.status === item).length})`}
+                  `(${floorTables.filter((table) => table.status === item).length})`}
               </button>
             ),
           )}
         </div>
         <p className="text-xs font-bold uppercase tracking-[0.13em] text-muted">
-          Main dining room · {tableList.length}{" "}
-          {tableList.length === 1 ? "table" : "tables"}
+          Main dining room · {floorTables.length}{" "}
+          {floorTables.length === 1 ? "table" : "tables"}
         </p>
       </div>
 
@@ -446,18 +449,18 @@ export function TablesWorkspace({
             <Skeleton key={row} className="h-[210px] rounded-[22px]" />
           ))}
         </div>
-      ) : filteredTables.length === 0 ? (
+      ) : visibleTables.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-line bg-cream-3 px-6 py-20 text-center">
           <h2 className="font-serif text-2xl">No tables to show</h2>
           <p className="mt-1 text-sm text-muted">
-            {tableList.length === 0
+            {floorTables.length === 0
               ? "Add tables in the admin workspace to start taking orders."
               : "No tables match this filter."}
           </p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredTables.map((table) => (
+          {visibleTables.map((table) => (
             <TableCard
               key={table.id}
               currency={currency}

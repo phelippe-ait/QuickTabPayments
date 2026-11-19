@@ -40,7 +40,8 @@ export function TablesPage() {
   )
   const enabledCount = tables.tables.filter((table) => table.isActive).length
   const occupiedCount = tables.tables.filter(
-    (table) => tableOccupancyState(table.status) === "occupied",
+    (table) =>
+      !table.isSystem && tableOccupancyState(table.status) === "occupied",
   ).length
 
   useEffect(
@@ -229,28 +230,30 @@ export function TablesPage() {
                   </div>
                   <TableQrCode tableName={tableDisplayName(table)} slug={slug} qrToken={table.qrToken} onNotify={notify} />
                 </div>
-                {occupancy === "occupied" ? (
-                  <div className={`${styles["active-seating"]}`}>
-                    <span><StatusPill tone="warning" withDot={false}>Occupied</StatusPill></span>
-                    {table.openOrder ? (
-                      <>
-                        <span>Order <strong>#{table.openOrder.orderNumber}</strong></span>
-                        <span>Seated <strong>{formatElapsed(table.openOrder.startedAt, now)}</strong></span>
-                      </>
-                    ) : (
-                      <span>Seated by staff · no order yet</span>
-                    )}
-                  </div>
-                ) : occupancy === "needs_cleaning" ? (
-                  <div className={`${styles["active-seating"]}`}>
-                    <span><StatusPill tone="warning" withDot={false}>Needs cleaning</StatusPill></span>
-                    <span>Awaiting cleaning</span>
-                  </div>
-                ) : (
-                  <div className={`${styles["active-seating"]}`}>
-                    <span><StatusPill tone="success" withDot={false}>Free</StatusPill></span>
-                    <span>No open order</span>
-                  </div>
+                {!table.isSystem && (
+                  occupancy === "occupied" ? (
+                    <div className={`${styles["active-seating"]}`}>
+                      <span><StatusPill tone="warning" withDot={false}>Occupied</StatusPill></span>
+                      {table.openOrder ? (
+                        <>
+                          <span>Order <strong>#{table.openOrder.orderNumber}</strong></span>
+                          <span>Seated <strong>{formatElapsed(table.openOrder.startedAt, now)}</strong></span>
+                        </>
+                      ) : (
+                        <span>Seated by staff · no order yet</span>
+                      )}
+                    </div>
+                  ) : occupancy === "needs_cleaning" ? (
+                    <div className={`${styles["active-seating"]}`}>
+                      <span><StatusPill tone="warning" withDot={false}>Needs cleaning</StatusPill></span>
+                      <span>Awaiting cleaning</span>
+                    </div>
+                  ) : (
+                    <div className={`${styles["active-seating"]}`}>
+                      <span><StatusPill tone="success" withDot={false}>Free</StatusPill></span>
+                      <span>No open order</span>
+                    </div>
+                  )
                 )}
                 <div className={`${styles["table-location"]}`}>
                   <div><span>Location</span><strong>{table.locationLabel ?? "Unassigned"}</strong></div>
