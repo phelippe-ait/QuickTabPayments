@@ -167,6 +167,13 @@ export function SettingsPage() {
     settings.uploadBranding(kind, file);
   };
 
+  const removeSavedLocation = () => {
+    setLocationPoint(null);
+    setClearSavedLocation(true);
+    setGeofenceEnabled(false);
+    setGeofenceError("");
+  };
+
   const lookupAddress = async () => {
     if (!form.address.trim()) {
       setAddressLookupError("Enter the restaurant street address first.");
@@ -324,10 +331,6 @@ export function SettingsPage() {
                 value={form.address}
                 onChange={(event) => {
                   update({ address: event.target.value });
-                  setLocationPoint(null);
-                  setClearSavedLocation(true);
-                  setGeofenceEnabled(false);
-                  setGeofenceError("");
                   setAddressMatches([]);
                   setAddressLookupError("");
                 }}
@@ -353,6 +356,22 @@ export function SettingsPage() {
                 {locationPoint && (
                   <span className="text-xs text-ink-mid" role="status">
                     Location selected
+                  </span>
+                )}
+                {settings.location &&
+                  !settings.isLocationPending &&
+                  !clearSavedLocation && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={removeSavedLocation}
+                    >
+                      Remove saved location
+                    </Button>
+                  )}
+                {clearSavedLocation && (
+                  <span className="text-xs font-medium text-danger" role="status">
+                    Saved location will be removed when you save.
                   </span>
                 )}
               </div>
