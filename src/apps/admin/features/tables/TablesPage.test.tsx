@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { TablesPage } from "./TablesPage"
 import type { TableVM } from "../../viewModels"
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
+  notifyError: vi.fn(),
   confirm: vi.fn(),
   refetch: vi.fn(),
+  deleteTable: vi.fn(async () => true),
+  deleteTables: vi.fn(async () => true),
+  setActive: vi.fn(async () => true),
+  countOrdersForTables: vi.fn(async () => ({}) as Record<string, number>),
   rows: [] as TableVM[],
   isLoading: false,
   error: null as Error | null,
@@ -25,7 +30,11 @@ vi.mock("@shared/restaurant/useRestaurant", () => ({
 }))
 
 vi.mock("../../hooks/AdminUiProvider", () => ({
-  useAdminUi: () => ({ notify: mocks.notify, notifyError: vi.fn(), confirm: mocks.confirm }),
+  useAdminUi: () => ({ notify: mocks.notify, notifyError: mocks.notifyError, confirm: mocks.confirm }),
+}))
+
+vi.mock("@shared/data/orders", () => ({
+  countOrdersForTables: mocks.countOrdersForTables,
 }))
 
 vi.mock("../../hooks/useTables", () => ({
@@ -37,9 +46,9 @@ vi.mock("../../hooks/useTables", () => ({
     isMutating: false,
     createTable: vi.fn(async () => true),
     updateTable: vi.fn(async () => true),
-    deleteTable: vi.fn(async () => true),
-    deleteTables: vi.fn(async () => true),
-    setActive: vi.fn(async () => true),
+    deleteTable: mocks.deleteTable,
+    deleteTables: mocks.deleteTables,
+    setActive: mocks.setActive,
   }),
 }))
 
@@ -75,9 +84,11 @@ const free: TableVM = {
 
 describe("TablesPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     mocks.rows = []
     mocks.isLoading = false
     mocks.error = null
+    mocks.countOrdersForTables.mockResolvedValue({})
   })
 
   it("shows a loading state", () => {
@@ -106,5 +117,60 @@ describe("TablesPage", () => {
 
     const seats = screen.getAllByText("—")
     expect(seats.length).toBeGreaterThan(0)
+  })
+
+  it("offers deactivation instead of deleting a table with past orders", async () => {
+    mocks.rows = [free]
+    mocks.countOrdersForTables.mockResolvedValue({ "table-2": 3 })
+    render(<TablesPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /delete table Pick-up/i }))
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalled())
+    const confirmation = mocks.confirm.mock.calls[0][0] as {
+      description: string
+      actionLabel: string
+      onConfirm: () => void
+    }
+    expect(confirmation.actionLabel).toBe("Disable table")
+    expect(confirmation.description).toMatch(/past orders/i)
+    expect(confirmation.description).toMatch(/erase their table reference/i)
+
+    confirmation.onConfirm()
+
+    await waitFor(() => expect(mocks.setActive).toHaveBeenCalledWith(["table-2"], false))
+    expect(mocks.deleteTable).not.toHaveBeenCalled()
+  })
+
+  it("deletes a table that has no past orders", async () => {
+    mocks.rows = [free]
+    mocks.countOrdersForTables.mockResolvedValue({})
+    render(<TablesPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /delete table Pick-up/i }))
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalled())
+    const confirmation = mocks.confirm.mock.calls[0][0] as {
+      actionLabel: string
+      onConfirm: () => void
+    }
+    expect(confirmation.actionLabel).toBe("Delete table")
+
+    confirmation.onConfirm()
+
+    await waitFor(() => expect(mocks.deleteTable).toHaveBeenCalledWith("table-2"))
+    expect(mocks.setActive).not.toHaveBeenCalled()
+  })
+
+  it("does not delete when the order-history lookup fails", async () => {
+    mocks.rows = [free]
+    mocks.countOrdersForTables.mockRejectedValue(new Error("lookup failed"))
+    render(<TablesPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /delete table Pick-up/i }))
+
+    await waitFor(() => expect(mocks.notifyError).toHaveBeenCalledWith("lookup failed"))
+    expect(mocks.confirm).not.toHaveBeenCalled()
+    expect(mocks.deleteTable).not.toHaveBeenCalled()
   })
 })

@@ -144,6 +144,32 @@ export async function fetchOpenOrdersByTable(
   return reduceOpenOrdersByTable(data ?? [])
 }
 
+/**
+ * Count the orders referencing each table. Tables with no orders are absent
+ * from the result, so callers should treat a missing key as zero. Used to
+ * protect historical orders from `orders.table_id … on delete set null`.
+ */
+export async function countOrdersForTables(
+  tableIds: string[],
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  if (!tableIds.length) return counts
+
+  const client = requireSupabase()
+  const { data, error } = await client
+    .from("orders")
+    .select("table_id")
+    .in("table_id", tableIds)
+
+  if (error) throw new Error(error.message)
+
+  for (const row of data ?? []) {
+    if (!row.table_id) continue
+    counts[row.table_id] = (counts[row.table_id] ?? 0) + 1
+  }
+  return counts
+}
+
 export async function fetchOrder(id: string): Promise<OrderWithDetails> {
   const client = requireSupabase();
   const { data, error } = await client
