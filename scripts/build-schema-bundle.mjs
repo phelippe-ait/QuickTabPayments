@@ -23,15 +23,23 @@ const files = (await readdir(migrationsDir))
   });
 
 /**
- * The historical schema is numbered 0001–0019 followed by timestamped
- * `2026…` migrations. The multi-digit packet migrations (0020+) were added
- * afterwards, so they must replay last even though "0020" sorts before
- * "2026…". This keeps `schema.sql` matching the order the migrations were
- * actually applied in.
+ * `schema.sql` must replay migrations in the order they were applied:
+ *
+ *   0. 0001–0019 — the original numbered schema
+ *   1. 2026-11-05 timestamped migrations — the first timestamped batch
+ *   2. 0020–0028 — the packet migrations added after that first batch
+ *   3. 2026-11-19+ timestamped migrations — added after the packet
+ *
+ * Without the 2026-11-19 split, `place_order` would be re-created with the
+ * old 8-arg signature after the idempotent 9-arg contract, leaving two
+ * overloads and a PGRST203 ambiguity in a freshly bundled database.
  */
 function migrationGroup(file) {
   const prefix = file.slice(0, file.indexOf("_"));
-  if (prefix.length > 4) return 1; // timestamped legacy migration
+  if (prefix.length > 4) {
+    // The YYYYMMDD part decides which side of the 0020–0028 packet it is on.
+    return prefix.slice(0, 8) >= "20261119" ? 3 : 1;
+  }
   return Number(prefix) >= 20 ? 2 : 0; // 0001–0019, then 0020+
 }
 

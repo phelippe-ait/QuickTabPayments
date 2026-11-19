@@ -553,6 +553,9 @@ The numbered migrations in `supabase/migrations/` are the source of truth:
 - `20261119100000_refund_guards_inflight.sql` counts in-flight (`requested`)
   refunds in the amount/quantity guards and locks the payment/order-item rows,
   so concurrent refunds cannot both pass the cap.
+- `20261119110000_checkout_idempotency.sql` adds `orders.idempotency_key` and
+  makes `place_order` return the original order when a checkout retries with
+  the same key, so a lost response cannot create a duplicate pending order.
 - `supabase/schema.sql` is the generated one-file bundle. Do not edit it by
   hand; change the migrations and run `npm run db:bundle`.
 

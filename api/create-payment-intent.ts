@@ -18,7 +18,26 @@ type Body = {
   items?: ItemInput[];
   location?: LocationInput;
   tip?: unknown;
+  idempotencyKey?: unknown;
 };
+
+const IDEMPOTENCY_KEY_MAX = 128;
+
+/**
+ * Optional per-checkout key. A missing key keeps the old behaviour; an empty
+ * one is treated as missing. Anything longer than a UUID is rejected rather
+ * than stored.
+ */
+function readIdempotencyKey(
+  value: unknown,
+): { ok: true; key?: string } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true };
+  if (typeof value !== "string") return { ok: false };
+  const key = value.trim();
+  if (!key) return { ok: true };
+  if (key.length > IDEMPOTENCY_KEY_MAX) return { ok: false };
+  return { ok: true, key };
+}
 
 function parseBody(req: VercelRequest): Body {
   if (!req.body) return {};
@@ -83,6 +102,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!parsedTip.ok) return json(res, 400, { error: "invalid_request" });
     const tip = parsedTip.tip;
 
+    const parsedIdempotency = readIdempotencyKey(body.idempotencyKey);
+    if (!parsedIdempotency.ok) {
+      return json(res, 400, { error: "invalid_request" });
+    }
+    const idempotencyKey = parsedIdempotency.key;
+
     const forwardedItems: ItemInput[] = [];
     for (const item of items) {
       const parsedModifiers = readModifiers(item.modifiers);
@@ -108,6 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       p_customer_latitude: location?.latitude ?? null,
       p_customer_longitude: location?.longitude ?? null,
       ...(tip ? { p_tip: tip } : {}),
+      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
     });
 
     if (placeErr) return json(res, 400, { error: placeErr.message });
@@ -118,17 +144,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const amount = Number(placed.amount_due ?? placed.total);
     const currency = String(placed.currency ?? "AUD");
 
-    // 2) Create the Stripe PaymentIntent (amount in minor units).
-    const stripe = getStripe();
-    const intent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100),
-      currency: currency.toLowerCase(),
-      automatic_payment_methods: { enabled: true },
-      metadata: { orderId, restaurantSlug, tableToken, tipAmount: String(tipAmount) },
-    });
+    const response = (clientSecret: string, paymentStatus: string) =>
+      json(res, 200, {
+        clientSecret,
+        orderId,
+        orderNumber: placed.order_number,
+        trackingToken: placed.tracking_token,
+        amount,
+        total: Number(placed.total ?? amount),
+        tipAmount,
+        amountDue: amount,
+        currency,
+        status: "pending",
+        paymentStatus,
+      });
 
-    // 3) Persist a pending payments row (service role; anon cannot write payments).
+    const stripe = getStripe();
     const admin = adminClient();
+
+    // 2) A retried checkout returns the same order. If that order already has
+    //    a PaymentIntent, reuse it so the customer can retry the same payment
+    //    instead of being charged twice.
+    const { data: existingPayments, error: existingError } = await admin
+      .from("payments")
+      .select("stripe_payment_intent_id, status")
+      .eq("order_id", orderId)
+      .not("stripe_payment_intent_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (existingError) {
+      return json(res, 500, { error: existingError.message });
+    }
+
+    const existing = (existingPayments ?? [])[0] as
+      | { stripe_payment_intent_id: string | null; status: string }
+      | undefined;
+
+    if (existing?.stripe_payment_intent_id) {
+      const intent = await stripe.paymentIntents.retrieve(
+        existing.stripe_payment_intent_id,
+      );
+      if (!intent.client_secret) {
+        return json(res, 500, { error: "payment_setup_failed" });
+      }
+      return response(intent.client_secret, existing.status);
+    }
+
+    // 3) Create the Stripe PaymentIntent (amount in minor units). The order id
+    //    makes the key deterministic, so two concurrent first attempts converge
+    //    on one intent.
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: Math.round(amount * 100),
+        currency: currency.toLowerCase(),
+        automatic_payment_methods: { enabled: true },
+        metadata: { orderId, restaurantSlug, tableToken, tipAmount: String(tipAmount) },
+      },
+      { idempotencyKey: `order-intent-${orderId}` },
+    );
+
+    // 4) Persist a pending payments row (service role; anon cannot write payments).
     const { error: payErr } = await admin.rpc("record_payment_intent", {
       p_order_id: orderId,
       p_amount: amount,
@@ -137,24 +213,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       p_method: null,
     });
 
-    if (payErr) {
+    // A concurrent request may have recorded the same intent first; that is a
+    // success, not a reason to cancel the shared intent.
+    if (payErr && payErr.code !== "23505") {
       // Best-effort cleanup so we don't strand an intent with no row.
       await stripe.paymentIntents.cancel(intent.id).catch(() => {});
       return json(res, 500, { error: "could_not_record_payment" });
     }
 
-    return json(res, 200, {
-      clientSecret: intent.client_secret,
-      orderId,
-      orderNumber: placed.order_number,
-      trackingToken: placed.tracking_token,
-      amount,
-      total: Number(placed.total ?? amount),
-      tipAmount,
-      amountDue: amount,
-      currency,
-      status: "pending",
-    });
+    return response(intent.client_secret ?? "", "pending");
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     return json(res, 500, { error: message });

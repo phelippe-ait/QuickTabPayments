@@ -78,6 +78,7 @@ const orderRow: OrderWithDetails = {
   table_id: "table-1",
   customer_id: null,
   customer_name_snapshot: "Olivia Moore",
+  idempotency_key: null,
   order_number: "1048",
   status: "preparing",
   subtotal: 12.4,

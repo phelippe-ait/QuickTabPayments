@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Elements,
   PaymentElement,
@@ -137,6 +137,19 @@ function PaymentForm({
     "idle",
   );
   const [ready, setReady] = useState(false);
+  // One key per checkout attempt. Reused on retries so a lost response returns
+  // the original order; rotated when the amount changes or the card is
+  // definitively declined (that order is cancelled server-side).
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  );
+  const keyedAmountRef = useRef(amountDue);
+
+  useEffect(() => {
+    if (keyedAmountRef.current === amountDue) return;
+    keyedAmountRef.current = amountDue;
+    setIdempotencyKey(crypto.randomUUID());
+  }, [amountDue]);
 
   // The tip changes the charge after the PaymentElement has mounted; keep the
   // element's amount (used by wallet buttons) in sync with the amount due.
@@ -172,7 +185,17 @@ function PaymentForm({
         items,
         location,
         tip: tip ?? null,
+        idempotencyKey,
       });
+
+      // A retry after a lost success response gets the original, already-paid
+      // intent back; do not confirm it again.
+      if (intent.paymentStatus === "succeeded") {
+        clearPendingOrder({ slug: restaurantSlug, tableToken });
+        setFlowStatus("succeeded");
+        await onPaid(intent);
+        return;
+      }
 
       // Redirect-based methods navigate away before `onPaid`, so remember the
       // token now; the tracking page clears this context's cart on return.
@@ -194,6 +217,15 @@ function PaymentForm({
       if (result.error) {
         setFlowStatus("failed");
         setError(mapStripeError(result.error).message);
+        // A definitive decline cancelled the order server-side, so the next
+        // attempt needs a fresh key/order. Connection errors keep the key: the
+        // payment may still have succeeded.
+        if (
+          result.error.type === "card_error" ||
+          result.error.type === "validation_error"
+        ) {
+          setIdempotencyKey(crypto.randomUUID());
+        }
         return;
       }
 

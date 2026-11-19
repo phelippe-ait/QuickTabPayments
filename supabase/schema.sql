@@ -18,7 +18,7 @@
 -- demo accounts, or any menu/order data. See README.md → "Database setup" for
 -- the data import steps.
 --
--- Generated from 43 migrations:
+-- Generated from 44 migrations:
 --   - 0001_profiles.sql
 --   - 0002_roles.sql
 --   - 0003_schema.sql
@@ -44,15 +44,6 @@
 --   - 20261105074709_optional_drink_preferences.sql
 --   - 20261105080931_order_modifier_support.sql
 --   - 20261105094127_order_geofence_toggle.sql
---   - 20261119000000_restore_place_order_contract.sql
---   - 20261119010000_staff_place_order.sql
---   - 20261119040000_orders_mark_table_occupied.sql
---   - 20261119050000_pickup_table.sql
---   - 20261119060000_pickup_table_no_status.sql
---   - 20261119070000_sales_report_busy_days.sql
---   - 20261119080000_add_staff_role.sql
---   - 20261119090000_role_permissions.sql
---   - 20261119100000_refund_guards_inflight.sql
 --   - 0020_restaurant_plans.sql
 --   - 0021_sales_reporting.sql
 --   - 0022_order_status_transition_guard.sql
@@ -62,6 +53,16 @@
 --   - 0026_sales_report_popular_items.sql
 --   - 0027_place_order_pending_status.sql
 --   - 0028_rls_audit_fixes.sql
+--   - 20261119000000_restore_place_order_contract.sql
+--   - 20261119010000_staff_place_order.sql
+--   - 20261119040000_orders_mark_table_occupied.sql
+--   - 20261119050000_pickup_table.sql
+--   - 20261119060000_pickup_table_no_status.sql
+--   - 20261119070000_sales_report_busy_days.sql
+--   - 20261119080000_add_staff_role.sql
+--   - 20261119090000_role_permissions.sql
+--   - 20261119100000_refund_guards_inflight.sql
+--   - 20261119110000_checkout_idempotency.sql
 -- ===========================================================================
 
 -- ===========================================================================
@@ -4786,2219 +4787,6 @@ revoke all on function public.place_order(text, text, text, text, jsonb, double 
 grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision) to anon, authenticated;
 
 -- ===========================================================================
--- Source: supabase/migrations/20261119000000_restore_place_order_contract.sql
--- ===========================================================================
-
--- =====================================================================
--- Restore the single `place_order` contract (audit H1)
--- ---------------------------------------------------------------------
--- 20261105094127_order_geofence_toggle.sql re-created a 7-arg place_order
--- (no `p_tip`) and an older get_order_tracking, without dropping the
--- canonical 8-arg function. The CLI sorts 0027 before the timestamped
--- group, so a fresh database ends up with both overloads (PGRST203).
---
--- This migration drops the stale 7-arg overload and restores the canonical
--- 8-arg body from 0027_place_order_pending_status.sql:21+ and the tracking
--- function from 0024_place_order_modifiers.sql:537+.
---
--- On the hosted project this is a deliberate no-op: the 7-arg overload does
--- not exist there and the 8-arg contract is already live.
--- Safe to re-run.
--- =====================================================================
-
-drop function if exists public.place_order(text, text, text, text, jsonb, double precision, double precision);
-
-create or replace function public.place_order(
-  p_restaurant_slug text,
-  p_table_token     text,
-  p_customer_name   text,
-  p_notes           text default null,
-  p_items           jsonb default '[]'::jsonb,
-  p_customer_latitude  double precision default null,
-  p_customer_longitude double precision default null,
-  p_tip             jsonb default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_restaurant_id   uuid;
-  v_restaurant_name text;
-  v_currency        text;
-  v_timezone        text;
-  v_tax_rate        numeric;
-  v_restaurant_latitude  double precision;
-  v_restaurant_longitude double precision;
-  v_geofence_enabled boolean := false;
-  v_distance_m          double precision;
-  v_table_id        uuid;
-  v_table_number    text;
-  v_expected_lines  int;
-  v_valid_lines     int;
-  v_lines           jsonb;
-  v_total           numeric;
-  v_tax             numeric;
-  v_subtotal        numeric;
-  v_tip_amount      numeric := 0;
-  v_amount_due      numeric;
-  v_tip_value       numeric;
-  v_tax_raw         numeric;
-  v_prep_minutes    int;
-  v_order_id        uuid;
-  v_tracking_token  text;
-  v_order_number    text;
-  v_day             text;
-  v_seq             int;
-  v_attempt         int := 0;
-  v_pickup_estimate timestamptz;
-  v_line            jsonb;
-  v_order_item_id   uuid;
-begin
-  -- -----------------------------------------------------------------
-  -- Input validation
-  -- -----------------------------------------------------------------
-  if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
-    raise exception 'customer_name_required' using errcode = 'P0001';
-  end if;
-
-  if p_items is null
-     or jsonb_typeof(p_items) <> 'array'
-     or jsonb_array_length(p_items) = 0 then
-    raise exception 'empty_cart' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e->>'menu_item_id' is null
-       or (e->>'menu_item_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e->>'quantity' is null
-       or (e->>'quantity') !~ '^[0-9]+$'
-       or (e->>'quantity')::int <= 0
-  ) then
-    raise exception 'invalid_quantity' using errcode = 'P0001';
-  end if;
-
-  -- `modifiers` is optional; when supplied it must be an array of uuids.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  -- The same modifier may not be chosen twice on one line.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
-      select count(distinct selected.value)
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    )
-  ) then
-    raise exception 'invalid_modifier' using errcode = 'P0001';
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Resolve restaurant + table (rejects cross-restaurant tokens and
-  -- deactivated tables/restaurants)
-  -- -----------------------------------------------------------------
-  select r.id, r.name, r.currency, r.timezone, r.tax_rate
-    into v_restaurant_id, v_restaurant_name, v_currency, v_timezone, v_tax_rate
-  from public.restaurants r
-  where r.slug = p_restaurant_slug
-    and r.is_active
-  limit 1;
-
-  if v_restaurant_id is null then
-    raise exception 'restaurant_not_found' using errcode = 'P0001';
-  end if;
-
-  select t.id, t.table_number
-    into v_table_id, v_table_number
-  from public.tables t
-  where t.qr_token = p_table_token
-    and t.restaurant_id = v_restaurant_id
-    and t.is_active
-  limit 1;
-
-  if v_table_id is null then
-    raise exception 'table_not_found' using errcode = 'P0001';
-  end if;
-
-  select rl.latitude, rl.longitude, coalesce(rl.geofence_enabled, false)
-    into v_restaurant_latitude, v_restaurant_longitude, v_geofence_enabled
-  from public.restaurant_locations rl
-  where rl.restaurant_id = v_restaurant_id;
-
-  if coalesce(v_geofence_enabled, false) then
-    if p_customer_latitude is null or p_customer_longitude is null then
-      raise exception 'customer_location_required' using errcode = 'P0001';
-    end if;
-
-    if p_customer_latitude < -90 or p_customer_latitude > 90
-       or p_customer_longitude < -180 or p_customer_longitude > 180 then
-      raise exception 'customer_location_invalid' using errcode = 'P0001';
-    end if;
-
-    if v_restaurant_latitude is null or v_restaurant_longitude is null then
-      raise exception 'restaurant_location_not_configured' using errcode = 'P0001';
-    end if;
-
-    -- Haversine great-circle distance in metres. Coordinates are not persisted.
-    v_distance_m := 6371000 * 2 * asin(least(1, sqrt(
-        power(sin(radians(p_customer_latitude - v_restaurant_latitude) / 2), 2)
-        + cos(radians(v_restaurant_latitude))
-          * cos(radians(p_customer_latitude))
-          * power(sin(radians(p_customer_longitude - v_restaurant_longitude) / 2), 2)
-      )));
-
-    if v_distance_m > 500 then
-      raise exception 'outside_ordering_radius' using errcode = 'P0001';
-    end if;
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Validate every menu item belongs to this restaurant and is available.
-  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
-  -- choices fold together while different variants stay separate.
-  -- -----------------------------------------------------------------
-  select count(*)
-    into v_expected_lines
-  from (
-    select distinct
-      (e->>'menu_item_id')::uuid as menu_item_id,
-      array(
-        select selected.value::uuid
-        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-        order by selected.value
-      ) as modifier_key
-    from jsonb_array_elements(p_items) as e
-  ) as wanted;
-
-  select count(*)
-    into v_valid_lines
-  from (
-    select distinct
-      (e->>'menu_item_id')::uuid as menu_item_id,
-      array(
-        select selected.value::uuid
-        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-        order by selected.value
-      ) as modifier_key
-    from jsonb_array_elements(p_items) as e
-  ) as wanted
-  join public.menu_items mi
-    on mi.id = wanted.menu_item_id
-   and mi.restaurant_id = v_restaurant_id
-   and mi.is_available;
-
-  if v_valid_lines <> v_expected_lines then
-    raise exception 'menu_item_unavailable' using errcode = 'P0001';
-  end if;
-
-  -- Modifier ids are untrusted: every choice must be available and linked
-  -- to this item through one of its groups at this restaurant.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    left join public.modifiers m
-      on m.id = selected.value::uuid
-     and m.is_available
-    left join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-     and item_group.modifier_group_id = m.modifier_group_id
-    left join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    where m.id is null or item_group.menu_item_id is null or g.id is null
-  ) then
-    raise exception 'invalid_modifier' using errcode = 'P0001';
-  end if;
-
-  -- A required group must have at least one choice.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-    join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    cross join lateral (
-      select count(*)::int as selected_count
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-      join public.modifiers m
-        on m.id = selected.value::uuid
-       and m.modifier_group_id = g.id
-       and m.is_available
-    ) chosen
-    where g.is_required
-      and chosen.selected_count = 0
-  ) then
-    raise exception 'modifier_required' using errcode = 'P0001';
-  end if;
-
-  -- Enforce each linked group's min/max rules on the server too.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-    join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    cross join lateral (
-      select count(*)::int as selected_count
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-      join public.modifiers m
-        on m.id = selected.value::uuid
-       and m.modifier_group_id = g.id
-       and m.is_available
-    ) chosen
-    where (g.selection_type = 'single'
-             and (chosen.selected_count > 1
-                  or chosen.selected_count < g.min_selections))
-       or (g.selection_type <> 'single'
-             and (chosen.selected_count < g.min_selections
-                  or (g.max_selections > 0
-                      and chosen.selected_count > g.max_selections)))
-  ) then
-    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
-  end if;
-
-  -- Price each grouped cart line from live database values. Identical item +
-  -- modifier combinations have already folded together.
-  select
-    jsonb_agg(
-      jsonb_build_object(
-        'menu_item_id', priced.menu_item_id,
-        'name',         priced.name,
-        'quantity',     priced.quantity,
-        'unit_price',   priced.unit_price,
-        'subtotal',     priced.line_subtotal,
-        'modifiers',    priced.modifiers
-      ) order by priced.display_order, priced.name, priced.line_order
-    ),
-    round(coalesce(sum(priced.line_subtotal), 0), 2),
-    max(priced.prep_time_minutes)
-  into v_lines, v_total, v_prep_minutes
-  from (
-    select
-      mi.id as menu_item_id,
-      mi.name,
-      mi.display_order,
-      mi.prep_time_minutes,
-      grouped.line_order,
-      grouped.quantity,
-      round(mi.price + selected.adjustment, 2) as unit_price,
-      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
-      selected.modifiers
-    from (
-      select
-        (e.value->>'menu_item_id')::uuid as menu_item_id,
-        array(
-          select selected.value::uuid
-          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
-          order by selected.value
-        ) as modifier_key,
-        sum((e.value->>'quantity')::int)::int as quantity,
-        min(e.ordinality) as line_order
-      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
-      group by 1, 2
-    ) as grouped
-    join public.menu_items mi
-      on mi.id = grouped.menu_item_id
-     and mi.restaurant_id = v_restaurant_id
-     and mi.is_available
-    cross join lateral (
-      select
-        coalesce((
-          select sum(m.price_adjustment)
-          from public.modifiers m
-          where m.id = any(grouped.modifier_key)
-            and m.is_available
-        ), 0) as adjustment,
-        coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'modifier_id', m.id,
-            'name', m.name,
-            'price_adjustment', m.price_adjustment
-          ) order by m.display_order, m.name)
-          from public.modifiers m
-          where m.id = any(grouped.modifier_key)
-            and m.is_available
-        ), '[]'::jsonb) as modifiers
-    ) as selected
-  ) as priced;
-
-  -- GST-inclusive split: total is what the customer pays.
-  v_total    := round(coalesce(v_total, 0), 2);
-  v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
-  v_tax      := round(v_tax_raw, 2);
-  v_subtotal := round(v_total - v_tax, 2);
-
-  -- Tip: computed here, never trusted from the client. The tip is added on
-  -- top of the GST-inclusive items total and carries no additional GST.
-  if p_tip is null or p_tip = 'null'::jsonb or p_tip = '{}'::jsonb then
-    v_tip_amount := 0;
-  elsif jsonb_typeof(p_tip) <> 'object' then
-    raise exception 'invalid_tip' using errcode = 'P0001';
-  elsif not (p_tip ? 'type') then
-    raise exception 'invalid_tip' using errcode = 'P0001';
-  elsif p_tip->>'type' = 'none' then
-    v_tip_amount := 0;
-  elsif p_tip->>'type' = 'percent' then
-    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
-      raise exception 'invalid_tip' using errcode = 'P0001';
-    end if;
-    v_tip_value := (p_tip->>'value')::numeric;
-    if v_tip_value < 0 or v_tip_value > 25 then
-      raise exception 'invalid_tip' using errcode = 'P0001';
-    end if;
-    v_tip_amount := round(v_total * v_tip_value / 100, 2);
-  elsif p_tip->>'type' = 'fixed' then
-    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
-      raise exception 'invalid_tip' using errcode = 'P0001';
-    end if;
-    v_tip_value := (p_tip->>'value')::numeric;
-    if v_tip_value < 0 or v_tip_value > 500 then
-      raise exception 'invalid_tip' using errcode = 'P0001';
-    end if;
-    v_tip_amount := round(v_tip_value, 2);
-  else
-    raise exception 'invalid_tip' using errcode = 'P0001';
-  end if;
-
-  v_amount_due := round(v_total + v_tip_amount, 2);
-
-  v_pickup_estimate := now()
-    + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
-
-  -- -----------------------------------------------------------------
-  -- Insert the order + items. Retry the daily order number on collision.
-  -- -----------------------------------------------------------------
-  v_day := to_char(now() at time zone v_timezone, 'YYMMDD');
-
-  select count(*) + 1
-    into v_seq
-  from public.orders o
-  where o.restaurant_id = v_restaurant_id
-    and o.order_number like 'QT-' || v_day || '-%';
-
-  loop
-    v_attempt := v_attempt + 1;
-    v_order_number := 'QT-' || v_day || '-' ||
-      lpad((v_seq + v_attempt - 1)::text, 4, '0');
-
-    begin
-      insert into public.orders (
-        restaurant_id,
-        table_id,
-        customer_id,
-        customer_name_snapshot,
-        order_number,
-        status,
-        subtotal,
-        tax,
-        total,
-        tip_amount,
-        notes,
-        pickup_time_estimate
-      )
-      values (
-        v_restaurant_id,
-        v_table_id,
-        auth.uid(),                        -- null for guests
-        btrim(p_customer_name),
-        v_order_number,
-        'pending'::public.order_status,  -- unpaid until the Stripe webhook confirms it
-        v_subtotal,
-        v_tax,
-        v_total,
-        v_tip_amount,
-        nullif(btrim(coalesce(p_notes, '')), ''),
-        v_pickup_estimate
-      )
-      returning id, tracking_token
-      into v_order_id, v_tracking_token;
-
-      exit;
-    exception
-      when unique_violation then
-        if v_attempt >= 5 then
-          raise exception 'order_number_conflict' using errcode = 'P0001';
-        end if;
-    end;
-  end loop;
-
-  -- Each priced line carries its own modifier snapshots; `returning id`
-  -- ties every snapshot row to the order_item it belongs to.
-  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
-  loop
-    insert into public.order_items (
-      order_id,
-      menu_item_id,
-      item_name_snapshot,
-      unit_price_snapshot,
-      quantity,
-      subtotal
-    )
-    values (
-      v_order_id,
-      (v_line->>'menu_item_id')::uuid,
-      v_line->>'name',
-      (v_line->>'unit_price')::numeric,
-      (v_line->>'quantity')::int,
-      (v_line->>'subtotal')::numeric
-    )
-    returning id into v_order_item_id;
-
-    insert into public.order_item_modifiers (
-      order_item_id,
-      modifier_id,
-      modifier_name_snapshot,
-      price_adjustment_snapshot
-    )
-    select
-      v_order_item_id,
-      (modifier->>'modifier_id')::uuid,
-      modifier->>'name',
-      (modifier->>'price_adjustment')::numeric
-    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
-  end loop;
-
-  return jsonb_build_object(
-    'order_id',            v_order_id,
-    'order_number',        v_order_number,
-    'tracking_token',      v_tracking_token,
-    'status',              'pending',
-    'subtotal',            v_subtotal,
-    'tax',                 v_tax,
-    'total',               v_total,
-    'tip_amount',          v_tip_amount,
-    'amount_due',          v_amount_due,
-    'currency',            v_currency,
-    'restaurant_name',     v_restaurant_name,
-    'table_number',        v_table_number,
-    'pickup_time_estimate', v_pickup_estimate,
-    'created_at',          now(),
-    'items',               v_lines
-  );
-end;
-$$;
-
--- ---------------------------------------------------------------------
--- Grants + comment (unchanged from 0024)
--- ---------------------------------------------------------------------
-revoke all on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) from public;
-grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb)
-  to anon, authenticated;
-
-comment on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) is
-  'Atomic guest/staff order placement with server-side GST-inclusive pricing, validated tips and server-validated modifier pricing/snapshots. Orders start pending until the Stripe webhook confirms payment.';
-
-create or replace function public.get_order_tracking(p_token text)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_result jsonb;
-begin
-  if p_token is null or length(btrim(p_token)) = 0 then
-    return null;
-  end if;
-
-  select jsonb_build_object(
-    'order_id',             o.id,
-    'order_number',         o.order_number,
-    'status',               o.status,
-    'subtotal',             o.subtotal,
-    'tax',                  o.tax,
-    'total',                o.total,
-    'tip_amount',           o.tip_amount,
-    'currency',             r.currency,
-    'created_at',           o.created_at,
-    'pickup_time_estimate', o.pickup_time_estimate,
-    'table_number',         t.table_number,
-    'restaurant_name',      r.name,
-    'payment_status',       latest_payment.status,
-    'payment_method_type',  latest_payment.payment_method_type,
-    'receipt_url',          latest_payment.receipt_url,
-    'amount_paid',          coalesce((
-      select sum(p.amount)
-        from public.payments p
-       where p.order_id = o.id
-         and p.status in ('succeeded', 'refunded')
-    ), 0),
-    'refunded_total',       coalesce((
-      select sum(rf.amount)
-        from public.refunds rf
-       where rf.order_id = o.id
-         and rf.status = 'succeeded'
-    ), 0),
-    'items', coalesce(
-      (
-        select jsonb_agg(
-          jsonb_build_object(
-            'name',       oi.item_name_snapshot,
-            'quantity',   oi.quantity,
-            'unit_price', oi.unit_price_snapshot,
-            'subtotal',   oi.subtotal,
-            'modifiers', coalesce((
-              select jsonb_agg(jsonb_build_object(
-                'name', oim.modifier_name_snapshot,
-                'price_adjustment', oim.price_adjustment_snapshot
-              ) order by oim.id)
-              from public.order_item_modifiers oim
-              where oim.order_item_id = oi.id
-            ), '[]'::jsonb)
-          )
-          order by oi.id
-        )
-        from public.order_items oi
-        where oi.order_id = o.id
-      ),
-      '[]'::jsonb
-    )
-  )
-  into v_result
-  from public.orders o
-  join public.restaurants r on r.id = o.restaurant_id
-  left join public.tables t on t.id = o.table_id
-  left join lateral (
-    select p.status, p.payment_method_type, p.receipt_url
-      from public.payments p
-     where p.order_id = o.id
-     order by (p.status in ('succeeded', 'refunded')) desc, p.created_at desc
-     limit 1
-  ) as latest_payment on true
-  where o.tracking_token = btrim(p_token);
-
-  return v_result;  -- null when no match; leaks nothing
-end;
-$$;
-
-revoke all on function public.get_order_tracking(text) from public;
-grant execute on function public.get_order_tracking(text)
-  to anon, authenticated;
-
--- ---------------------------------------------------------------------
--- Safety assertion: exactly one `place_order` overload must remain.
--- ---------------------------------------------------------------------
-do $$
-declare n int;
-begin
-  select count(*) into n from pg_proc where proname = 'place_order';
-  if n <> 1 then
-    raise exception 'expected exactly one place_order, found %', n;
-  end if;
-end $$;
-
--- ===========================================================================
--- Source: supabase/migrations/20261119010000_staff_place_order.sql
--- ===========================================================================
-
--- =====================================================================
--- Staff-assisted ordering (counter / table service)
--- ---------------------------------------------------------------------
--- Customers who order in person need a staff-facing way to create the
--- order. This RPC is the only writer for that journey.
---
---   * SECURITY DEFINER + explicit active-staff verification.
---   * `p_table_id` is optional: null means a counter / no-table order.
---   * Reuses the exact `place_order` validation and GST-inclusive pricing
---     rules (menu availability, modifier ownership, required/min/max,
---     server-side prices and snapshots).
---   * Orders are inserted as `confirmed` because staff have taken the
---     order in person; there is no Stripe PaymentIntent to wait for.
---   * `p_paid` records a payment collected at the counter (cash/terminal).
---     When false, no payment row is written and the order stays
---     "not recorded" rather than pretending money was captured.
---
--- Safe to re-run.
--- =====================================================================
-
-create or replace function public.staff_place_order(
-  p_table_id      uuid default null,
-  p_customer_name text default null,
-  p_notes         text default null,
-  p_items         jsonb default '[]'::jsonb,
-  p_paid          boolean default false
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_restaurant_id   uuid;
-  v_restaurant_name text;
-  v_currency        text;
-  v_timezone        text;
-  v_tax_rate        numeric;
-  v_table_id        uuid;
-  v_table_number    text;
-  v_expected_lines  int;
-  v_valid_lines     int;
-  v_lines           jsonb;
-  v_total           numeric;
-  v_tax             numeric;
-  v_subtotal        numeric;
-  v_tax_raw         numeric;
-  v_prep_minutes    int;
-  v_order_id        uuid;
-  v_tracking_token  text;
-  v_order_number    text;
-  v_day             text;
-  v_seq             int;
-  v_attempt         int := 0;
-  v_pickup_estimate timestamptz;
-  v_line            jsonb;
-  v_order_item_id   uuid;
-begin
-  -- -----------------------------------------------------------------
-  -- Caller verification. A table id is optional (counter order), but
-  -- either way the caller must be active staff of that restaurant.
-  -- -----------------------------------------------------------------
-  if auth.uid() is null then
-    raise exception 'not_authorised' using errcode = 'P0001';
-  end if;
-
-  if p_table_id is not null then
-    select t.id, t.table_number, t.restaurant_id
-      into v_table_id, v_table_number, v_restaurant_id
-    from public.tables t
-    where t.id = p_table_id
-      and t.is_active
-    limit 1;
-
-    if v_table_id is null then
-      raise exception 'table_not_found' using errcode = 'P0001';
-    end if;
-
-    if not public.is_staff_of(v_restaurant_id) then
-      raise exception 'not_authorised' using errcode = 'P0001';
-    end if;
-  else
-    select r.id
-      into v_restaurant_id
-    from public.restaurant_staff rs
-    join public.restaurants r on r.id = rs.restaurant_id
-    where rs.user_id = auth.uid()
-      and rs.is_active
-      and r.is_active
-    order by r.created_at, r.id
-    limit 1;
-
-    if v_restaurant_id is null then
-      raise exception 'not_authorised' using errcode = 'P0001';
-    end if;
-  end if;
-
-  select r.name, r.currency, r.timezone, r.tax_rate
-    into v_restaurant_name, v_currency, v_timezone, v_tax_rate
-  from public.restaurants r
-  where r.id = v_restaurant_id
-    and r.is_active;
-
-  if v_restaurant_name is null then
-    raise exception 'not_authorised' using errcode = 'P0001';
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Input validation (mirrors place_order)
-  -- -----------------------------------------------------------------
-  if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
-    raise exception 'customer_name_required' using errcode = 'P0001';
-  end if;
-
-  if p_items is null
-     or jsonb_typeof(p_items) <> 'array'
-     or jsonb_array_length(p_items) = 0 then
-    raise exception 'empty_cart' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e->>'menu_item_id' is null
-       or (e->>'menu_item_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e->>'quantity' is null
-       or (e->>'quantity') !~ '^[0-9]+$'
-       or (e->>'quantity')::int <= 0
-  ) then
-    raise exception 'invalid_quantity' using errcode = 'P0001';
-  end if;
-
-  -- `modifiers` is optional; when supplied it must be an array of uuids.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ) then
-    raise exception 'invalid_item' using errcode = 'P0001';
-  end if;
-
-  -- The same modifier may not be chosen twice on one line.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
-      select count(distinct selected.value)
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    )
-  ) then
-    raise exception 'invalid_modifier' using errcode = 'P0001';
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Validate every menu item belongs to this restaurant and is available.
-  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
-  -- choices fold together while different variants stay separate.
-  -- -----------------------------------------------------------------
-  select count(*)
-    into v_expected_lines
-  from (
-    select distinct
-      (e->>'menu_item_id')::uuid as menu_item_id,
-      array(
-        select selected.value::uuid
-        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-        order by selected.value
-      ) as modifier_key
-    from jsonb_array_elements(p_items) as e
-  ) as wanted;
-
-  select count(*)
-    into v_valid_lines
-  from (
-    select distinct
-      (e->>'menu_item_id')::uuid as menu_item_id,
-      array(
-        select selected.value::uuid
-        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-        order by selected.value
-      ) as modifier_key
-    from jsonb_array_elements(p_items) as e
-  ) as wanted
-  join public.menu_items mi
-    on mi.id = wanted.menu_item_id
-   and mi.restaurant_id = v_restaurant_id
-   and mi.is_available;
-
-  if v_valid_lines <> v_expected_lines then
-    raise exception 'menu_item_unavailable' using errcode = 'P0001';
-  end if;
-
-  -- Modifier ids are untrusted: every choice must be available and linked
-  -- to this item through one of its groups at this restaurant.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-    left join public.modifiers m
-      on m.id = selected.value::uuid
-     and m.is_available
-    left join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-     and item_group.modifier_group_id = m.modifier_group_id
-    left join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    where m.id is null or item_group.menu_item_id is null or g.id is null
-  ) then
-    raise exception 'invalid_modifier' using errcode = 'P0001';
-  end if;
-
-  -- A required group must have at least one choice.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-    join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    cross join lateral (
-      select count(*)::int as selected_count
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-      join public.modifiers m
-        on m.id = selected.value::uuid
-       and m.modifier_group_id = g.id
-       and m.is_available
-    ) chosen
-    where g.is_required
-      and chosen.selected_count = 0
-  ) then
-    raise exception 'modifier_required' using errcode = 'P0001';
-  end if;
-
-  -- Enforce each linked group's min/max rules on the server too.
-  if exists (
-    select 1
-    from jsonb_array_elements(p_items) as e
-    join public.menu_item_modifier_groups item_group
-      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
-    join public.modifier_groups g
-      on g.id = item_group.modifier_group_id
-     and g.restaurant_id = v_restaurant_id
-    cross join lateral (
-      select count(*)::int as selected_count
-      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
-      join public.modifiers m
-        on m.id = selected.value::uuid
-       and m.modifier_group_id = g.id
-       and m.is_available
-    ) chosen
-    where (g.selection_type = 'single'
-             and (chosen.selected_count > 1
-                  or chosen.selected_count < g.min_selections))
-       or (g.selection_type <> 'single'
-             and (chosen.selected_count < g.min_selections
-                  or (g.max_selections > 0
-                      and chosen.selected_count > g.max_selections)))
-  ) then
-    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
-  end if;
-
-  -- Price each grouped cart line from live database values.
-  select
-    jsonb_agg(
-      jsonb_build_object(
-        'menu_item_id', priced.menu_item_id,
-        'name',         priced.name,
-        'quantity',     priced.quantity,
-        'unit_price',   priced.unit_price,
-        'subtotal',     priced.line_subtotal,
-        'modifiers',    priced.modifiers
-      ) order by priced.display_order, priced.name, priced.line_order
-    ),
-    round(coalesce(sum(priced.line_subtotal), 0), 2),
-    max(priced.prep_time_minutes)
-  into v_lines, v_total, v_prep_minutes
-  from (
-    select
-      mi.id as menu_item_id,
-      mi.name,
-      mi.display_order,
-      mi.prep_time_minutes,
-      grouped.line_order,
-      grouped.quantity,
-      round(mi.price + selected.adjustment, 2) as unit_price,
-      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
-      selected.modifiers
-    from (
-      select
-        (e.value->>'menu_item_id')::uuid as menu_item_id,
-        array(
-          select selected.value::uuid
-          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
-          order by selected.value
-        ) as modifier_key,
-        sum((e.value->>'quantity')::int)::int as quantity,
-        min(e.ordinality) as line_order
-      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
-      group by 1, 2
-    ) as grouped
-    join public.menu_items mi
-      on mi.id = grouped.menu_item_id
-     and mi.restaurant_id = v_restaurant_id
-     and mi.is_available
-    cross join lateral (
-      select
-        coalesce((
-          select sum(m.price_adjustment)
-          from public.modifiers m
-          where m.id = any(grouped.modifier_key)
-            and m.is_available
-        ), 0) as adjustment,
-        coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'modifier_id', m.id,
-            'name', m.name,
-            'price_adjustment', m.price_adjustment
-          ) order by m.display_order, m.name)
-          from public.modifiers m
-          where m.id = any(grouped.modifier_key)
-            and m.is_available
-        ), '[]'::jsonb) as modifiers
-    ) as selected
-  ) as priced;
-
-  -- GST-inclusive split: total is what the guest pays at the counter.
-  v_total    := round(coalesce(v_total, 0), 2);
-  v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
-  v_tax      := round(v_tax_raw, 2);
-  v_subtotal := round(v_total - v_tax, 2);
-
-  v_pickup_estimate := now()
-    + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
-
-  -- -----------------------------------------------------------------
-  -- Insert the order + items. Retry the daily order number on collision.
-  -- Staff orders are `confirmed` immediately: there is no online payment
-  -- step to wait for before the kitchen can start.
-  -- -----------------------------------------------------------------
-  v_day := to_char(now() at time zone v_timezone, 'YYMMDD');
-
-  select count(*) + 1
-    into v_seq
-  from public.orders o
-  where o.restaurant_id = v_restaurant_id
-    and o.order_number like 'QT-' || v_day || '-%';
-
-  loop
-    v_attempt := v_attempt + 1;
-    v_order_number := 'QT-' || v_day || '-' ||
-      lpad((v_seq + v_attempt - 1)::text, 4, '0');
-
-    begin
-      insert into public.orders (
-        restaurant_id,
-        table_id,
-        customer_id,
-        customer_name_snapshot,
-        order_number,
-        status,
-        subtotal,
-        tax,
-        total,
-        tip_amount,
-        notes,
-        pickup_time_estimate
-      )
-      values (
-        v_restaurant_id,
-        v_table_id,
-        null,                              -- staff-created, not a customer account
-        btrim(p_customer_name),
-        v_order_number,
-        'confirmed'::public.order_status,
-        v_subtotal,
-        v_tax,
-        v_total,
-        0,
-        nullif(btrim(coalesce(p_notes, '')), ''),
-        v_pickup_estimate
-      )
-      returning id, tracking_token
-      into v_order_id, v_tracking_token;
-
-      exit;
-    exception
-      when unique_violation then
-        if v_attempt >= 5 then
-          raise exception 'order_number_conflict' using errcode = 'P0001';
-        end if;
-    end;
-  end loop;
-
-  -- Each priced line carries its own modifier snapshots.
-  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
-  loop
-    insert into public.order_items (
-      order_id,
-      menu_item_id,
-      item_name_snapshot,
-      unit_price_snapshot,
-      quantity,
-      subtotal
-    )
-    values (
-      v_order_id,
-      (v_line->>'menu_item_id')::uuid,
-      v_line->>'name',
-      (v_line->>'unit_price')::numeric,
-      (v_line->>'quantity')::int,
-      (v_line->>'subtotal')::numeric
-    )
-    returning id into v_order_item_id;
-
-    insert into public.order_item_modifiers (
-      order_item_id,
-      modifier_id,
-      modifier_name_snapshot,
-      price_adjustment_snapshot
-    )
-    select
-      v_order_item_id,
-      (modifier->>'modifier_id')::uuid,
-      modifier->>'name',
-      (modifier->>'price_adjustment')::numeric
-    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
-  end loop;
-
-  -- Optional: money collected at the counter (cash or external terminal).
-  -- Without this, the order remains honestly "no payment recorded".
-  if coalesce(p_paid, false) then
-    insert into public.payments (
-      order_id,
-      status,
-      amount,
-      currency,
-      payment_method_type,
-      paid_at
-    )
-    values (
-      v_order_id,
-      'succeeded',
-      v_total,
-      v_currency,
-      'other',
-      now()
-    );
-  end if;
-
-  return jsonb_build_object(
-    'order_id',             v_order_id,
-    'order_number',         v_order_number,
-    'tracking_token',       v_tracking_token,
-    'status',               'confirmed',
-    'subtotal',             v_subtotal,
-    'tax',                  v_tax,
-    'total',                v_total,
-    'tip_amount',           0,
-    'currency',             v_currency,
-    'restaurant_name',      v_restaurant_name,
-    'table_number',         v_table_number,
-    'customer_name',        btrim(p_customer_name),
-    'paid',                 coalesce(p_paid, false),
-    'pickup_time_estimate', v_pickup_estimate,
-    'created_at',           now(),
-    'items',                v_lines
-  );
-end;
-$$;
-
-revoke all on function public.staff_place_order(uuid, text, text, jsonb, boolean)
-  from public, anon, authenticated;
-grant execute on function public.staff_place_order(uuid, text, text, jsonb, boolean)
-  to authenticated;
-
-comment on function public.staff_place_order(uuid, text, text, jsonb, boolean) is
-  'Staff-facing counter/table order creation: active-staff only, server-priced, validated modifiers, confirmed immediately, optional counter payment record.';
-
--- ===========================================================================
--- Source: supabase/migrations/20261119040000_orders_mark_table_occupied.sql
--- ===========================================================================
-
--- =====================================================================
--- Confirmed orders occupy their table
--- ---------------------------------------------------------------------
--- Staff asked for the floor plan to reflect service automatically:
---   * when a customer order is confirmed (payment succeeded) the table
---     becomes occupied;
---   * when staff create an order it is confirmed immediately, so the same
---     rule applies;
---   * staff still own the reverse transition — nothing auto-frees a table.
---
--- The trigger keeps this out of `place_order` / `staff_place_order` bodies
--- (and away from the Stripe webhook), so every confirmation path behaves the
--- same. Pending/unpaid checkouts do not occupy a table.
---
--- Safe to re-run.
--- =====================================================================
-
-create or replace function public.mark_table_occupied_for_order()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if new.table_id is not null
-     and new.status = 'confirmed'
-     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
-    update public.tables
-       set status = 'occupied'
-     where id = new.table_id;
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_orders_mark_table_occupied on public.orders;
-create trigger trg_orders_mark_table_occupied
-  after insert or update of status on public.orders
-  for each row execute function public.mark_table_occupied_for_order();
-
-comment on function public.mark_table_occupied_for_order() is
-  'Marks a table occupied when an order becomes confirmed. Staff still mark tables free/cleaning; orders never auto-free a table.';
-
--- ===========================================================================
--- Source: supabase/migrations/20261119050000_pickup_table.sql
--- ===========================================================================
-
--- =====================================================================
--- System counter / pick-up table
--- ---------------------------------------------------------------------
--- Every restaurant gets one permanent service table for counter and pick-up
--- orders. It is created with the restaurant, appears first on the floor plan,
--- and can only be enabled/disabled or moved through its operational status.
--- It cannot be edited structurally or deleted.
---
--- Existing restaurants: an existing Pick-up/Counter table is promoted, or a
--- new one is inserted. New restaurants created through the onboarding RPCs get
--- one automatically.
---
--- Safe to re-run.
--- =====================================================================
-
-alter table public.tables
-  add column if not exists is_system boolean not null default false;
-
-comment on column public.tables.is_system is
-  'True for the permanent counter/pick-up table. System tables cannot be edited structurally or deleted.';
-
--- ---------------------------------------------------------------------
--- 1. Idempotent creation/promotion helper
--- ---------------------------------------------------------------------
-create or replace function public.ensure_pickup_table(p_restaurant_id uuid)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_table_id uuid;
-begin
-  select t.id
-    into v_table_id
-  from public.tables t
-  where t.restaurant_id = p_restaurant_id
-    and t.is_system
-  limit 1;
-
-  if v_table_id is not null then
-    return v_table_id;
-  end if;
-
-  select t.id
-    into v_table_id
-  from public.tables t
-  where t.restaurant_id = p_restaurant_id
-    and (
-      lower(t.table_number) in ('pick-up', 'pickup', 'counter', 'counter / pick-up')
-      or lower(coalesce(t.location_label, '')) in ('pick-up', 'pickup', 'counter')
-    )
-  order by t.created_at, t.id
-  limit 1;
-
-  if v_table_id is not null then
-    update public.tables
-       set is_system = true,
-           location_label = 'Counter'
-     where id = v_table_id;
-    return v_table_id;
-  end if;
-
-  insert into public.tables (
-    restaurant_id,
-    table_number,
-    location_label,
-    is_active,
-    is_system
-  )
-  values (
-    p_restaurant_id,
-    'Pick-up',
-    'Counter',
-    true,
-    true
-  )
-  returning id into v_table_id;
-
-  return v_table_id;
-end;
-$$;
-
-revoke all on function public.ensure_pickup_table(uuid) from public, anon, authenticated;
-
--- ---------------------------------------------------------------------
--- 2. Backfill every existing restaurant
--- ---------------------------------------------------------------------
-do $$
-declare
-  v_restaurant record;
-begin
-  for v_restaurant in select id from public.restaurants loop
-    perform public.ensure_pickup_table(v_restaurant.id);
-  end loop;
-end;
-$$;
-
-create unique index if not exists uq_tables_one_system_per_restaurant
-  on public.tables(restaurant_id)
-  where is_system;
-
--- ---------------------------------------------------------------------
--- 3. Protect the system table
--- ---------------------------------------------------------------------
-create or replace function public.guard_system_table()
-returns trigger
-language plpgsql
-security invoker
-set search_path = public
-as $$
-begin
-  if tg_op = 'DELETE' then
-    if old.is_system then
-      raise exception 'system_table_immutable' using errcode = '42501';
-    end if;
-    return old;
-  end if;
-
-  if tg_op = 'INSERT' then
-    if new.is_system and not public.is_privileged_caller() then
-      raise exception 'system_table_immutable' using errcode = '42501';
-    end if;
-    return new;
-  end if;
-
-  if new.is_system is distinct from old.is_system
-     and not public.is_privileged_caller() then
-    raise exception 'system_table_immutable' using errcode = '42501';
-  end if;
-
-  if old.is_system and (
-    new.restaurant_id  is distinct from old.restaurant_id
-    or new.table_number  is distinct from old.table_number
-    or new.qr_token      is distinct from old.qr_token
-    or new.location_label is distinct from old.location_label
-    or new.seats         is distinct from old.seats
-    or new.created_at    is distinct from old.created_at
-  ) then
-    raise exception 'system_table_immutable' using errcode = '42501';
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists guard_system_table on public.tables;
-create trigger guard_system_table
-  before insert or update or delete on public.tables
-  for each row execute function public.guard_system_table();
-
-comment on function public.guard_system_table() is
-  'System counter/pick-up tables may only change is_active/status; deletion and structural edits are rejected.';
-
--- ---------------------------------------------------------------------
--- 4. Onboarding RPCs create the system table
--- ---------------------------------------------------------------------
-create or replace function public.create_restaurant_with_owner(
-  p_name text,
-  p_slug text
-)
-returns public.restaurants
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user_id    uuid := auth.uid();
-  v_name       text := btrim(coalesce(p_name, ''));
-  v_slug       text := btrim(coalesce(p_slug, ''));
-  v_restaurant public.restaurants;
-begin
-  if v_user_id is null then
-    raise exception 'You must be signed in to create a restaurant'
-      using errcode = '42501';
-  end if;
-
-  if v_name = '' then
-    raise exception 'Restaurant name is required'
-      using errcode = '22023';
-  end if;
-
-  if v_slug = '' then
-    raise exception 'Restaurant web address is required'
-      using errcode = '22023';
-  end if;
-
-  if not exists (select 1 from public.profiles p where p.id = v_user_id) then
-    raise exception 'Your profile is not ready yet. Please try again.'
-      using errcode = 'P0002';
-  end if;
-
-  begin
-    insert into public.restaurants (owner_id, slug, name)
-    values (v_user_id, v_slug, v_name)
-    returning * into v_restaurant;
-  exception when unique_violation then
-    raise exception 'That web address is already taken. Choose another one.'
-      using errcode = '23505';
-  end;
-
-  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
-  values (v_restaurant.id, v_user_id, 'owner', true)
-  on conflict (restaurant_id, user_id) do update
-    set role = 'owner', is_active = true;
-
-  perform public.ensure_pickup_table(v_restaurant.id);
-
-  return v_restaurant;
-end;
-$$;
-
-revoke all on function public.create_restaurant_with_owner(text, text)
-  from public, anon, authenticated;
-
-create or replace function public.claim_restaurant_invite(
-  p_name text default null,
-  p_slug text default null
-)
-returns public.restaurants
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user       uuid := auth.uid();
-  v_email      text;
-  v_invite     public.restaurant_invites;
-  v_name       text;
-  v_slug       text;
-  v_restaurant public.restaurants;
-begin
-  if v_user is null then
-    raise exception 'Sign in before claiming a restaurant invitation'
-      using errcode = '42501';
-  end if;
-
-  select u.email
-    into v_email
-  from auth.users u
-  where u.id = v_user
-    and u.email_confirmed_at is not null;
-
-  if v_email is null then
-    raise exception 'Verify your email address before claiming a restaurant invitation'
-      using errcode = '42501';
-  end if;
-
-  if exists (
-    select 1 from public.restaurant_staff
-    where user_id = v_user and is_active
-  ) then
-    raise exception 'This account already has an active restaurant'
-      using errcode = '23505';
-  end if;
-
-  select i.*
-    into v_invite
-  from public.restaurant_invites i
-  where i.status = 'pending'
-    and lower(i.email) = lower(v_email)
-    and i.expires_at > now()
-  order by i.created_at desc
-  limit 1
-  for update;
-
-  if not found then
-    raise exception 'No pending restaurant invitation found for this email'
-      using errcode = 'P0002';
-  end if;
-
-  v_name := btrim(coalesce(nullif(p_name, ''), v_invite.restaurant_name));
-  v_slug := lower(btrim(coalesce(nullif(p_slug, ''), v_invite.restaurant_slug)));
-
-  if v_name = '' then
-    raise exception 'Restaurant name is required'
-      using errcode = '22023';
-  end if;
-
-  if v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or length(v_slug) > 60 then
-    raise exception 'Web address must use lowercase letters, numbers and single hyphens (max 60 characters)'
-      using errcode = '22023';
-  end if;
-
-  begin
-    insert into public.restaurants (owner_id, slug, name)
-    values (v_user, v_slug, v_name)
-    returning * into v_restaurant;
-  exception
-    when unique_violation then
-      raise exception 'That web address is already taken. Choose another one.'
-        using errcode = '23505';
-  end;
-
-  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
-  values (v_restaurant.id, v_user, 'owner', true)
-  on conflict (restaurant_id, user_id) do update
-    set role = 'owner', is_active = true;
-
-  perform public.ensure_pickup_table(v_restaurant.id);
-
-  update public.restaurant_invites
-     set status = 'accepted',
-         accepted_at = now(),
-         accepted_restaurant_id = v_restaurant.id
-   where id = v_invite.id;
-
-  return v_restaurant;
-end;
-$$;
-
-revoke all on function public.claim_restaurant_invite(text, text)
-  from public, anon;
-grant execute on function public.claim_restaurant_invite(text, text)
-  to authenticated;
-
-comment on function public.ensure_pickup_table(uuid) is
-  'Returns the permanent counter/pick-up table for a restaurant, promoting an existing Pick-up/Counter row or creating one.';
-
--- ===========================================================================
--- Source: supabase/migrations/20261119060000_pickup_table_no_status.sql
--- ===========================================================================
-
--- =====================================================================
--- Pickup table has no occupancy status
--- ---------------------------------------------------------------------
--- The counter / pick-up point is not a seat. It should never show or change
--- occupied/available/needs-cleaning, and it is hidden from the staff floor
--- plan. It remains selectable in staff New order and by customer QR.
---
--- Safe to re-run.
--- =====================================================================
-
--- Confirmed orders only occupy real tables.
-create or replace function public.mark_table_occupied_for_order()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if new.table_id is not null
-     and new.status = 'confirmed'
-     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
-    update public.tables
-       set status = 'occupied'
-     where id = new.table_id
-       and not is_system;
-  end if;
-
-  return new;
-end;
-$$;
-
--- Reset any status the pickup point picked up before this rule.
-update public.tables
-   set status = 'available'
- where is_system
-   and status <> 'available';
-
--- Freeze status on system tables. is_active remains changeable so owners can
--- enable/disable the pickup point.
-create or replace function public.guard_system_table()
-returns trigger
-language plpgsql
-security invoker
-set search_path = public
-as $$
-begin
-  if tg_op = 'DELETE' then
-    if old.is_system then
-      raise exception 'system_table_immutable' using errcode = '42501';
-    end if;
-    return old;
-  end if;
-
-  if tg_op = 'INSERT' then
-    if new.is_system and not public.is_privileged_caller() then
-      raise exception 'system_table_immutable' using errcode = '42501';
-    end if;
-    return new;
-  end if;
-
-  if new.is_system is distinct from old.is_system
-     and not public.is_privileged_caller() then
-    raise exception 'system_table_immutable' using errcode = '42501';
-  end if;
-
-  if old.is_system and (
-    new.restaurant_id  is distinct from old.restaurant_id
-    or new.table_number  is distinct from old.table_number
-    or new.qr_token      is distinct from old.qr_token
-    or new.location_label is distinct from old.location_label
-    or new.seats         is distinct from old.seats
-    or new.created_at    is distinct from old.created_at
-    or new.status        is distinct from old.status
-  ) then
-    raise exception 'system_table_immutable' using errcode = '42501';
-  end if;
-
-  return new;
-end;
-$$;
-
--- ===========================================================================
--- Source: supabase/migrations/20261119070000_sales_report_busy_days.sql
--- ===========================================================================
-
--- =====================================================================
--- Sales report: busy days
--- ---------------------------------------------------------------------
--- Adds `busy_days` to `get_sales_report`, mirroring `busy_hours` but grouped
--- by day-of-week in the restaurant timezone. The array is zero-filled for all
--- seven days (0 = Sunday … 6 = Saturday) so the chart never shifts.
---
--- No tables, policies or grants change; access stays owner/manager only.
---
--- Safe to re-run.
--- =====================================================================
-
-create or replace function public.get_sales_report(
-  p_from timestamptz default null,
-  p_to   timestamptz default null
-)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_restaurant_id uuid;
-  v_currency      text;
-  v_timezone      text;
-  v_from          timestamptz;
-  v_to            timestamptz;
-  v_order_count   int;
-  v_gross_revenue numeric;
-  v_paid_revenue  numeric;
-  v_refunded      numeric;
-  v_aov           numeric;
-  v_top_items     jsonb;
-  v_popular_items jsonb;
-  v_busy_hours    jsonb;
-  v_busy_days     jsonb;
-begin
-  -- -----------------------------------------------------------------
-  -- Caller verification: active owner/manager of exactly one restaurant
-  -- (single-restaurant site). Everyone else gets `not_authorised`.
-  -- -----------------------------------------------------------------
-  select r.id, r.currency, r.timezone
-    into v_restaurant_id, v_currency, v_timezone
-  from public.restaurant_staff rs
-  join public.restaurants r on r.id = rs.restaurant_id
-  where rs.user_id = auth.uid()
-    and rs.is_active
-    and rs.role in ('owner', 'manager')
-  order by r.created_at, r.id
-  limit 1;
-
-  if v_restaurant_id is null then
-    raise exception 'not_authorised' using errcode = 'P0001';
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Date range: defaults, validation, and a hard 366-day cap.
-  -- -----------------------------------------------------------------
-  v_to   := coalesce(p_to, now());
-  v_from := coalesce(p_from, v_to - interval '30 days');
-
-  if v_from >= v_to then
-    raise exception 'invalid_date_range' using errcode = 'P0001';
-  end if;
-
-  if v_to - v_from > interval '366 days' then
-    v_from := v_to - interval '366 days';
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Order count + gross revenue (created in range, not cancelled)
-  -- -----------------------------------------------------------------
-  select count(*), coalesce(sum(o.total), 0)
-    into v_order_count, v_gross_revenue
-  from public.orders o
-  where o.restaurant_id = v_restaurant_id
-    and o.created_at >= v_from
-    and o.created_at <  v_to
-    and o.status <> 'cancelled';
-
-  v_gross_revenue := round(v_gross_revenue, 2);
-
-  -- Average order value (0 when there are no orders).
-  if v_order_count = 0 then
-    v_aov := 0;
-  else
-    v_aov := round(v_gross_revenue / v_order_count, 2);
-  end if;
-
-  -- -----------------------------------------------------------------
-  -- Paid revenue: succeeded payments whose paid_at falls in range.
-  -- -----------------------------------------------------------------
-  select coalesce(sum(p.amount), 0)
-    into v_paid_revenue
-  from public.payments p
-  join public.orders o on o.id = p.order_id
-  where o.restaurant_id = v_restaurant_id
-    and p.status = 'succeeded'
-    and p.paid_at >= v_from
-    and p.paid_at <  v_to;
-
-  v_paid_revenue := round(v_paid_revenue, 2);
-
-  -- -----------------------------------------------------------------
-  -- Refunded amount: succeeded refunds created in range.
-  -- -----------------------------------------------------------------
-  select coalesce(sum(rf.amount), 0)
-    into v_refunded
-  from public.refunds rf
-  join public.orders o on o.id = rf.order_id
-  where o.restaurant_id = v_restaurant_id
-    and rf.status = 'succeeded'
-    and rf.created_at >= v_from
-    and rf.created_at <  v_to;
-
-  v_refunded := round(v_refunded, 2);
-
-  -- -----------------------------------------------------------------
-  -- Top 10 items by revenue (snapshot name), not cancelled, in range.
-  -- -----------------------------------------------------------------
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'name',     t.item_name_snapshot,
-        'quantity', t.quantity,
-        'revenue',  round(t.revenue, 2)::text
-      )
-      order by t.revenue desc, t.item_name_snapshot
-    ),
-    '[]'::jsonb
-  )
-  into v_top_items
-  from (
-    select
-      oi.item_name_snapshot,
-      sum(oi.quantity)::int as quantity,
-      sum(oi.subtotal)      as revenue
-    from public.order_items oi
-    join public.orders o on o.id = oi.order_id
-    where o.restaurant_id = v_restaurant_id
-      and o.created_at >= v_from
-      and o.created_at <  v_to
-      and o.status <> 'cancelled'
-    group by oi.item_name_snapshot
-    order by revenue desc, oi.item_name_snapshot
-    limit 10
-  ) t;
-
-  -- -----------------------------------------------------------------
-  -- Popular items: top 10 by quantity sold for kitchen prep. Revenue
-  -- breaks quantity ties so the order is deterministic.
-  -- -----------------------------------------------------------------
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'name',     t.item_name_snapshot,
-        'quantity', t.quantity,
-        'revenue',  round(t.revenue, 2)::text
-      )
-      order by t.quantity desc, t.revenue desc, t.item_name_snapshot
-    ),
-    '[]'::jsonb
-  )
-  into v_popular_items
-  from (
-    select
-      oi.item_name_snapshot,
-      sum(oi.quantity)::int as quantity,
-      sum(oi.subtotal)      as revenue
-    from public.order_items oi
-    join public.orders o on o.id = oi.order_id
-    where o.restaurant_id = v_restaurant_id
-      and o.created_at >= v_from
-      and o.created_at <  v_to
-      and o.status <> 'cancelled'
-    group by oi.item_name_snapshot
-    order by quantity desc, revenue desc, oi.item_name_snapshot
-    limit 10
-  ) t;
-
-  -- -----------------------------------------------------------------
-  -- Busy hours: orders per hour-of-day in the restaurant timezone,
-  -- zero-filled for all 24 hours so the chart never shifts.
-  -- -----------------------------------------------------------------
-  select jsonb_agg(
-    jsonb_build_object(
-      'hour',   gs.hr,
-      'orders', coalesce(h.orders, 0)
-    )
-    order by gs.hr
-  )
-  into v_busy_hours
-  from generate_series(0, 23) as gs(hr)
-  left join (
-    select
-      extract(hour from (o.created_at at time zone v_timezone))::int as hr,
-      count(*)::int as orders
-    from public.orders o
-    where o.restaurant_id = v_restaurant_id
-      and o.created_at >= v_from
-      and o.created_at <  v_to
-      and o.status <> 'cancelled'
-    group by 1
-  ) h on h.hr = gs.hr;
-
-  -- -----------------------------------------------------------------
-  -- Busy days: orders per day-of-week in the restaurant timezone,
-  -- zero-filled for Sunday..Saturday so the chart never shifts.
-  -- -----------------------------------------------------------------
-  select jsonb_agg(
-    jsonb_build_object(
-      'day',    gs.dow,
-      'orders', coalesce(d.orders, 0)
-    )
-    order by gs.dow
-  )
-  into v_busy_days
-  from generate_series(0, 6) as gs(dow)
-  left join (
-    select
-      extract(dow from (o.created_at at time zone v_timezone))::int as dow,
-      count(*)::int as orders
-    from public.orders o
-    where o.restaurant_id = v_restaurant_id
-      and o.created_at >= v_from
-      and o.created_at <  v_to
-      and o.status <> 'cancelled'
-    group by 1
-  ) d on d.dow = gs.dow;
-
-  return jsonb_build_object(
-    'currency',        v_currency,
-    'from',            v_from,
-    'to',              v_to,
-    'order_count',     v_order_count,
-    'gross_revenue',   v_gross_revenue::text,
-    'paid_revenue',    v_paid_revenue::text,
-    'refunded_amount', v_refunded::text,
-    'aov',             v_aov::text,
-    'top_items',       v_top_items,
-    'popular_items',   v_popular_items,
-    'busy_hours',      v_busy_hours,
-    'busy_days',       v_busy_days
-  );
-end;
-$$;
-
--- Owners/managers only. On Supabase the default privileges grant EXECUTE
--- directly to anon/authenticated, so revoke from those roles explicitly
--- (same lesson as 0018) as well as PUBLIC.
-revoke all on function public.get_sales_report(timestamptz, timestamptz)
-  from public, anon, authenticated;
-grant execute on function public.get_sales_report(timestamptz, timestamptz)
-  to authenticated;
-
-comment on function public.get_sales_report(timestamptz, timestamptz) is
-  'Admin sales report for the caller''s restaurant. Owner/manager only; aggregates orders, payments, refunds, top items (revenue-led), popular items (quantity-led), busy hours and busy days server-side.';
-
--- ---------------------------------------------------------------------
--- End of migration
--- ---------------------------------------------------------------------
-
--- ===========================================================================
--- Source: supabase/migrations/20261119080000_add_staff_role.sql
--- ===========================================================================
-
--- =====================================================================
--- Add the staff role
--- ---------------------------------------------------------------------
--- New front-of-house role: full access to the staff workspace, but no admin
--- or team-management access. Kept in its own migration because PostgreSQL
--- enum values cannot be used reliably in the same transaction that adds them.
--- =====================================================================
-
-alter type public.staff_role
-  add value if not exists 'staff';
-
--- ===========================================================================
--- Source: supabase/migrations/20261119090000_role_permissions.sql
--- ===========================================================================
-
--- =====================================================================
--- Role management rules
--- ---------------------------------------------------------------------
--- owner   : everything, including managers and owners.
--- manager : everything except creating/editing/deleting managers or owners.
--- staff   : full staff-app access; no admin or role management.
--- kitchen : staff-app kitchen + order history only; no role management.
---
--- RLS already routes management through is_manager_of() (owner/manager only).
--- These guards close the remaining role-granting holes.
---
--- Safe to re-run.
--- =====================================================================
-
-create or replace function public.add_staff_by_email(
-  p_restaurant_id uuid,
-  p_email text,
-  p_role public.staff_role default 'staff'
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user_id uuid;
-  v_staff_id uuid;
-begin
-  if not public.is_manager_of(p_restaurant_id) then
-    raise exception 'Only an owner or manager can add team members'
-      using errcode = '42501';
-  end if;
-
-  if p_role = 'owner' then
-    raise exception 'Owner access cannot be granted from this screen'
-      using errcode = '42501';
-  end if;
-
-  if p_role = 'manager' and not public.is_owner_of(p_restaurant_id) then
-    raise exception 'Only the owner can add managers'
-      using errcode = '42501';
-  end if;
-
-  select p.id into v_user_id
-  from public.profiles p
-  where lower(p.email) = lower(btrim(p_email));
-
-  if v_user_id is null then
-    raise exception 'No account found for %. Ask them to sign up to QuickTab first.', btrim(p_email)
-      using errcode = 'P0002';
-  end if;
-
-  if v_user_id = auth.uid() then
-    raise exception 'You cannot change your own membership from this screen'
-      using errcode = '42501';
-  end if;
-
-  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
-  values (p_restaurant_id, v_user_id, p_role, true)
-  on conflict (restaurant_id, user_id) do update
-    set role = excluded.role,
-        is_active = true
-  returning id into v_staff_id;
-
-  return v_staff_id;
-end;
-$$;
-
-revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from public;
-revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from anon;
-grant execute on function public.add_staff_by_email(uuid, text, public.staff_role) to authenticated;
-
--- Direct INSERT guard: managers may only add kitchen/staff rows.
-create or replace function public.guard_staff_insert()
-returns trigger
-language plpgsql
-security invoker
-set search_path = public
-as $$
-begin
-  if public.is_privileged_caller() then
-    return new;
-  end if;
-
-  if new.role = 'owner' and not public.is_owner_of(new.restaurant_id) then
-    raise exception 'Only the restaurant owner can grant owner access'
-      using errcode = '42501';
-  end if;
-
-  if new.role = 'manager' and not public.is_owner_of(new.restaurant_id) then
-    raise exception 'Only the restaurant owner can grant manager access'
-      using errcode = '42501';
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists guard_staff_insert on public.restaurant_staff;
-create trigger guard_staff_insert
-  before insert on public.restaurant_staff
-  for each row execute function public.guard_staff_insert();
-
--- UPDATE/DELETE guard: owners are owner-only, managers are owner-only, and
--- kitchen/staff cannot manage anyone (RLS blocks them first).
-create or replace function public.guard_staff_management()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_privileged      boolean;
-  v_active_owners   int;
-begin
-  v_privileged :=
-    auth.role() = 'service_role'
-    or session_user in ('postgres', 'supabase_admin');
-
-  if v_privileged then
-    if tg_op = 'DELETE' then
-      return old;
-    end if;
-    return new;
-  end if;
-
-  -- Owner rows may only be managed by the owner.
-  if (tg_op = 'DELETE' and old.role = 'owner')
-     or (tg_op = 'UPDATE' and (old.role = 'owner' or new.role = 'owner')) then
-    if not public.is_owner_of(old.restaurant_id) then
-      raise exception 'Only the restaurant owner can change or remove an owner row'
-        using errcode = '42501';
-    end if;
-  end if;
-
-  if tg_op = 'UPDATE' then
-    -- The last active owner must remain active and keep the owner role.
-    if old.role = 'owner'
-       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
-      select count(*)
-        into v_active_owners
-      from public.restaurant_staff
-      where restaurant_id = old.restaurant_id
-        and role = 'owner'
-        and is_active;
-
-      if v_active_owners <= 1 then
-        raise exception 'The last active owner cannot be deactivated or demoted'
-          using errcode = '42501';
-      end if;
-    end if;
-
-    -- Nobody changes their own role or active status through the API.
-    if old.user_id = auth.uid()
-       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
-      raise exception 'You cannot change your own access'
-        using errcode = '42501';
-    end if;
-
-    -- Managers cannot manage peer managers.
-    if old.role = 'manager'
-       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active)
-       and not public.is_owner_of(old.restaurant_id) then
-      raise exception 'Managers cannot manage other managers'
-        using errcode = '42501';
-    end if;
-
-    -- Managers cannot promote kitchen/staff members into manager.
-    if new.role = 'manager'
-       and old.role is distinct from 'manager'
-       and not public.is_owner_of(old.restaurant_id) then
-      raise exception 'Only the restaurant owner can grant manager access'
-        using errcode = '42501';
-    end if;
-
-    return new;
-  end if;
-
-  -- DELETE: managers cannot remove peer managers.
-  if old.role = 'manager' and not public.is_owner_of(old.restaurant_id) then
-    raise exception 'Managers cannot manage other managers'
-      using errcode = '42501';
-  end if;
-
-  return old;
-end;
-$$;
-
-drop trigger if exists guard_staff_management on public.restaurant_staff;
-create trigger guard_staff_management
-  before update or delete on public.restaurant_staff
-  for each row execute function public.guard_staff_management();
-
-comment on function public.guard_staff_management() is
-  'Owner rows and manager grants are owner-only; managers may manage staff/kitchen rows, while staff/kitchen cannot manage roles.';
-
--- ===========================================================================
--- Source: supabase/migrations/20261119100000_refund_guards_inflight.sql
--- ===========================================================================
-
--- =====================================================================
--- Refund guards count in-flight refunds and serialise per payment/line
--- ---------------------------------------------------------------------
--- The API inserts a refund row once Stripe has accepted the refund. While
--- Stripe settles it the row is 'requested', but the money is already
--- reserved and no longer refundable, so the amount and quantity guards must
--- count it.
---
--- Two gaps are closed here:
---   * guard_refund_amount summed only 'succeeded' refunds, so a second
---     refund could pass the cap while an earlier one was still requested.
---   * Neither guard locked the row it caps against, so two concurrent
---     refunds could both read the same total and both pass.
---
--- Locking the payment row serialises concurrent refunds for that payment;
--- locking the order-item row does the same for concurrent line refunds.
--- The triggers fire in name order, so both transactions take the payment
--- lock first (guard_refund_amount) and the line lock second
--- (guard_refund_quantity), which keeps the lock order consistent.
---
--- Safe to re-run.
--- =====================================================================
-
-create or replace function public.guard_refund_amount()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_payment  public.payments;
-  v_refunded numeric;
-begin
-  -- Lock the payment so concurrent refunds for it serialise on the cap.
-  select * into v_payment
-  from public.payments
-  where id = new.payment_id
-  for update;
-
-  if not found then
-    raise exception 'Payment not found for this refund'
-      using errcode = '23503';
-  end if;
-
-  if v_payment.order_id <> new.order_id then
-    raise exception 'Refund order does not match the payment order'
-      using errcode = '23514';
-  end if;
-
-  if v_payment.status <> 'succeeded' then
-    raise exception 'Only succeeded payments can be refunded'
-      using errcode = '23514';
-  end if;
-
-  select coalesce(sum(amount), 0)
-    into v_refunded
-  from public.refunds
-  where payment_id = new.payment_id
-    and status in ('succeeded', 'requested')
-    and id is distinct from new.id;
-
-  if v_refunded + new.amount > v_payment.amount then
-    raise exception 'Refund amount exceeds the remaining payment balance'
-      using errcode = '23514';
-  end if;
-
-  return new;
-end;
-$$;
-
-create or replace function public.guard_refund_quantity()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_item     public.order_items;
-  v_used     int;
-  v_expected numeric;
-begin
-  if new.order_item_id is null then
-    return new;
-  end if;
-
-  -- Lock the line so concurrent refunds for it serialise on the cap.
-  select * into v_item
-  from public.order_items
-  where id = new.order_item_id
-  for update;
-
-  if not found then
-    raise exception 'Order line not found for this refund'
-      using errcode = '23503';
-  end if;
-
-  if v_item.order_id <> new.order_id then
-    raise exception 'Refund order does not match the order line'
-      using errcode = '23514';
-  end if;
-
-  if new.quantity is null or new.quantity <= 0 then
-    raise exception 'Line refunds require a positive quantity'
-      using errcode = '23514';
-  end if;
-
-  if new.quantity > v_item.quantity then
-    raise exception 'Refund quantity exceeds the ordered quantity'
-      using errcode = '23514';
-  end if;
-
-  select coalesce(sum(quantity), 0)
-    into v_used
-  from public.refunds
-  where order_item_id = new.order_item_id
-    and status in ('succeeded', 'requested')
-    and id is distinct from new.id;
-
-  if v_used + new.quantity > v_item.quantity then
-    raise exception 'Refund quantity exceeds the remaining line quantity'
-      using errcode = '23514';
-  end if;
-
-  v_expected := round(v_item.unit_price_snapshot * new.quantity, 2);
-  if new.amount <> v_expected then
-    raise exception 'Line refund amount must equal unit price × quantity'
-      using errcode = '23514';
-  end if;
-
-  return new;
-end;
-$$;
-
-comment on function public.guard_refund_amount() is
-  'Caps refunds at the payment balance, counts in-flight (requested) refunds, and locks the payment row so concurrent refunds serialise.';
-comment on function public.guard_refund_quantity() is
-  'Caps line refunds at the ordered quantity, counts in-flight (requested) refunds, and locks the order-item row so concurrent refunds serialise.';
-
--- ===========================================================================
 -- Source: supabase/migrations/0020_restaurant_plans.sql
 -- ===========================================================================
 
@@ -10002,3 +7790,2848 @@ grant execute on function public.is_owner_of(uuid)   to anon, authenticated;
 -- ---------------------------------------------------------------------
 -- End of migration
 -- ---------------------------------------------------------------------
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119000000_restore_place_order_contract.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Restore the single `place_order` contract (audit H1)
+-- ---------------------------------------------------------------------
+-- 20261105094127_order_geofence_toggle.sql re-created a 7-arg place_order
+-- (no `p_tip`) and an older get_order_tracking, without dropping the
+-- canonical 8-arg function. The CLI sorts 0027 before the timestamped
+-- group, so a fresh database ends up with both overloads (PGRST203).
+--
+-- This migration drops the stale 7-arg overload and restores the canonical
+-- 8-arg body from 0027_place_order_pending_status.sql:21+ and the tracking
+-- function from 0024_place_order_modifiers.sql:537+.
+--
+-- On the hosted project this is a deliberate no-op: the 7-arg overload does
+-- not exist there and the 8-arg contract is already live.
+-- Safe to re-run.
+-- =====================================================================
+
+drop function if exists public.place_order(text, text, text, text, jsonb, double precision, double precision);
+
+create or replace function public.place_order(
+  p_restaurant_slug text,
+  p_table_token     text,
+  p_customer_name   text,
+  p_notes           text default null,
+  p_items           jsonb default '[]'::jsonb,
+  p_customer_latitude  double precision default null,
+  p_customer_longitude double precision default null,
+  p_tip             jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id   uuid;
+  v_restaurant_name text;
+  v_currency        text;
+  v_timezone        text;
+  v_tax_rate        numeric;
+  v_restaurant_latitude  double precision;
+  v_restaurant_longitude double precision;
+  v_geofence_enabled boolean := false;
+  v_distance_m          double precision;
+  v_table_id        uuid;
+  v_table_number    text;
+  v_expected_lines  int;
+  v_valid_lines     int;
+  v_lines           jsonb;
+  v_total           numeric;
+  v_tax             numeric;
+  v_subtotal        numeric;
+  v_tip_amount      numeric := 0;
+  v_amount_due      numeric;
+  v_tip_value       numeric;
+  v_tax_raw         numeric;
+  v_prep_minutes    int;
+  v_order_id        uuid;
+  v_tracking_token  text;
+  v_order_number    text;
+  v_day             text;
+  v_seq             int;
+  v_attempt         int := 0;
+  v_pickup_estimate timestamptz;
+  v_line            jsonb;
+  v_order_item_id   uuid;
+begin
+  -- -----------------------------------------------------------------
+  -- Input validation
+  -- -----------------------------------------------------------------
+  if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
+    raise exception 'customer_name_required' using errcode = 'P0001';
+  end if;
+
+  if p_items is null
+     or jsonb_typeof(p_items) <> 'array'
+     or jsonb_array_length(p_items) = 0 then
+    raise exception 'empty_cart' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'menu_item_id' is null
+       or (e->>'menu_item_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'quantity' is null
+       or (e->>'quantity') !~ '^[0-9]+$'
+       or (e->>'quantity')::int <= 0
+  ) then
+    raise exception 'invalid_quantity' using errcode = 'P0001';
+  end if;
+
+  -- `modifiers` is optional; when supplied it must be an array of uuids.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  -- The same modifier may not be chosen twice on one line.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
+      select count(distinct selected.value)
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    )
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Resolve restaurant + table (rejects cross-restaurant tokens and
+  -- deactivated tables/restaurants)
+  -- -----------------------------------------------------------------
+  select r.id, r.name, r.currency, r.timezone, r.tax_rate
+    into v_restaurant_id, v_restaurant_name, v_currency, v_timezone, v_tax_rate
+  from public.restaurants r
+  where r.slug = p_restaurant_slug
+    and r.is_active
+  limit 1;
+
+  if v_restaurant_id is null then
+    raise exception 'restaurant_not_found' using errcode = 'P0001';
+  end if;
+
+  select t.id, t.table_number
+    into v_table_id, v_table_number
+  from public.tables t
+  where t.qr_token = p_table_token
+    and t.restaurant_id = v_restaurant_id
+    and t.is_active
+  limit 1;
+
+  if v_table_id is null then
+    raise exception 'table_not_found' using errcode = 'P0001';
+  end if;
+
+  select rl.latitude, rl.longitude, coalesce(rl.geofence_enabled, false)
+    into v_restaurant_latitude, v_restaurant_longitude, v_geofence_enabled
+  from public.restaurant_locations rl
+  where rl.restaurant_id = v_restaurant_id;
+
+  if coalesce(v_geofence_enabled, false) then
+    if p_customer_latitude is null or p_customer_longitude is null then
+      raise exception 'customer_location_required' using errcode = 'P0001';
+    end if;
+
+    if p_customer_latitude < -90 or p_customer_latitude > 90
+       or p_customer_longitude < -180 or p_customer_longitude > 180 then
+      raise exception 'customer_location_invalid' using errcode = 'P0001';
+    end if;
+
+    if v_restaurant_latitude is null or v_restaurant_longitude is null then
+      raise exception 'restaurant_location_not_configured' using errcode = 'P0001';
+    end if;
+
+    -- Haversine great-circle distance in metres. Coordinates are not persisted.
+    v_distance_m := 6371000 * 2 * asin(least(1, sqrt(
+        power(sin(radians(p_customer_latitude - v_restaurant_latitude) / 2), 2)
+        + cos(radians(v_restaurant_latitude))
+          * cos(radians(p_customer_latitude))
+          * power(sin(radians(p_customer_longitude - v_restaurant_longitude) / 2), 2)
+      )));
+
+    if v_distance_m > 500 then
+      raise exception 'outside_ordering_radius' using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Validate every menu item belongs to this restaurant and is available.
+  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
+  -- choices fold together while different variants stay separate.
+  -- -----------------------------------------------------------------
+  select count(*)
+    into v_expected_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted;
+
+  select count(*)
+    into v_valid_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted
+  join public.menu_items mi
+    on mi.id = wanted.menu_item_id
+   and mi.restaurant_id = v_restaurant_id
+   and mi.is_available;
+
+  if v_valid_lines <> v_expected_lines then
+    raise exception 'menu_item_unavailable' using errcode = 'P0001';
+  end if;
+
+  -- Modifier ids are untrusted: every choice must be available and linked
+  -- to this item through one of its groups at this restaurant.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    left join public.modifiers m
+      on m.id = selected.value::uuid
+     and m.is_available
+    left join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+     and item_group.modifier_group_id = m.modifier_group_id
+    left join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    where m.id is null or item_group.menu_item_id is null or g.id is null
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- A required group must have at least one choice.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where g.is_required
+      and chosen.selected_count = 0
+  ) then
+    raise exception 'modifier_required' using errcode = 'P0001';
+  end if;
+
+  -- Enforce each linked group's min/max rules on the server too.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where (g.selection_type = 'single'
+             and (chosen.selected_count > 1
+                  or chosen.selected_count < g.min_selections))
+       or (g.selection_type <> 'single'
+             and (chosen.selected_count < g.min_selections
+                  or (g.max_selections > 0
+                      and chosen.selected_count > g.max_selections)))
+  ) then
+    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
+  end if;
+
+  -- Price each grouped cart line from live database values. Identical item +
+  -- modifier combinations have already folded together.
+  select
+    jsonb_agg(
+      jsonb_build_object(
+        'menu_item_id', priced.menu_item_id,
+        'name',         priced.name,
+        'quantity',     priced.quantity,
+        'unit_price',   priced.unit_price,
+        'subtotal',     priced.line_subtotal,
+        'modifiers',    priced.modifiers
+      ) order by priced.display_order, priced.name, priced.line_order
+    ),
+    round(coalesce(sum(priced.line_subtotal), 0), 2),
+    max(priced.prep_time_minutes)
+  into v_lines, v_total, v_prep_minutes
+  from (
+    select
+      mi.id as menu_item_id,
+      mi.name,
+      mi.display_order,
+      mi.prep_time_minutes,
+      grouped.line_order,
+      grouped.quantity,
+      round(mi.price + selected.adjustment, 2) as unit_price,
+      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
+      selected.modifiers
+    from (
+      select
+        (e.value->>'menu_item_id')::uuid as menu_item_id,
+        array(
+          select selected.value::uuid
+          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
+          order by selected.value
+        ) as modifier_key,
+        sum((e.value->>'quantity')::int)::int as quantity,
+        min(e.ordinality) as line_order
+      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
+      group by 1, 2
+    ) as grouped
+    join public.menu_items mi
+      on mi.id = grouped.menu_item_id
+     and mi.restaurant_id = v_restaurant_id
+     and mi.is_available
+    cross join lateral (
+      select
+        coalesce((
+          select sum(m.price_adjustment)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), 0) as adjustment,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'modifier_id', m.id,
+            'name', m.name,
+            'price_adjustment', m.price_adjustment
+          ) order by m.display_order, m.name)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), '[]'::jsonb) as modifiers
+    ) as selected
+  ) as priced;
+
+  -- GST-inclusive split: total is what the customer pays.
+  v_total    := round(coalesce(v_total, 0), 2);
+  v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
+  v_tax      := round(v_tax_raw, 2);
+  v_subtotal := round(v_total - v_tax, 2);
+
+  -- Tip: computed here, never trusted from the client. The tip is added on
+  -- top of the GST-inclusive items total and carries no additional GST.
+  if p_tip is null or p_tip = 'null'::jsonb or p_tip = '{}'::jsonb then
+    v_tip_amount := 0;
+  elsif jsonb_typeof(p_tip) <> 'object' then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif not (p_tip ? 'type') then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif p_tip->>'type' = 'none' then
+    v_tip_amount := 0;
+  elsif p_tip->>'type' = 'percent' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 25 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_total * v_tip_value / 100, 2);
+  elsif p_tip->>'type' = 'fixed' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 500 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_tip_value, 2);
+  else
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  end if;
+
+  v_amount_due := round(v_total + v_tip_amount, 2);
+
+  v_pickup_estimate := now()
+    + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
+
+  -- -----------------------------------------------------------------
+  -- Insert the order + items. Retry the daily order number on collision.
+  -- -----------------------------------------------------------------
+  v_day := to_char(now() at time zone v_timezone, 'YYMMDD');
+
+  select count(*) + 1
+    into v_seq
+  from public.orders o
+  where o.restaurant_id = v_restaurant_id
+    and o.order_number like 'QT-' || v_day || '-%';
+
+  loop
+    v_attempt := v_attempt + 1;
+    v_order_number := 'QT-' || v_day || '-' ||
+      lpad((v_seq + v_attempt - 1)::text, 4, '0');
+
+    begin
+      insert into public.orders (
+        restaurant_id,
+        table_id,
+        customer_id,
+        customer_name_snapshot,
+        order_number,
+        status,
+        subtotal,
+        tax,
+        total,
+        tip_amount,
+        notes,
+        pickup_time_estimate
+      )
+      values (
+        v_restaurant_id,
+        v_table_id,
+        auth.uid(),                        -- null for guests
+        btrim(p_customer_name),
+        v_order_number,
+        'pending'::public.order_status,  -- unpaid until the Stripe webhook confirms it
+        v_subtotal,
+        v_tax,
+        v_total,
+        v_tip_amount,
+        nullif(btrim(coalesce(p_notes, '')), ''),
+        v_pickup_estimate
+      )
+      returning id, tracking_token
+      into v_order_id, v_tracking_token;
+
+      exit;
+    exception
+      when unique_violation then
+        if v_attempt >= 5 then
+          raise exception 'order_number_conflict' using errcode = 'P0001';
+        end if;
+    end;
+  end loop;
+
+  -- Each priced line carries its own modifier snapshots; `returning id`
+  -- ties every snapshot row to the order_item it belongs to.
+  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
+  loop
+    insert into public.order_items (
+      order_id,
+      menu_item_id,
+      item_name_snapshot,
+      unit_price_snapshot,
+      quantity,
+      subtotal
+    )
+    values (
+      v_order_id,
+      (v_line->>'menu_item_id')::uuid,
+      v_line->>'name',
+      (v_line->>'unit_price')::numeric,
+      (v_line->>'quantity')::int,
+      (v_line->>'subtotal')::numeric
+    )
+    returning id into v_order_item_id;
+
+    insert into public.order_item_modifiers (
+      order_item_id,
+      modifier_id,
+      modifier_name_snapshot,
+      price_adjustment_snapshot
+    )
+    select
+      v_order_item_id,
+      (modifier->>'modifier_id')::uuid,
+      modifier->>'name',
+      (modifier->>'price_adjustment')::numeric
+    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
+  end loop;
+
+  return jsonb_build_object(
+    'order_id',            v_order_id,
+    'order_number',        v_order_number,
+    'tracking_token',      v_tracking_token,
+    'status',              'pending',
+    'subtotal',            v_subtotal,
+    'tax',                 v_tax,
+    'total',               v_total,
+    'tip_amount',          v_tip_amount,
+    'amount_due',          v_amount_due,
+    'currency',            v_currency,
+    'restaurant_name',     v_restaurant_name,
+    'table_number',        v_table_number,
+    'pickup_time_estimate', v_pickup_estimate,
+    'created_at',          now(),
+    'items',               v_lines
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Grants + comment (unchanged from 0024)
+-- ---------------------------------------------------------------------
+revoke all on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) from public;
+grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb)
+  to anon, authenticated;
+
+comment on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb) is
+  'Atomic guest/staff order placement with server-side GST-inclusive pricing, validated tips and server-validated modifier pricing/snapshots. Orders start pending until the Stripe webhook confirms payment.';
+
+create or replace function public.get_order_tracking(p_token text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+begin
+  if p_token is null or length(btrim(p_token)) = 0 then
+    return null;
+  end if;
+
+  select jsonb_build_object(
+    'order_id',             o.id,
+    'order_number',         o.order_number,
+    'status',               o.status,
+    'subtotal',             o.subtotal,
+    'tax',                  o.tax,
+    'total',                o.total,
+    'tip_amount',           o.tip_amount,
+    'currency',             r.currency,
+    'created_at',           o.created_at,
+    'pickup_time_estimate', o.pickup_time_estimate,
+    'table_number',         t.table_number,
+    'restaurant_name',      r.name,
+    'payment_status',       latest_payment.status,
+    'payment_method_type',  latest_payment.payment_method_type,
+    'receipt_url',          latest_payment.receipt_url,
+    'amount_paid',          coalesce((
+      select sum(p.amount)
+        from public.payments p
+       where p.order_id = o.id
+         and p.status in ('succeeded', 'refunded')
+    ), 0),
+    'refunded_total',       coalesce((
+      select sum(rf.amount)
+        from public.refunds rf
+       where rf.order_id = o.id
+         and rf.status = 'succeeded'
+    ), 0),
+    'items', coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'name',       oi.item_name_snapshot,
+            'quantity',   oi.quantity,
+            'unit_price', oi.unit_price_snapshot,
+            'subtotal',   oi.subtotal,
+            'modifiers', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'name', oim.modifier_name_snapshot,
+                'price_adjustment', oim.price_adjustment_snapshot
+              ) order by oim.id)
+              from public.order_item_modifiers oim
+              where oim.order_item_id = oi.id
+            ), '[]'::jsonb)
+          )
+          order by oi.id
+        )
+        from public.order_items oi
+        where oi.order_id = o.id
+      ),
+      '[]'::jsonb
+    )
+  )
+  into v_result
+  from public.orders o
+  join public.restaurants r on r.id = o.restaurant_id
+  left join public.tables t on t.id = o.table_id
+  left join lateral (
+    select p.status, p.payment_method_type, p.receipt_url
+      from public.payments p
+     where p.order_id = o.id
+     order by (p.status in ('succeeded', 'refunded')) desc, p.created_at desc
+     limit 1
+  ) as latest_payment on true
+  where o.tracking_token = btrim(p_token);
+
+  return v_result;  -- null when no match; leaks nothing
+end;
+$$;
+
+revoke all on function public.get_order_tracking(text) from public;
+grant execute on function public.get_order_tracking(text)
+  to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Safety assertion: exactly one `place_order` overload must remain.
+-- ---------------------------------------------------------------------
+do $$
+declare n int;
+begin
+  select count(*) into n from pg_proc where proname = 'place_order';
+  if n <> 1 then
+    raise exception 'expected exactly one place_order, found %', n;
+  end if;
+end $$;
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119010000_staff_place_order.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Staff-assisted ordering (counter / table service)
+-- ---------------------------------------------------------------------
+-- Customers who order in person need a staff-facing way to create the
+-- order. This RPC is the only writer for that journey.
+--
+--   * SECURITY DEFINER + explicit active-staff verification.
+--   * `p_table_id` is optional: null means a counter / no-table order.
+--   * Reuses the exact `place_order` validation and GST-inclusive pricing
+--     rules (menu availability, modifier ownership, required/min/max,
+--     server-side prices and snapshots).
+--   * Orders are inserted as `confirmed` because staff have taken the
+--     order in person; there is no Stripe PaymentIntent to wait for.
+--   * `p_paid` records a payment collected at the counter (cash/terminal).
+--     When false, no payment row is written and the order stays
+--     "not recorded" rather than pretending money was captured.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.staff_place_order(
+  p_table_id      uuid default null,
+  p_customer_name text default null,
+  p_notes         text default null,
+  p_items         jsonb default '[]'::jsonb,
+  p_paid          boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id   uuid;
+  v_restaurant_name text;
+  v_currency        text;
+  v_timezone        text;
+  v_tax_rate        numeric;
+  v_table_id        uuid;
+  v_table_number    text;
+  v_expected_lines  int;
+  v_valid_lines     int;
+  v_lines           jsonb;
+  v_total           numeric;
+  v_tax             numeric;
+  v_subtotal        numeric;
+  v_tax_raw         numeric;
+  v_prep_minutes    int;
+  v_order_id        uuid;
+  v_tracking_token  text;
+  v_order_number    text;
+  v_day             text;
+  v_seq             int;
+  v_attempt         int := 0;
+  v_pickup_estimate timestamptz;
+  v_line            jsonb;
+  v_order_item_id   uuid;
+begin
+  -- -----------------------------------------------------------------
+  -- Caller verification. A table id is optional (counter order), but
+  -- either way the caller must be active staff of that restaurant.
+  -- -----------------------------------------------------------------
+  if auth.uid() is null then
+    raise exception 'not_authorised' using errcode = 'P0001';
+  end if;
+
+  if p_table_id is not null then
+    select t.id, t.table_number, t.restaurant_id
+      into v_table_id, v_table_number, v_restaurant_id
+    from public.tables t
+    where t.id = p_table_id
+      and t.is_active
+    limit 1;
+
+    if v_table_id is null then
+      raise exception 'table_not_found' using errcode = 'P0001';
+    end if;
+
+    if not public.is_staff_of(v_restaurant_id) then
+      raise exception 'not_authorised' using errcode = 'P0001';
+    end if;
+  else
+    select r.id
+      into v_restaurant_id
+    from public.restaurant_staff rs
+    join public.restaurants r on r.id = rs.restaurant_id
+    where rs.user_id = auth.uid()
+      and rs.is_active
+      and r.is_active
+    order by r.created_at, r.id
+    limit 1;
+
+    if v_restaurant_id is null then
+      raise exception 'not_authorised' using errcode = 'P0001';
+    end if;
+  end if;
+
+  select r.name, r.currency, r.timezone, r.tax_rate
+    into v_restaurant_name, v_currency, v_timezone, v_tax_rate
+  from public.restaurants r
+  where r.id = v_restaurant_id
+    and r.is_active;
+
+  if v_restaurant_name is null then
+    raise exception 'not_authorised' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Input validation (mirrors place_order)
+  -- -----------------------------------------------------------------
+  if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
+    raise exception 'customer_name_required' using errcode = 'P0001';
+  end if;
+
+  if p_items is null
+     or jsonb_typeof(p_items) <> 'array'
+     or jsonb_array_length(p_items) = 0 then
+    raise exception 'empty_cart' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'menu_item_id' is null
+       or (e->>'menu_item_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'quantity' is null
+       or (e->>'quantity') !~ '^[0-9]+$'
+       or (e->>'quantity')::int <= 0
+  ) then
+    raise exception 'invalid_quantity' using errcode = 'P0001';
+  end if;
+
+  -- `modifiers` is optional; when supplied it must be an array of uuids.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  -- The same modifier may not be chosen twice on one line.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
+      select count(distinct selected.value)
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    )
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Validate every menu item belongs to this restaurant and is available.
+  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
+  -- choices fold together while different variants stay separate.
+  -- -----------------------------------------------------------------
+  select count(*)
+    into v_expected_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted;
+
+  select count(*)
+    into v_valid_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted
+  join public.menu_items mi
+    on mi.id = wanted.menu_item_id
+   and mi.restaurant_id = v_restaurant_id
+   and mi.is_available;
+
+  if v_valid_lines <> v_expected_lines then
+    raise exception 'menu_item_unavailable' using errcode = 'P0001';
+  end if;
+
+  -- Modifier ids are untrusted: every choice must be available and linked
+  -- to this item through one of its groups at this restaurant.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    left join public.modifiers m
+      on m.id = selected.value::uuid
+     and m.is_available
+    left join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+     and item_group.modifier_group_id = m.modifier_group_id
+    left join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    where m.id is null or item_group.menu_item_id is null or g.id is null
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- A required group must have at least one choice.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where g.is_required
+      and chosen.selected_count = 0
+  ) then
+    raise exception 'modifier_required' using errcode = 'P0001';
+  end if;
+
+  -- Enforce each linked group's min/max rules on the server too.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where (g.selection_type = 'single'
+             and (chosen.selected_count > 1
+                  or chosen.selected_count < g.min_selections))
+       or (g.selection_type <> 'single'
+             and (chosen.selected_count < g.min_selections
+                  or (g.max_selections > 0
+                      and chosen.selected_count > g.max_selections)))
+  ) then
+    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
+  end if;
+
+  -- Price each grouped cart line from live database values.
+  select
+    jsonb_agg(
+      jsonb_build_object(
+        'menu_item_id', priced.menu_item_id,
+        'name',         priced.name,
+        'quantity',     priced.quantity,
+        'unit_price',   priced.unit_price,
+        'subtotal',     priced.line_subtotal,
+        'modifiers',    priced.modifiers
+      ) order by priced.display_order, priced.name, priced.line_order
+    ),
+    round(coalesce(sum(priced.line_subtotal), 0), 2),
+    max(priced.prep_time_minutes)
+  into v_lines, v_total, v_prep_minutes
+  from (
+    select
+      mi.id as menu_item_id,
+      mi.name,
+      mi.display_order,
+      mi.prep_time_minutes,
+      grouped.line_order,
+      grouped.quantity,
+      round(mi.price + selected.adjustment, 2) as unit_price,
+      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
+      selected.modifiers
+    from (
+      select
+        (e.value->>'menu_item_id')::uuid as menu_item_id,
+        array(
+          select selected.value::uuid
+          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
+          order by selected.value
+        ) as modifier_key,
+        sum((e.value->>'quantity')::int)::int as quantity,
+        min(e.ordinality) as line_order
+      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
+      group by 1, 2
+    ) as grouped
+    join public.menu_items mi
+      on mi.id = grouped.menu_item_id
+     and mi.restaurant_id = v_restaurant_id
+     and mi.is_available
+    cross join lateral (
+      select
+        coalesce((
+          select sum(m.price_adjustment)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), 0) as adjustment,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'modifier_id', m.id,
+            'name', m.name,
+            'price_adjustment', m.price_adjustment
+          ) order by m.display_order, m.name)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), '[]'::jsonb) as modifiers
+    ) as selected
+  ) as priced;
+
+  -- GST-inclusive split: total is what the guest pays at the counter.
+  v_total    := round(coalesce(v_total, 0), 2);
+  v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
+  v_tax      := round(v_tax_raw, 2);
+  v_subtotal := round(v_total - v_tax, 2);
+
+  v_pickup_estimate := now()
+    + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
+
+  -- -----------------------------------------------------------------
+  -- Insert the order + items. Retry the daily order number on collision.
+  -- Staff orders are `confirmed` immediately: there is no online payment
+  -- step to wait for before the kitchen can start.
+  -- -----------------------------------------------------------------
+  v_day := to_char(now() at time zone v_timezone, 'YYMMDD');
+
+  select count(*) + 1
+    into v_seq
+  from public.orders o
+  where o.restaurant_id = v_restaurant_id
+    and o.order_number like 'QT-' || v_day || '-%';
+
+  loop
+    v_attempt := v_attempt + 1;
+    v_order_number := 'QT-' || v_day || '-' ||
+      lpad((v_seq + v_attempt - 1)::text, 4, '0');
+
+    begin
+      insert into public.orders (
+        restaurant_id,
+        table_id,
+        customer_id,
+        customer_name_snapshot,
+        order_number,
+        status,
+        subtotal,
+        tax,
+        total,
+        tip_amount,
+        notes,
+        pickup_time_estimate
+      )
+      values (
+        v_restaurant_id,
+        v_table_id,
+        null,                              -- staff-created, not a customer account
+        btrim(p_customer_name),
+        v_order_number,
+        'confirmed'::public.order_status,
+        v_subtotal,
+        v_tax,
+        v_total,
+        0,
+        nullif(btrim(coalesce(p_notes, '')), ''),
+        v_pickup_estimate
+      )
+      returning id, tracking_token
+      into v_order_id, v_tracking_token;
+
+      exit;
+    exception
+      when unique_violation then
+        if v_attempt >= 5 then
+          raise exception 'order_number_conflict' using errcode = 'P0001';
+        end if;
+    end;
+  end loop;
+
+  -- Each priced line carries its own modifier snapshots.
+  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
+  loop
+    insert into public.order_items (
+      order_id,
+      menu_item_id,
+      item_name_snapshot,
+      unit_price_snapshot,
+      quantity,
+      subtotal
+    )
+    values (
+      v_order_id,
+      (v_line->>'menu_item_id')::uuid,
+      v_line->>'name',
+      (v_line->>'unit_price')::numeric,
+      (v_line->>'quantity')::int,
+      (v_line->>'subtotal')::numeric
+    )
+    returning id into v_order_item_id;
+
+    insert into public.order_item_modifiers (
+      order_item_id,
+      modifier_id,
+      modifier_name_snapshot,
+      price_adjustment_snapshot
+    )
+    select
+      v_order_item_id,
+      (modifier->>'modifier_id')::uuid,
+      modifier->>'name',
+      (modifier->>'price_adjustment')::numeric
+    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
+  end loop;
+
+  -- Optional: money collected at the counter (cash or external terminal).
+  -- Without this, the order remains honestly "no payment recorded".
+  if coalesce(p_paid, false) then
+    insert into public.payments (
+      order_id,
+      status,
+      amount,
+      currency,
+      payment_method_type,
+      paid_at
+    )
+    values (
+      v_order_id,
+      'succeeded',
+      v_total,
+      v_currency,
+      'other',
+      now()
+    );
+  end if;
+
+  return jsonb_build_object(
+    'order_id',             v_order_id,
+    'order_number',         v_order_number,
+    'tracking_token',       v_tracking_token,
+    'status',               'confirmed',
+    'subtotal',             v_subtotal,
+    'tax',                  v_tax,
+    'total',                v_total,
+    'tip_amount',           0,
+    'currency',             v_currency,
+    'restaurant_name',      v_restaurant_name,
+    'table_number',         v_table_number,
+    'customer_name',        btrim(p_customer_name),
+    'paid',                 coalesce(p_paid, false),
+    'pickup_time_estimate', v_pickup_estimate,
+    'created_at',           now(),
+    'items',                v_lines
+  );
+end;
+$$;
+
+revoke all on function public.staff_place_order(uuid, text, text, jsonb, boolean)
+  from public, anon, authenticated;
+grant execute on function public.staff_place_order(uuid, text, text, jsonb, boolean)
+  to authenticated;
+
+comment on function public.staff_place_order(uuid, text, text, jsonb, boolean) is
+  'Staff-facing counter/table order creation: active-staff only, server-priced, validated modifiers, confirmed immediately, optional counter payment record.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119040000_orders_mark_table_occupied.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Confirmed orders occupy their table
+-- ---------------------------------------------------------------------
+-- Staff asked for the floor plan to reflect service automatically:
+--   * when a customer order is confirmed (payment succeeded) the table
+--     becomes occupied;
+--   * when staff create an order it is confirmed immediately, so the same
+--     rule applies;
+--   * staff still own the reverse transition — nothing auto-frees a table.
+--
+-- The trigger keeps this out of `place_order` / `staff_place_order` bodies
+-- (and away from the Stripe webhook), so every confirmation path behaves the
+-- same. Pending/unpaid checkouts do not occupy a table.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.mark_table_occupied_for_order()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.table_id is not null
+     and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.tables
+       set status = 'occupied'
+     where id = new.table_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_orders_mark_table_occupied on public.orders;
+create trigger trg_orders_mark_table_occupied
+  after insert or update of status on public.orders
+  for each row execute function public.mark_table_occupied_for_order();
+
+comment on function public.mark_table_occupied_for_order() is
+  'Marks a table occupied when an order becomes confirmed. Staff still mark tables free/cleaning; orders never auto-free a table.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119050000_pickup_table.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- System counter / pick-up table
+-- ---------------------------------------------------------------------
+-- Every restaurant gets one permanent service table for counter and pick-up
+-- orders. It is created with the restaurant, appears first on the floor plan,
+-- and can only be enabled/disabled or moved through its operational status.
+-- It cannot be edited structurally or deleted.
+--
+-- Existing restaurants: an existing Pick-up/Counter table is promoted, or a
+-- new one is inserted. New restaurants created through the onboarding RPCs get
+-- one automatically.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+alter table public.tables
+  add column if not exists is_system boolean not null default false;
+
+comment on column public.tables.is_system is
+  'True for the permanent counter/pick-up table. System tables cannot be edited structurally or deleted.';
+
+-- ---------------------------------------------------------------------
+-- 1. Idempotent creation/promotion helper
+-- ---------------------------------------------------------------------
+create or replace function public.ensure_pickup_table(p_restaurant_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_table_id uuid;
+begin
+  select t.id
+    into v_table_id
+  from public.tables t
+  where t.restaurant_id = p_restaurant_id
+    and t.is_system
+  limit 1;
+
+  if v_table_id is not null then
+    return v_table_id;
+  end if;
+
+  select t.id
+    into v_table_id
+  from public.tables t
+  where t.restaurant_id = p_restaurant_id
+    and (
+      lower(t.table_number) in ('pick-up', 'pickup', 'counter', 'counter / pick-up')
+      or lower(coalesce(t.location_label, '')) in ('pick-up', 'pickup', 'counter')
+    )
+  order by t.created_at, t.id
+  limit 1;
+
+  if v_table_id is not null then
+    update public.tables
+       set is_system = true,
+           location_label = 'Counter'
+     where id = v_table_id;
+    return v_table_id;
+  end if;
+
+  insert into public.tables (
+    restaurant_id,
+    table_number,
+    location_label,
+    is_active,
+    is_system
+  )
+  values (
+    p_restaurant_id,
+    'Pick-up',
+    'Counter',
+    true,
+    true
+  )
+  returning id into v_table_id;
+
+  return v_table_id;
+end;
+$$;
+
+revoke all on function public.ensure_pickup_table(uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 2. Backfill every existing restaurant
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_restaurant record;
+begin
+  for v_restaurant in select id from public.restaurants loop
+    perform public.ensure_pickup_table(v_restaurant.id);
+  end loop;
+end;
+$$;
+
+create unique index if not exists uq_tables_one_system_per_restaurant
+  on public.tables(restaurant_id)
+  where is_system;
+
+-- ---------------------------------------------------------------------
+-- 3. Protect the system table
+-- ---------------------------------------------------------------------
+create or replace function public.guard_system_table()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_system then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.is_system and not public.is_privileged_caller() then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.is_system is distinct from old.is_system
+     and not public.is_privileged_caller() then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  if old.is_system and (
+    new.restaurant_id  is distinct from old.restaurant_id
+    or new.table_number  is distinct from old.table_number
+    or new.qr_token      is distinct from old.qr_token
+    or new.location_label is distinct from old.location_label
+    or new.seats         is distinct from old.seats
+    or new.created_at    is distinct from old.created_at
+  ) then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_system_table on public.tables;
+create trigger guard_system_table
+  before insert or update or delete on public.tables
+  for each row execute function public.guard_system_table();
+
+comment on function public.guard_system_table() is
+  'System counter/pick-up tables may only change is_active/status; deletion and structural edits are rejected.';
+
+-- ---------------------------------------------------------------------
+-- 4. Onboarding RPCs create the system table
+-- ---------------------------------------------------------------------
+create or replace function public.create_restaurant_with_owner(
+  p_name text,
+  p_slug text
+)
+returns public.restaurants
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_name       text := btrim(coalesce(p_name, ''));
+  v_slug       text := btrim(coalesce(p_slug, ''));
+  v_restaurant public.restaurants;
+begin
+  if v_user_id is null then
+    raise exception 'You must be signed in to create a restaurant'
+      using errcode = '42501';
+  end if;
+
+  if v_name = '' then
+    raise exception 'Restaurant name is required'
+      using errcode = '22023';
+  end if;
+
+  if v_slug = '' then
+    raise exception 'Restaurant web address is required'
+      using errcode = '22023';
+  end if;
+
+  if not exists (select 1 from public.profiles p where p.id = v_user_id) then
+    raise exception 'Your profile is not ready yet. Please try again.'
+      using errcode = 'P0002';
+  end if;
+
+  begin
+    insert into public.restaurants (owner_id, slug, name)
+    values (v_user_id, v_slug, v_name)
+    returning * into v_restaurant;
+  exception when unique_violation then
+    raise exception 'That web address is already taken. Choose another one.'
+      using errcode = '23505';
+  end;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (v_restaurant.id, v_user_id, 'owner', true)
+  on conflict (restaurant_id, user_id) do update
+    set role = 'owner', is_active = true;
+
+  perform public.ensure_pickup_table(v_restaurant.id);
+
+  return v_restaurant;
+end;
+$$;
+
+revoke all on function public.create_restaurant_with_owner(text, text)
+  from public, anon, authenticated;
+
+create or replace function public.claim_restaurant_invite(
+  p_name text default null,
+  p_slug text default null
+)
+returns public.restaurants
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user       uuid := auth.uid();
+  v_email      text;
+  v_invite     public.restaurant_invites;
+  v_name       text;
+  v_slug       text;
+  v_restaurant public.restaurants;
+begin
+  if v_user is null then
+    raise exception 'Sign in before claiming a restaurant invitation'
+      using errcode = '42501';
+  end if;
+
+  select u.email
+    into v_email
+  from auth.users u
+  where u.id = v_user
+    and u.email_confirmed_at is not null;
+
+  if v_email is null then
+    raise exception 'Verify your email address before claiming a restaurant invitation'
+      using errcode = '42501';
+  end if;
+
+  if exists (
+    select 1 from public.restaurant_staff
+    where user_id = v_user and is_active
+  ) then
+    raise exception 'This account already has an active restaurant'
+      using errcode = '23505';
+  end if;
+
+  select i.*
+    into v_invite
+  from public.restaurant_invites i
+  where i.status = 'pending'
+    and lower(i.email) = lower(v_email)
+    and i.expires_at > now()
+  order by i.created_at desc
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'No pending restaurant invitation found for this email'
+      using errcode = 'P0002';
+  end if;
+
+  v_name := btrim(coalesce(nullif(p_name, ''), v_invite.restaurant_name));
+  v_slug := lower(btrim(coalesce(nullif(p_slug, ''), v_invite.restaurant_slug)));
+
+  if v_name = '' then
+    raise exception 'Restaurant name is required'
+      using errcode = '22023';
+  end if;
+
+  if v_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or length(v_slug) > 60 then
+    raise exception 'Web address must use lowercase letters, numbers and single hyphens (max 60 characters)'
+      using errcode = '22023';
+  end if;
+
+  begin
+    insert into public.restaurants (owner_id, slug, name)
+    values (v_user, v_slug, v_name)
+    returning * into v_restaurant;
+  exception
+    when unique_violation then
+      raise exception 'That web address is already taken. Choose another one.'
+        using errcode = '23505';
+  end;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (v_restaurant.id, v_user, 'owner', true)
+  on conflict (restaurant_id, user_id) do update
+    set role = 'owner', is_active = true;
+
+  perform public.ensure_pickup_table(v_restaurant.id);
+
+  update public.restaurant_invites
+     set status = 'accepted',
+         accepted_at = now(),
+         accepted_restaurant_id = v_restaurant.id
+   where id = v_invite.id;
+
+  return v_restaurant;
+end;
+$$;
+
+revoke all on function public.claim_restaurant_invite(text, text)
+  from public, anon;
+grant execute on function public.claim_restaurant_invite(text, text)
+  to authenticated;
+
+comment on function public.ensure_pickup_table(uuid) is
+  'Returns the permanent counter/pick-up table for a restaurant, promoting an existing Pick-up/Counter row or creating one.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119060000_pickup_table_no_status.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Pickup table has no occupancy status
+-- ---------------------------------------------------------------------
+-- The counter / pick-up point is not a seat. It should never show or change
+-- occupied/available/needs-cleaning, and it is hidden from the staff floor
+-- plan. It remains selectable in staff New order and by customer QR.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+-- Confirmed orders only occupy real tables.
+create or replace function public.mark_table_occupied_for_order()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.table_id is not null
+     and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.tables
+       set status = 'occupied'
+     where id = new.table_id
+       and not is_system;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Reset any status the pickup point picked up before this rule.
+update public.tables
+   set status = 'available'
+ where is_system
+   and status <> 'available';
+
+-- Freeze status on system tables. is_active remains changeable so owners can
+-- enable/disable the pickup point.
+create or replace function public.guard_system_table()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_system then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.is_system and not public.is_privileged_caller() then
+      raise exception 'system_table_immutable' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.is_system is distinct from old.is_system
+     and not public.is_privileged_caller() then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  if old.is_system and (
+    new.restaurant_id  is distinct from old.restaurant_id
+    or new.table_number  is distinct from old.table_number
+    or new.qr_token      is distinct from old.qr_token
+    or new.location_label is distinct from old.location_label
+    or new.seats         is distinct from old.seats
+    or new.created_at    is distinct from old.created_at
+    or new.status        is distinct from old.status
+  ) then
+    raise exception 'system_table_immutable' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119070000_sales_report_busy_days.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Sales report: busy days
+-- ---------------------------------------------------------------------
+-- Adds `busy_days` to `get_sales_report`, mirroring `busy_hours` but grouped
+-- by day-of-week in the restaurant timezone. The array is zero-filled for all
+-- seven days (0 = Sunday … 6 = Saturday) so the chart never shifts.
+--
+-- No tables, policies or grants change; access stays owner/manager only.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.get_sales_report(
+  p_from timestamptz default null,
+  p_to   timestamptz default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_currency      text;
+  v_timezone      text;
+  v_from          timestamptz;
+  v_to            timestamptz;
+  v_order_count   int;
+  v_gross_revenue numeric;
+  v_paid_revenue  numeric;
+  v_refunded      numeric;
+  v_aov           numeric;
+  v_top_items     jsonb;
+  v_popular_items jsonb;
+  v_busy_hours    jsonb;
+  v_busy_days     jsonb;
+begin
+  -- -----------------------------------------------------------------
+  -- Caller verification: active owner/manager of exactly one restaurant
+  -- (single-restaurant site). Everyone else gets `not_authorised`.
+  -- -----------------------------------------------------------------
+  select r.id, r.currency, r.timezone
+    into v_restaurant_id, v_currency, v_timezone
+  from public.restaurant_staff rs
+  join public.restaurants r on r.id = rs.restaurant_id
+  where rs.user_id = auth.uid()
+    and rs.is_active
+    and rs.role in ('owner', 'manager')
+  order by r.created_at, r.id
+  limit 1;
+
+  if v_restaurant_id is null then
+    raise exception 'not_authorised' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Date range: defaults, validation, and a hard 366-day cap.
+  -- -----------------------------------------------------------------
+  v_to   := coalesce(p_to, now());
+  v_from := coalesce(p_from, v_to - interval '30 days');
+
+  if v_from >= v_to then
+    raise exception 'invalid_date_range' using errcode = 'P0001';
+  end if;
+
+  if v_to - v_from > interval '366 days' then
+    v_from := v_to - interval '366 days';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Order count + gross revenue (created in range, not cancelled)
+  -- -----------------------------------------------------------------
+  select count(*), coalesce(sum(o.total), 0)
+    into v_order_count, v_gross_revenue
+  from public.orders o
+  where o.restaurant_id = v_restaurant_id
+    and o.created_at >= v_from
+    and o.created_at <  v_to
+    and o.status <> 'cancelled';
+
+  v_gross_revenue := round(v_gross_revenue, 2);
+
+  -- Average order value (0 when there are no orders).
+  if v_order_count = 0 then
+    v_aov := 0;
+  else
+    v_aov := round(v_gross_revenue / v_order_count, 2);
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Paid revenue: succeeded payments whose paid_at falls in range.
+  -- -----------------------------------------------------------------
+  select coalesce(sum(p.amount), 0)
+    into v_paid_revenue
+  from public.payments p
+  join public.orders o on o.id = p.order_id
+  where o.restaurant_id = v_restaurant_id
+    and p.status = 'succeeded'
+    and p.paid_at >= v_from
+    and p.paid_at <  v_to;
+
+  v_paid_revenue := round(v_paid_revenue, 2);
+
+  -- -----------------------------------------------------------------
+  -- Refunded amount: succeeded refunds created in range.
+  -- -----------------------------------------------------------------
+  select coalesce(sum(rf.amount), 0)
+    into v_refunded
+  from public.refunds rf
+  join public.orders o on o.id = rf.order_id
+  where o.restaurant_id = v_restaurant_id
+    and rf.status = 'succeeded'
+    and rf.created_at >= v_from
+    and rf.created_at <  v_to;
+
+  v_refunded := round(v_refunded, 2);
+
+  -- -----------------------------------------------------------------
+  -- Top 10 items by revenue (snapshot name), not cancelled, in range.
+  -- -----------------------------------------------------------------
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'name',     t.item_name_snapshot,
+        'quantity', t.quantity,
+        'revenue',  round(t.revenue, 2)::text
+      )
+      order by t.revenue desc, t.item_name_snapshot
+    ),
+    '[]'::jsonb
+  )
+  into v_top_items
+  from (
+    select
+      oi.item_name_snapshot,
+      sum(oi.quantity)::int as quantity,
+      sum(oi.subtotal)      as revenue
+    from public.order_items oi
+    join public.orders o on o.id = oi.order_id
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by oi.item_name_snapshot
+    order by revenue desc, oi.item_name_snapshot
+    limit 10
+  ) t;
+
+  -- -----------------------------------------------------------------
+  -- Popular items: top 10 by quantity sold for kitchen prep. Revenue
+  -- breaks quantity ties so the order is deterministic.
+  -- -----------------------------------------------------------------
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'name',     t.item_name_snapshot,
+        'quantity', t.quantity,
+        'revenue',  round(t.revenue, 2)::text
+      )
+      order by t.quantity desc, t.revenue desc, t.item_name_snapshot
+    ),
+    '[]'::jsonb
+  )
+  into v_popular_items
+  from (
+    select
+      oi.item_name_snapshot,
+      sum(oi.quantity)::int as quantity,
+      sum(oi.subtotal)      as revenue
+    from public.order_items oi
+    join public.orders o on o.id = oi.order_id
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by oi.item_name_snapshot
+    order by quantity desc, revenue desc, oi.item_name_snapshot
+    limit 10
+  ) t;
+
+  -- -----------------------------------------------------------------
+  -- Busy hours: orders per hour-of-day in the restaurant timezone,
+  -- zero-filled for all 24 hours so the chart never shifts.
+  -- -----------------------------------------------------------------
+  select jsonb_agg(
+    jsonb_build_object(
+      'hour',   gs.hr,
+      'orders', coalesce(h.orders, 0)
+    )
+    order by gs.hr
+  )
+  into v_busy_hours
+  from generate_series(0, 23) as gs(hr)
+  left join (
+    select
+      extract(hour from (o.created_at at time zone v_timezone))::int as hr,
+      count(*)::int as orders
+    from public.orders o
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by 1
+  ) h on h.hr = gs.hr;
+
+  -- -----------------------------------------------------------------
+  -- Busy days: orders per day-of-week in the restaurant timezone,
+  -- zero-filled for Sunday..Saturday so the chart never shifts.
+  -- -----------------------------------------------------------------
+  select jsonb_agg(
+    jsonb_build_object(
+      'day',    gs.dow,
+      'orders', coalesce(d.orders, 0)
+    )
+    order by gs.dow
+  )
+  into v_busy_days
+  from generate_series(0, 6) as gs(dow)
+  left join (
+    select
+      extract(dow from (o.created_at at time zone v_timezone))::int as dow,
+      count(*)::int as orders
+    from public.orders o
+    where o.restaurant_id = v_restaurant_id
+      and o.created_at >= v_from
+      and o.created_at <  v_to
+      and o.status <> 'cancelled'
+    group by 1
+  ) d on d.dow = gs.dow;
+
+  return jsonb_build_object(
+    'currency',        v_currency,
+    'from',            v_from,
+    'to',              v_to,
+    'order_count',     v_order_count,
+    'gross_revenue',   v_gross_revenue::text,
+    'paid_revenue',    v_paid_revenue::text,
+    'refunded_amount', v_refunded::text,
+    'aov',             v_aov::text,
+    'top_items',       v_top_items,
+    'popular_items',   v_popular_items,
+    'busy_hours',      v_busy_hours,
+    'busy_days',       v_busy_days
+  );
+end;
+$$;
+
+-- Owners/managers only. On Supabase the default privileges grant EXECUTE
+-- directly to anon/authenticated, so revoke from those roles explicitly
+-- (same lesson as 0018) as well as PUBLIC.
+revoke all on function public.get_sales_report(timestamptz, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.get_sales_report(timestamptz, timestamptz)
+  to authenticated;
+
+comment on function public.get_sales_report(timestamptz, timestamptz) is
+  'Admin sales report for the caller''s restaurant. Owner/manager only; aggregates orders, payments, refunds, top items (revenue-led), popular items (quantity-led), busy hours and busy days server-side.';
+
+-- ---------------------------------------------------------------------
+-- End of migration
+-- ---------------------------------------------------------------------
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119080000_add_staff_role.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Add the staff role
+-- ---------------------------------------------------------------------
+-- New front-of-house role: full access to the staff workspace, but no admin
+-- or team-management access. Kept in its own migration because PostgreSQL
+-- enum values cannot be used reliably in the same transaction that adds them.
+-- =====================================================================
+
+alter type public.staff_role
+  add value if not exists 'staff';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119090000_role_permissions.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Role management rules
+-- ---------------------------------------------------------------------
+-- owner   : everything, including managers and owners.
+-- manager : everything except creating/editing/deleting managers or owners.
+-- staff   : full staff-app access; no admin or role management.
+-- kitchen : staff-app kitchen + order history only; no role management.
+--
+-- RLS already routes management through is_manager_of() (owner/manager only).
+-- These guards close the remaining role-granting holes.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.add_staff_by_email(
+  p_restaurant_id uuid,
+  p_email text,
+  p_role public.staff_role default 'staff'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_staff_id uuid;
+begin
+  if not public.is_manager_of(p_restaurant_id) then
+    raise exception 'Only an owner or manager can add team members'
+      using errcode = '42501';
+  end if;
+
+  if p_role = 'owner' then
+    raise exception 'Owner access cannot be granted from this screen'
+      using errcode = '42501';
+  end if;
+
+  if p_role = 'manager' and not public.is_owner_of(p_restaurant_id) then
+    raise exception 'Only the owner can add managers'
+      using errcode = '42501';
+  end if;
+
+  select p.id into v_user_id
+  from public.profiles p
+  where lower(p.email) = lower(btrim(p_email));
+
+  if v_user_id is null then
+    raise exception 'No account found for %. Ask them to sign up to QuickTab first.', btrim(p_email)
+      using errcode = 'P0002';
+  end if;
+
+  if v_user_id = auth.uid() then
+    raise exception 'You cannot change your own membership from this screen'
+      using errcode = '42501';
+  end if;
+
+  insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+  values (p_restaurant_id, v_user_id, p_role, true)
+  on conflict (restaurant_id, user_id) do update
+    set role = excluded.role,
+        is_active = true
+  returning id into v_staff_id;
+
+  return v_staff_id;
+end;
+$$;
+
+revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from public;
+revoke all on function public.add_staff_by_email(uuid, text, public.staff_role) from anon;
+grant execute on function public.add_staff_by_email(uuid, text, public.staff_role) to authenticated;
+
+-- Direct INSERT guard: managers may only add kitchen/staff rows.
+create or replace function public.guard_staff_insert()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if public.is_privileged_caller() then
+    return new;
+  end if;
+
+  if new.role = 'owner' and not public.is_owner_of(new.restaurant_id) then
+    raise exception 'Only the restaurant owner can grant owner access'
+      using errcode = '42501';
+  end if;
+
+  if new.role = 'manager' and not public.is_owner_of(new.restaurant_id) then
+    raise exception 'Only the restaurant owner can grant manager access'
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_staff_insert on public.restaurant_staff;
+create trigger guard_staff_insert
+  before insert on public.restaurant_staff
+  for each row execute function public.guard_staff_insert();
+
+-- UPDATE/DELETE guard: owners are owner-only, managers are owner-only, and
+-- kitchen/staff cannot manage anyone (RLS blocks them first).
+create or replace function public.guard_staff_management()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_privileged      boolean;
+  v_active_owners   int;
+begin
+  v_privileged :=
+    auth.role() = 'service_role'
+    or session_user in ('postgres', 'supabase_admin');
+
+  if v_privileged then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  -- Owner rows may only be managed by the owner.
+  if (tg_op = 'DELETE' and old.role = 'owner')
+     or (tg_op = 'UPDATE' and (old.role = 'owner' or new.role = 'owner')) then
+    if not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Only the restaurant owner can change or remove an owner row'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    -- The last active owner must remain active and keep the owner role.
+    if old.role = 'owner'
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
+      select count(*)
+        into v_active_owners
+      from public.restaurant_staff
+      where restaurant_id = old.restaurant_id
+        and role = 'owner'
+        and is_active;
+
+      if v_active_owners <= 1 then
+        raise exception 'The last active owner cannot be deactivated or demoted'
+          using errcode = '42501';
+      end if;
+    end if;
+
+    -- Nobody changes their own role or active status through the API.
+    if old.user_id = auth.uid()
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
+      raise exception 'You cannot change your own access'
+        using errcode = '42501';
+    end if;
+
+    -- Managers cannot manage peer managers.
+    if old.role = 'manager'
+       and (new.role is distinct from old.role or new.is_active is distinct from old.is_active)
+       and not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Managers cannot manage other managers'
+        using errcode = '42501';
+    end if;
+
+    -- Managers cannot promote kitchen/staff members into manager.
+    if new.role = 'manager'
+       and old.role is distinct from 'manager'
+       and not public.is_owner_of(old.restaurant_id) then
+      raise exception 'Only the restaurant owner can grant manager access'
+        using errcode = '42501';
+    end if;
+
+    return new;
+  end if;
+
+  -- DELETE: managers cannot remove peer managers.
+  if old.role = 'manager' and not public.is_owner_of(old.restaurant_id) then
+    raise exception 'Managers cannot manage other managers'
+      using errcode = '42501';
+  end if;
+
+  return old;
+end;
+$$;
+
+drop trigger if exists guard_staff_management on public.restaurant_staff;
+create trigger guard_staff_management
+  before update or delete on public.restaurant_staff
+  for each row execute function public.guard_staff_management();
+
+comment on function public.guard_staff_management() is
+  'Owner rows and manager grants are owner-only; managers may manage staff/kitchen rows, while staff/kitchen cannot manage roles.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119100000_refund_guards_inflight.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Refund guards count in-flight refunds and serialise per payment/line
+-- ---------------------------------------------------------------------
+-- The API inserts a refund row once Stripe has accepted the refund. While
+-- Stripe settles it the row is 'requested', but the money is already
+-- reserved and no longer refundable, so the amount and quantity guards must
+-- count it.
+--
+-- Two gaps are closed here:
+--   * guard_refund_amount summed only 'succeeded' refunds, so a second
+--     refund could pass the cap while an earlier one was still requested.
+--   * Neither guard locked the row it caps against, so two concurrent
+--     refunds could both read the same total and both pass.
+--
+-- Locking the payment row serialises concurrent refunds for that payment;
+-- locking the order-item row does the same for concurrent line refunds.
+-- The triggers fire in name order, so both transactions take the payment
+-- lock first (guard_refund_amount) and the line lock second
+-- (guard_refund_quantity), which keeps the lock order consistent.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.guard_refund_amount()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payment  public.payments;
+  v_refunded numeric;
+begin
+  -- Lock the payment so concurrent refunds for it serialise on the cap.
+  select * into v_payment
+  from public.payments
+  where id = new.payment_id
+  for update;
+
+  if not found then
+    raise exception 'Payment not found for this refund'
+      using errcode = '23503';
+  end if;
+
+  if v_payment.order_id <> new.order_id then
+    raise exception 'Refund order does not match the payment order'
+      using errcode = '23514';
+  end if;
+
+  if v_payment.status <> 'succeeded' then
+    raise exception 'Only succeeded payments can be refunded'
+      using errcode = '23514';
+  end if;
+
+  select coalesce(sum(amount), 0)
+    into v_refunded
+  from public.refunds
+  where payment_id = new.payment_id
+    and status in ('succeeded', 'requested')
+    and id is distinct from new.id;
+
+  if v_refunded + new.amount > v_payment.amount then
+    raise exception 'Refund amount exceeds the remaining payment balance'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.guard_refund_quantity()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item     public.order_items;
+  v_used     int;
+  v_expected numeric;
+begin
+  if new.order_item_id is null then
+    return new;
+  end if;
+
+  -- Lock the line so concurrent refunds for it serialise on the cap.
+  select * into v_item
+  from public.order_items
+  where id = new.order_item_id
+  for update;
+
+  if not found then
+    raise exception 'Order line not found for this refund'
+      using errcode = '23503';
+  end if;
+
+  if v_item.order_id <> new.order_id then
+    raise exception 'Refund order does not match the order line'
+      using errcode = '23514';
+  end if;
+
+  if new.quantity is null or new.quantity <= 0 then
+    raise exception 'Line refunds require a positive quantity'
+      using errcode = '23514';
+  end if;
+
+  if new.quantity > v_item.quantity then
+    raise exception 'Refund quantity exceeds the ordered quantity'
+      using errcode = '23514';
+  end if;
+
+  select coalesce(sum(quantity), 0)
+    into v_used
+  from public.refunds
+  where order_item_id = new.order_item_id
+    and status in ('succeeded', 'requested')
+    and id is distinct from new.id;
+
+  if v_used + new.quantity > v_item.quantity then
+    raise exception 'Refund quantity exceeds the remaining line quantity'
+      using errcode = '23514';
+  end if;
+
+  v_expected := round(v_item.unit_price_snapshot * new.quantity, 2);
+  if new.amount <> v_expected then
+    raise exception 'Line refund amount must equal unit price × quantity'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function public.guard_refund_amount() is
+  'Caps refunds at the payment balance, counts in-flight (requested) refunds, and locks the payment row so concurrent refunds serialise.';
+comment on function public.guard_refund_quantity() is
+  'Caps line refunds at the ordered quantity, counts in-flight (requested) refunds, and locks the order-item row so concurrent refunds serialise.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119110000_checkout_idempotency.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Checkout idempotency
+-- ---------------------------------------------------------------------
+-- A retried checkout (lost response, double submit, two tabs) must not
+-- create a second pending order. The client sends a stable key for the
+-- attempt; `place_order` returns the existing order when it sees that key
+-- again, including when two requests race on the same key.
+--
+-- The key is optional so older clients and direct RPC callers keep working.
+-- It is scoped per restaurant and only unique when present.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+alter table public.orders add column if not exists idempotency_key text;
+
+create unique index if not exists uq_orders_idempotency_per_restaurant
+  on public.orders(restaurant_id, idempotency_key)
+  where idempotency_key is not null;
+
+-- The 8-arg overload would be ambiguous with the new 9-arg contract once the
+-- new argument is defaulted (PostgREST picks by supplied keys), so remove it.
+drop function if exists public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb);
+
+create or replace function public.place_order(
+  p_restaurant_slug text,
+  p_table_token     text,
+  p_customer_name   text,
+  p_notes           text default null,
+  p_items           jsonb default '[]'::jsonb,
+  p_customer_latitude  double precision default null,
+  p_customer_longitude double precision default null,
+  p_tip             jsonb default null,
+  p_idempotency_key text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id   uuid;
+  v_restaurant_name text;
+  v_currency        text;
+  v_timezone        text;
+  v_tax_rate        numeric;
+  v_restaurant_latitude  double precision;
+  v_restaurant_longitude double precision;
+  v_geofence_enabled boolean := false;
+  v_distance_m          double precision;
+  v_table_id        uuid;
+  v_table_number    text;
+  v_expected_lines  int;
+  v_valid_lines     int;
+  v_lines           jsonb;
+  v_total           numeric;
+  v_tax             numeric;
+  v_subtotal        numeric;
+  v_tip_amount      numeric := 0;
+  v_amount_due      numeric;
+  v_tip_value       numeric;
+  v_tax_raw         numeric;
+  v_prep_minutes    int;
+  v_order_id        uuid;
+  v_tracking_token  text;
+  v_order_number    text;
+  v_day             text;
+  v_seq             int;
+  v_attempt         int := 0;
+  v_pickup_estimate timestamptz;
+  v_line            jsonb;
+  v_order_item_id   uuid;
+  v_idempotency_key text;
+  v_existing_payload jsonb;
+  v_existing_order_id uuid;
+  v_existing_status   public.order_status;
+begin
+  -- Optional idempotency key: one checkout attempt maps to one order.
+  v_idempotency_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
+  if v_idempotency_key is not null and length(v_idempotency_key) > 128 then
+    raise exception 'invalid_idempotency_key' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Input validation
+  -- -----------------------------------------------------------------
+  if p_customer_name is null or length(btrim(p_customer_name)) = 0 then
+    raise exception 'customer_name_required' using errcode = 'P0001';
+  end if;
+
+  if p_items is null
+     or jsonb_typeof(p_items) <> 'array'
+     or jsonb_array_length(p_items) = 0 then
+    raise exception 'empty_cart' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'menu_item_id' is null
+       or (e->>'menu_item_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e->>'quantity' is null
+       or (e->>'quantity') !~ '^[0-9]+$'
+       or (e->>'quantity')::int <= 0
+  ) then
+    raise exception 'invalid_quantity' using errcode = 'P0001';
+  end if;
+
+  -- `modifiers` is optional; when supplied it must be an array of uuids.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where e ? 'modifiers' and jsonb_typeof(e->'modifiers') <> 'array'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    where selected.value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) then
+    raise exception 'invalid_item' using errcode = 'P0001';
+  end if;
+
+  -- The same modifier may not be chosen twice on one line.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    where jsonb_array_length(coalesce(e->'modifiers', '[]'::jsonb)) <> (
+      select count(distinct selected.value)
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    )
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Resolve restaurant + table (rejects cross-restaurant tokens and
+  -- deactivated tables/restaurants)
+  -- -----------------------------------------------------------------
+  select r.id, r.name, r.currency, r.timezone, r.tax_rate
+    into v_restaurant_id, v_restaurant_name, v_currency, v_timezone, v_tax_rate
+  from public.restaurants r
+  where r.slug = p_restaurant_slug
+    and r.is_active
+  limit 1;
+
+  if v_restaurant_id is null then
+    raise exception 'restaurant_not_found' using errcode = 'P0001';
+  end if;
+
+  -- A retried checkout returns the original order even if the table or an
+  -- item has changed state since the first attempt. A cancelled order (for
+  -- example after a declined card) releases the key so the next attempt gets
+  -- a fresh order instead of re-confirming a dead one.
+  if v_idempotency_key is not null then
+    select
+      o.id,
+      o.status,
+      jsonb_build_object(
+        'order_id',            o.id,
+        'order_number',        o.order_number,
+        'tracking_token',      o.tracking_token,
+        'status',              o.status,
+        'subtotal',            o.subtotal,
+        'tax',                 o.tax,
+        'total',               o.total,
+        'tip_amount',          o.tip_amount,
+        'amount_due',          round(o.total + o.tip_amount, 2),
+        'currency',            r.currency,
+        'restaurant_name',     r.name,
+        'created_at',          o.created_at
+      )
+      into v_existing_order_id, v_existing_status, v_existing_payload
+    from public.orders o
+    join public.restaurants r on r.id = o.restaurant_id
+    where o.restaurant_id = v_restaurant_id
+      and o.idempotency_key = v_idempotency_key
+    limit 1;
+
+    if v_existing_order_id is not null then
+      if v_existing_status = 'cancelled' then
+        update public.orders
+           set idempotency_key = null
+         where id = v_existing_order_id;
+        v_existing_payload := null;
+      else
+        return v_existing_payload;
+      end if;
+    end if;
+  end if;
+
+  select t.id, t.table_number
+    into v_table_id, v_table_number
+  from public.tables t
+  where t.qr_token = p_table_token
+    and t.restaurant_id = v_restaurant_id
+    and t.is_active
+  limit 1;
+
+  if v_table_id is null then
+    raise exception 'table_not_found' using errcode = 'P0001';
+  end if;
+
+  select rl.latitude, rl.longitude, coalesce(rl.geofence_enabled, false)
+    into v_restaurant_latitude, v_restaurant_longitude, v_geofence_enabled
+  from public.restaurant_locations rl
+  where rl.restaurant_id = v_restaurant_id;
+
+  if coalesce(v_geofence_enabled, false) then
+    if p_customer_latitude is null or p_customer_longitude is null then
+      raise exception 'customer_location_required' using errcode = 'P0001';
+    end if;
+
+    if p_customer_latitude < -90 or p_customer_latitude > 90
+       or p_customer_longitude < -180 or p_customer_longitude > 180 then
+      raise exception 'customer_location_invalid' using errcode = 'P0001';
+    end if;
+
+    if v_restaurant_latitude is null or v_restaurant_longitude is null then
+      raise exception 'restaurant_location_not_configured' using errcode = 'P0001';
+    end if;
+
+    -- Haversine great-circle distance in metres. Coordinates are not persisted.
+    v_distance_m := 6371000 * 2 * asin(least(1, sqrt(
+        power(sin(radians(p_customer_latitude - v_restaurant_latitude) / 2), 2)
+        + cos(radians(v_restaurant_latitude))
+          * cos(radians(p_customer_latitude))
+          * power(sin(radians(p_customer_longitude - v_restaurant_longitude) / 2), 2)
+      )));
+
+    if v_distance_m > 500 then
+      raise exception 'outside_ordering_radius' using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- Validate every menu item belongs to this restaurant and is available.
+  -- Lines are keyed by (menu_item_id, sorted modifier ids) so identical
+  -- choices fold together while different variants stay separate.
+  -- -----------------------------------------------------------------
+  select count(*)
+    into v_expected_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted;
+
+  select count(*)
+    into v_valid_lines
+  from (
+    select distinct
+      (e->>'menu_item_id')::uuid as menu_item_id,
+      array(
+        select selected.value::uuid
+        from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+        order by selected.value
+      ) as modifier_key
+    from jsonb_array_elements(p_items) as e
+  ) as wanted
+  join public.menu_items mi
+    on mi.id = wanted.menu_item_id
+   and mi.restaurant_id = v_restaurant_id
+   and mi.is_available;
+
+  if v_valid_lines <> v_expected_lines then
+    raise exception 'menu_item_unavailable' using errcode = 'P0001';
+  end if;
+
+  -- Modifier ids are untrusted: every choice must be available and linked
+  -- to this item through one of its groups at this restaurant.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    cross join lateral jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+    left join public.modifiers m
+      on m.id = selected.value::uuid
+     and m.is_available
+    left join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+     and item_group.modifier_group_id = m.modifier_group_id
+    left join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    where m.id is null or item_group.menu_item_id is null or g.id is null
+  ) then
+    raise exception 'invalid_modifier' using errcode = 'P0001';
+  end if;
+
+  -- A required group must have at least one choice.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where g.is_required
+      and chosen.selected_count = 0
+  ) then
+    raise exception 'modifier_required' using errcode = 'P0001';
+  end if;
+
+  -- Enforce each linked group's min/max rules on the server too.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) as e
+    join public.menu_item_modifier_groups item_group
+      on item_group.menu_item_id = (e->>'menu_item_id')::uuid
+    join public.modifier_groups g
+      on g.id = item_group.modifier_group_id
+     and g.restaurant_id = v_restaurant_id
+    cross join lateral (
+      select count(*)::int as selected_count
+      from jsonb_array_elements_text(coalesce(e->'modifiers', '[]'::jsonb)) as selected(value)
+      join public.modifiers m
+        on m.id = selected.value::uuid
+       and m.modifier_group_id = g.id
+       and m.is_available
+    ) chosen
+    where (g.selection_type = 'single'
+             and (chosen.selected_count > 1
+                  or chosen.selected_count < g.min_selections))
+       or (g.selection_type <> 'single'
+             and (chosen.selected_count < g.min_selections
+                  or (g.max_selections > 0
+                      and chosen.selected_count > g.max_selections)))
+  ) then
+    raise exception 'modifier_selection_invalid' using errcode = 'P0001';
+  end if;
+
+  -- Price each grouped cart line from live database values. Identical item +
+  -- modifier combinations have already folded together.
+  select
+    jsonb_agg(
+      jsonb_build_object(
+        'menu_item_id', priced.menu_item_id,
+        'name',         priced.name,
+        'quantity',     priced.quantity,
+        'unit_price',   priced.unit_price,
+        'subtotal',     priced.line_subtotal,
+        'modifiers',    priced.modifiers
+      ) order by priced.display_order, priced.name, priced.line_order
+    ),
+    round(coalesce(sum(priced.line_subtotal), 0), 2),
+    max(priced.prep_time_minutes)
+  into v_lines, v_total, v_prep_minutes
+  from (
+    select
+      mi.id as menu_item_id,
+      mi.name,
+      mi.display_order,
+      mi.prep_time_minutes,
+      grouped.line_order,
+      grouped.quantity,
+      round(mi.price + selected.adjustment, 2) as unit_price,
+      round(round(mi.price + selected.adjustment, 2) * grouped.quantity, 2) as line_subtotal,
+      selected.modifiers
+    from (
+      select
+        (e.value->>'menu_item_id')::uuid as menu_item_id,
+        array(
+          select selected.value::uuid
+          from jsonb_array_elements_text(coalesce(e.value->'modifiers', '[]'::jsonb)) as selected(value)
+          order by selected.value
+        ) as modifier_key,
+        sum((e.value->>'quantity')::int)::int as quantity,
+        min(e.ordinality) as line_order
+      from jsonb_array_elements(p_items) with ordinality as e(value, ordinality)
+      group by 1, 2
+    ) as grouped
+    join public.menu_items mi
+      on mi.id = grouped.menu_item_id
+     and mi.restaurant_id = v_restaurant_id
+     and mi.is_available
+    cross join lateral (
+      select
+        coalesce((
+          select sum(m.price_adjustment)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), 0) as adjustment,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'modifier_id', m.id,
+            'name', m.name,
+            'price_adjustment', m.price_adjustment
+          ) order by m.display_order, m.name)
+          from public.modifiers m
+          where m.id = any(grouped.modifier_key)
+            and m.is_available
+        ), '[]'::jsonb) as modifiers
+    ) as selected
+  ) as priced;
+
+  -- GST-inclusive split: total is what the customer pays.
+  v_total    := round(coalesce(v_total, 0), 2);
+  v_tax_raw  := v_total * v_tax_rate / (1 + v_tax_rate);
+  v_tax      := round(v_tax_raw, 2);
+  v_subtotal := round(v_total - v_tax, 2);
+
+  -- Tip: computed here, never trusted from the client. The tip is added on
+  -- top of the GST-inclusive items total and carries no additional GST.
+  if p_tip is null or p_tip = 'null'::jsonb or p_tip = '{}'::jsonb then
+    v_tip_amount := 0;
+  elsif jsonb_typeof(p_tip) <> 'object' then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif not (p_tip ? 'type') then
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  elsif p_tip->>'type' = 'none' then
+    v_tip_amount := 0;
+  elsif p_tip->>'type' = 'percent' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 25 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_total * v_tip_value / 100, 2);
+  elsif p_tip->>'type' = 'fixed' then
+    if jsonb_typeof(p_tip->'value') is distinct from 'number' then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_value := (p_tip->>'value')::numeric;
+    if v_tip_value < 0 or v_tip_value > 500 then
+      raise exception 'invalid_tip' using errcode = 'P0001';
+    end if;
+    v_tip_amount := round(v_tip_value, 2);
+  else
+    raise exception 'invalid_tip' using errcode = 'P0001';
+  end if;
+
+  v_amount_due := round(v_total + v_tip_amount, 2);
+
+  v_pickup_estimate := now()
+    + (coalesce(v_prep_minutes, 0) || ' minutes')::interval;
+
+  -- -----------------------------------------------------------------
+  -- Insert the order + items. Retry the daily order number on collision.
+  -- -----------------------------------------------------------------
+  v_day := to_char(now() at time zone v_timezone, 'YYMMDD');
+
+  select count(*) + 1
+    into v_seq
+  from public.orders o
+  where o.restaurant_id = v_restaurant_id
+    and o.order_number like 'QT-' || v_day || '-%';
+
+  loop
+    v_attempt := v_attempt + 1;
+    v_order_number := 'QT-' || v_day || '-' ||
+      lpad((v_seq + v_attempt - 1)::text, 4, '0');
+
+    begin
+      insert into public.orders (
+        restaurant_id,
+        table_id,
+        customer_id,
+        customer_name_snapshot,
+        order_number,
+        status,
+        subtotal,
+        tax,
+        total,
+        tip_amount,
+        notes,
+        pickup_time_estimate,
+        idempotency_key
+      )
+      values (
+        v_restaurant_id,
+        v_table_id,
+        auth.uid(),                        -- null for guests
+        btrim(p_customer_name),
+        v_order_number,
+        'pending'::public.order_status,  -- unpaid until the Stripe webhook confirms it
+        v_subtotal,
+        v_tax,
+        v_total,
+        v_tip_amount,
+        nullif(btrim(coalesce(p_notes, '')), ''),
+        v_pickup_estimate,
+        v_idempotency_key
+      )
+      returning id, tracking_token
+      into v_order_id, v_tracking_token;
+
+      exit;
+    exception
+      when unique_violation then
+        -- A concurrent request with the same idempotency key won the race;
+        -- return its order instead of creating a second one.
+        if v_idempotency_key is not null then
+          select
+            o.id,
+            o.status,
+            jsonb_build_object(
+              'order_id',            o.id,
+              'order_number',        o.order_number,
+              'tracking_token',      o.tracking_token,
+              'status',              o.status,
+              'subtotal',            o.subtotal,
+              'tax',                 o.tax,
+              'total',               o.total,
+              'tip_amount',          o.tip_amount,
+              'amount_due',          round(o.total + o.tip_amount, 2),
+              'currency',            r.currency,
+              'restaurant_name',     r.name,
+              'created_at',          o.created_at
+            )
+            into v_existing_order_id, v_existing_status, v_existing_payload
+          from public.orders o
+          join public.restaurants r on r.id = o.restaurant_id
+          where o.restaurant_id = v_restaurant_id
+            and o.idempotency_key = v_idempotency_key
+          limit 1;
+
+          if v_existing_order_id is not null then
+            if v_existing_status = 'cancelled' then
+              update public.orders
+                 set idempotency_key = null
+               where id = v_existing_order_id;
+              v_existing_payload := null;
+            else
+              return v_existing_payload;
+            end if;
+          end if;
+        end if;
+
+        if v_attempt >= 5 then
+          raise exception 'order_number_conflict' using errcode = 'P0001';
+        end if;
+    end;
+  end loop;
+
+  -- Each priced line carries its own modifier snapshots; `returning id`
+  -- ties every snapshot row to the order_item it belongs to.
+  for v_line in select value from jsonb_array_elements(v_lines) as lines(value)
+  loop
+    insert into public.order_items (
+      order_id,
+      menu_item_id,
+      item_name_snapshot,
+      unit_price_snapshot,
+      quantity,
+      subtotal
+    )
+    values (
+      v_order_id,
+      (v_line->>'menu_item_id')::uuid,
+      v_line->>'name',
+      (v_line->>'unit_price')::numeric,
+      (v_line->>'quantity')::int,
+      (v_line->>'subtotal')::numeric
+    )
+    returning id into v_order_item_id;
+
+    insert into public.order_item_modifiers (
+      order_item_id,
+      modifier_id,
+      modifier_name_snapshot,
+      price_adjustment_snapshot
+    )
+    select
+      v_order_item_id,
+      (modifier->>'modifier_id')::uuid,
+      modifier->>'name',
+      (modifier->>'price_adjustment')::numeric
+    from jsonb_array_elements(v_line->'modifiers') as chosen(modifier);
+  end loop;
+
+  return jsonb_build_object(
+    'order_id',            v_order_id,
+    'order_number',        v_order_number,
+    'tracking_token',      v_tracking_token,
+    'status',              'pending',
+    'subtotal',            v_subtotal,
+    'tax',                 v_tax,
+    'total',               v_total,
+    'tip_amount',          v_tip_amount,
+    'amount_due',          v_amount_due,
+    'currency',            v_currency,
+    'restaurant_name',     v_restaurant_name,
+    'table_number',        v_table_number,
+    'pickup_time_estimate', v_pickup_estimate,
+    'created_at',          now(),
+    'items',               v_lines
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Grants + comment (unchanged from 0024)
+-- ---------------------------------------------------------------------
+
+revoke all on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb, text) from public;
+grant execute on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb, text)
+  to anon, authenticated;
+
+comment on function public.place_order(text, text, text, text, jsonb, double precision, double precision, jsonb, text) is
+  'Atomic guest order placement with server-side pricing, validated tips/modifiers, and optional idempotency: a repeated key returns the original order. Orders start pending until the Stripe webhook confirms payment.';
