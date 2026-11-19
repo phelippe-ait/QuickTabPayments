@@ -32,6 +32,13 @@ import { useOrderSound } from "./useOrderSound"
 export const STAFF_POLL_INTERVAL_MS = 10_000
 
 /**
+ * Floor-plan refresh cadence. `tables` is deliberately outside the Realtime
+ * publication (P17 scoping), so other staff devices only converge by polling.
+ * Skipped while the tab is hidden or a status write is in flight.
+ */
+export const STAFF_TABLES_POLL_INTERVAL_MS = 15_000
+
+/**
  * Merge table metadata with its latest open order. Derived occupancy fields
  * exist only when an open order does — never as fabricated zeros.
  */
@@ -80,6 +87,10 @@ export function useStaffWorkspace(restaurantId: string | null) {
   const [tableStatusUpdating, setTableStatusUpdating] = useState<
     ReadonlySet<string>
   >(new Set())
+  // Mirror of `tableStatusUpdating` for the polling interval, which must not
+  // clobber an optimistic status with a fetch that predates the write.
+  const tableStatusUpdatingRef = useRef<ReadonlySet<string>>(new Set())
+  const tablesLoadingRef = useRef(false)
 
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
@@ -212,6 +223,10 @@ export function useStaffWorkspace(restaurantId: string | null) {
     refreshTablesRef.current = () => loadTables(restaurantId)
 
     async function loadTables(id: string) {
+      // Polling and realtime-driven refreshes can overlap; skip the duplicate
+      // rather than racing two responses into state.
+      if (tablesLoadingRef.current) return
+      tablesLoadingRef.current = true
       try {
         const rows = await fetchStaffTables(id)
         let openByTable: Record<string, OpenTableOrder> = {}
@@ -235,6 +250,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
           )
         }
       } finally {
+        tablesLoadingRef.current = false
         if (!cancelled) setTablesLoading(false)
       }
     }
@@ -249,6 +265,28 @@ export function useStaffWorkspace(restaurantId: string | null) {
       refreshTablesRef.current = null
     }
   }, [restaurantId, playOrderSound, observeOrders, resetNewOrders])
+
+  // Floor plan polling: `tables` has no Realtime subscription, so another
+  // device's status change only reaches us with this refresh. Visibility and
+  // in-flight writes are checked at fire time so the interval never clobbers an
+  // optimistic status.
+  useEffect(() => {
+    if (!restaurantId) return
+
+    const timer = window.setInterval(() => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return
+      }
+      if (connectionStateRef.current === "offline") return
+      if (tableStatusUpdatingRef.current.size > 0) return
+      void refreshTablesRef.current?.()
+    }, STAFF_TABLES_POLL_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [restaurantId])
 
   // While Realtime is offline, poll the board over REST so a dropped socket
   // never freezes the kitchen. Reconnecting flips `enabled` back to false and
@@ -415,11 +453,19 @@ export function useStaffWorkspace(restaurantId: string | null) {
     )
   }
 
+  const setTableUpdating = (tableId: string, updating: boolean) => {
+    const next = new Set(tableStatusUpdatingRef.current)
+    if (updating) next.add(tableId)
+    else next.delete(tableId)
+    tableStatusUpdatingRef.current = next
+    setTableStatusUpdating(next)
+  }
+
   /**
    * One-tap table status cycle. The pill flips optimistically, then rolls back
-   * if the write fails (RLS, offline, stale id). Table status is fetch-on-demand:
-   * there is deliberately no `tables` Realtime subscription (P17 scoping), so
-   * other devices pick the new status up the next time they load the floor.
+   * if the write fails (RLS, offline, stale id). There is deliberately no
+   * `tables` Realtime subscription (P17 scoping), so other devices converge
+   * through `STAFF_TABLES_POLL_INTERVAL_MS` instead.
    */
   const updateTableStatus = async (tableId: string, status: TableStatus) => {
     const table = tableList.find(
@@ -434,7 +480,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
 
     const previousStatus = table.status
     setTablesError(null)
-    setTableStatusUpdating((current) => new Set(current).add(tableId))
+    setTableUpdating(tableId, true)
     setTableList((current) =>
       current.map((candidate) =>
         String(candidate.id) === tableId
@@ -460,11 +506,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
           : "Could not update the table. Please try again.",
       )
     } finally {
-      setTableStatusUpdating((current) => {
-        const next = new Set(current)
-        next.delete(tableId)
-        return next
-      })
+      setTableUpdating(tableId, false)
     }
   }
 

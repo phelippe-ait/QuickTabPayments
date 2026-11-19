@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, renderHook, waitFor } from "@testing-library/react"
-import { toStaffTable, useStaffWorkspace } from "./useStaffWorkspace"
+import {
+  STAFF_TABLES_POLL_INTERVAL_MS,
+  toStaffTable,
+  useStaffWorkspace,
+} from "./useStaffWorkspace"
 import { fetchStaffOrders } from "../services/staffOrders"
 import type { StaffTableRow } from "../services/staffTables"
 
@@ -70,6 +74,10 @@ beforeEach(() => {
   tablesService.fetchStaffTables.mockResolvedValue([])
   tablesService.updateStaffTableStatus.mockResolvedValue(undefined)
   occupancyService.fetchOpenOrdersByTable.mockResolvedValue({})
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe("useStaffWorkspace realtime scoping", () => {
@@ -246,6 +254,68 @@ describe("useStaffWorkspace table status", () => {
     expect(result.current.tableList[0].status).toBe("occupied")
     expect(result.current.tableStatusUpdating.has("table-1")).toBe(false)
     expect(result.current.tablesError).toBeNull()
+  })
+
+  it("refreshes the floor plan on the polling cadence", async () => {
+    const intervalSpy = vi.spyOn(window, "setInterval")
+    tablesService.fetchStaffTables.mockResolvedValue([staffTable()])
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(result.current.tableList).toHaveLength(1))
+    expect(tablesService.fetchStaffTables).toHaveBeenCalledTimes(1)
+
+    const poll = intervalSpy.mock.calls.find(
+      ([, delay]) => delay === STAFF_TABLES_POLL_INTERVAL_MS,
+    )
+    expect(poll).toBeTruthy()
+
+    act(() => {
+      ;(poll![0] as () => void)()
+    })
+
+    await waitFor(() =>
+      expect(tablesService.fetchStaffTables).toHaveBeenCalledTimes(2),
+    )
+  })
+
+  it("skips the floor refresh while a status write is in flight", async () => {
+    const intervalSpy = vi.spyOn(window, "setInterval")
+    tablesService.fetchStaffTables.mockResolvedValue([staffTable()])
+    let resolveUpdate: (() => void) | undefined
+    tablesService.updateStaffTableStatus.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveUpdate = resolve
+        }),
+    )
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+    await waitFor(() => expect(result.current.tableList).toHaveLength(1))
+
+    let pending: Promise<void> | undefined
+    act(() => {
+      pending = result.current.updateTableStatus("table-1", "occupied")
+    })
+    expect(result.current.tableStatusUpdating.has("table-1")).toBe(true)
+
+    const poll = intervalSpy.mock.calls.find(
+      ([, delay]) => delay === STAFF_TABLES_POLL_INTERVAL_MS,
+    )
+    expect(poll).toBeTruthy()
+
+    const callsBefore = tablesService.fetchStaffTables.mock.calls.length
+    act(() => {
+      ;(poll![0] as () => void)()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(tablesService.fetchStaffTables).toHaveBeenCalledTimes(callsBefore)
+
+    await act(async () => {
+      resolveUpdate?.()
+      await pending
+    })
   })
 
   it("rolls the status back and surfaces the error when the write fails", async () => {
