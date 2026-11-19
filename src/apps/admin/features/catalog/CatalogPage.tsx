@@ -127,7 +127,7 @@ export function CatalogPage() {
                     <input type="checkbox" aria-label={`Select ${item.name}`} checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
                   </label>
                   {item.isAvailable ? (
-                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3">Available</StatusPill>
+                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3 max-[760px]:left-[61px]">Available</StatusPill>
                   ) : (
                     <span className={`${styles["unavailable-banner"]}`}>Unavailable</span>
                   )}

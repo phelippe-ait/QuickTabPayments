@@ -162,8 +162,8 @@ function ReportsOverview({ restaurant }: { restaurant: ReportRestaurant }) {
             </p>
           )}
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <div className="lg:col-span-2">
+          <div className="mt-6 grid min-w-0 gap-4 lg:grid-cols-2">
+            <div className="min-w-0 lg:col-span-2">
               <BusyHoursCard
                 hours={report.busy_hours}
                 timezone={restaurant.timezone}

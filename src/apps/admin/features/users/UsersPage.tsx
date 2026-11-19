@@ -6,6 +6,7 @@ import { roleLabels } from "@shared/restaurant/restaurantHelpers";
 import { useRestaurant } from "@shared/restaurant/useRestaurant";
 import type { StaffRole } from "@shared/lib/database.types";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
+import { ResponsiveTable } from "../../components/ResponsiveTable";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
 import { useStaff } from "../../hooks/useStaff";
 import type { StaffVM } from "../../viewModels";
@@ -157,7 +158,10 @@ export function UsersPage() {
           {visible.length === 0 ? (
             <EmptyState title="No users found" description="Try changing the name, status, or role filters." />
           ) : (
-            <div className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}>
+            <ResponsiveTable
+              label="Team members table"
+              className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}
+            >
               <div className={`${styles["table-heading"]}`}>
                 <label className={`${styles["inline-select"]}`}>
                   <input
@@ -240,7 +244,7 @@ export function UsersPage() {
                   </div>
                 )
               })}
-            </div>
+            </ResponsiveTable>
           )}
         </>
       )}

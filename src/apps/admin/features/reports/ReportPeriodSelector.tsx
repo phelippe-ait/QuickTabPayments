@@ -72,6 +72,7 @@ export function ReportPeriodSelector({
               key={value}
               size="sm"
               variant={preset === value ? "default" : "secondary"}
+              className="max-sm:min-h-11"
               aria-pressed={preset === value}
               onClick={() => selectPreset(value)}
             >
@@ -81,6 +82,7 @@ export function ReportPeriodSelector({
           <Button
             size="sm"
             variant={preset === "custom" ? "default" : "secondary"}
+            className="max-sm:min-h-11"
             aria-pressed={preset === "custom"}
             onClick={() => setPreset("custom")}
           >
@@ -116,7 +118,7 @@ export function ReportPeriodSelector({
               onChange={(event) => setCustomTo(event.target.value)}
             />
           </label>
-          <Button size="sm" onClick={applyCustom} disabled={Boolean(customError)}>
+          <Button size="sm" className="max-sm:min-h-11" onClick={applyCustom} disabled={Boolean(customError)}>
             Apply
           </Button>
           {customError && (

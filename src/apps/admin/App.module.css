@@ -183,6 +183,10 @@ main { min-width: 0; background: var(--color-cream-3); }
 .table-location strong { margin-top: 2px; color: var(--color-ink-mid); font-size: 11px; }
 
 .table-card { overflow: hidden; border: 1px solid var(--color-line); border-radius: 12px; background: #fff; box-shadow: 0 6px 20px rgba(65,58,48,.05); }
+/* Horizontal-scroll wrapper for wide tables. Declared after `.table-card` so it
+   wins over that card's `overflow: hidden` without changing the desktop grid. */
+.responsive-table { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.responsive-table:focus-visible { outline: 2px solid var(--color-berry); outline-offset: -2px; }
 .table-heading, .table-row { display: grid; grid-template-columns: minmax(250px, 2fr) 1fr 1fr 90px; align-items: center; gap: 16px; padding: 15px 20px; }
 .users-table .table-heading, .users-table .table-row { grid-template-columns: 24px minmax(250px, 2fr) 1fr 1fr 90px; }
 .table-heading { color: var(--color-muted); background: var(--color-cream-2); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
@@ -233,7 +237,8 @@ main { min-width: 0; background: var(--color-cream-3); }
 .order-line { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 12px; padding: 10px; border-bottom: 1px solid var(--color-cream-2); }
 .order-line:last-child { border-bottom: 0; }
 .order-line img { width: 52px; height: 48px; border-radius: 7px; object-fit: cover; }
-.order-line strong, .order-line small { display: block; }
+.order-line > div { min-width: 0; }
+.order-line strong, .order-line small { display: block; overflow-wrap: anywhere; }
 .order-line strong { color: var(--color-ink-soft); font-size: 12px; }
 .order-line small { margin-top: 4px; color: var(--color-muted); font-size: 10px; }
 .order-summary { margin-top: 22px; padding-bottom: 16px; border-bottom: 1px solid var(--color-line); }
@@ -268,10 +273,10 @@ main { min-width: 0; background: var(--color-cream-3); }
 .custom-refund > small { display: block; margin-top: 5px; color: var(--color-muted); font-size: 9px; font-weight: 400; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(43,39,45,.52); backdrop-filter: blur(3px); animation: fade .18s ease; }
-.modal { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 31px; border-radius: 15px; background: var(--color-paper); box-shadow: 0 25px 70px rgba(30,25,27,.25); animation: rise .22s ease; }
+.modal { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; padding: 31px; border-radius: 15px; background: var(--color-paper); box-shadow: 0 25px 70px rgba(30,25,27,.25); animation: rise .22s ease; }
 .small-modal { width: min(500px, 100%); }
 .modal-close { position: absolute; top: 20px; right: 20px; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--color-line); border-radius: 50%; color: var(--color-muted-2); background: transparent; }
-.modal h2 { margin: 0; color: var(--color-ink-soft); font-family: "DM Serif Display", serif; font-size: 30px; font-weight: 400; }
+.modal h2 { margin: 0; padding-right: 34px; color: var(--color-ink-soft); font-family: "DM Serif Display", serif; font-size: 30px; font-weight: 400; }
 .modal-description { margin: 6px 0 24px; color: var(--color-muted); font-size: 12px; }
 .confirmation-backdrop { z-index: 70; }
 .confirmation-modal { width: min(430px, 100%); }
@@ -331,18 +336,27 @@ main { min-width: 0; background: var(--color-cream-3); }
   .tables-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content { width: calc(100% - 48px); }
   .technology-footer { width: calc(100% - 48px); }
-  /* Tablet: keep the data tables readable instead of squeezing six columns. */
-  .table-card { overflow-x: auto; }
+  /* Tablet: keep the data tables readable instead of squeezing six columns.
+     The identity column stays pinned while the rest pans sideways. */
   .table-heading, .table-row { min-width: 680px; }
   .users-table .table-heading, .users-table .table-row { min-width: 720px; }
   .order-table .table-heading, .order-table .table-row { min-width: 820px; }
+  .table-card.responsive-table .table-heading > :nth-child(2),
+  .table-card.responsive-table .table-row > :nth-child(2) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #fff;
+    box-shadow: 1px 0 0 var(--color-line-soft);
+  }
+  .table-card.responsive-table .table-heading > :nth-child(2) { background: var(--color-cream-2); }
 }
 
 @media (max-width: 760px) {
   .app-shell { display: block; }
-  .sidebar { position: fixed; left: 0; transform: translateX(-100%); width: 248px; transition: transform .25s ease; }
-  .sidebar.open { transform: translateX(0); }
-  .mobile-menu { position: fixed; top: 16px; left: 16px; z-index: 30; display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 38px; height: 38px; padding: 0 10px; border: 1px solid var(--color-line); border-radius: 9px; background: rgba(255,255,255,.92); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .sidebar { position: fixed; left: 0; visibility: hidden; transform: translateX(-100%); width: 248px; transition: transform .25s ease, visibility 0s linear .25s; }
+  .sidebar.open { visibility: visible; transform: translateX(0); transition: transform .25s ease; }
+  .mobile-menu { position: fixed; top: 16px; left: 16px; z-index: 30; display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 44px; height: 44px; padding: 0 12px; border: 1px solid var(--color-line); border-radius: 9px; background: rgba(255,255,255,.92); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
   .mobile-menu span { width: 100%; height: 1.5px; background: var(--color-ink-mid); }
   .nav-scrim { position: fixed; inset: 0; z-index: 19; display: block; border: 0; background: rgba(40,36,41,.4); }
   .content { width: calc(100% - 32px); padding-top: 76px; }
@@ -362,22 +376,63 @@ main { min-width: 0; background: var(--color-cream-3); }
   .tables-grid, .table-overview { grid-template-columns: 1fr; }
   .table-card-top .row-actions { opacity: 1; }
   .stats { grid-template-columns: 1fr; }
-  .table-card { overflow-x: auto; }
   .table-heading, .table-row { min-width: 650px; }
   .users-table .table-heading, .users-table .table-row { min-width: 700px; }
   .order-table .table-heading, .order-table .table-row { min-width: 800px; }
   .card-actions { opacity: 1; transform: none; }
+  /* 44px minimum touch targets for the controls that stay dense on desktop. */
+  .filter-pills button,
+  .manage-sections,
+  .selection-bar button,
+  .selection-bar > button:last-child,
+  .row-actions button,
+  .card-actions button,
+  .table-card-top button.table-state,
+  .table-qr .qr-download,
+  .modal-close,
+  .sidebar-footer > button:not(.admin-profile) {
+    min-height: 44px;
+  }
+  .filter-pills button { min-width: 44px; }
+  .row-actions button,
+  .card-actions button,
+  .modal-close { width: 44px; height: 44px; }
+  .table-qr .qr-download { padding: 0 10px; }
+  .table-card-top { grid-template-columns: 44px 1fr auto; }
+  .table-card-top .inline-select { width: 44px; height: 44px; }
+  .table-heading > .inline-select, .table-row > .inline-select { min-width: 44px; min-height: 44px; }
+  .users-table .table-heading, .users-table .table-row { grid-template-columns: 44px minmax(250px, 2fr) 1fr 1fr 100px; }
+  .order-table .table-heading, .order-table .table-row { grid-template-columns: 44px .7fr 1.35fr 1.15fr .6fr 1.15fr; }
+  .card-select { width: 44px; height: 44px; }
+  .order-link { display: inline-flex; align-items: center; min-height: 44px; }
+  .search-box, .filter-select, .reset-filters, .export-table { height: 44px; }
+  .app-shell button, .modal button { min-height: 44px; }
+  .modal button { min-width: 44px; }
+  .refund-actions { grid-template-columns: 1fr; }
+  .cancel-order,
+  .refund-button,
+  .refund-confirmation button,
+  .refund-quantity button,
+  .modal-actions button {
+    min-height: 44px;
+  }
+  .refund-quantity { grid-template-columns: 44px 28px 44px; }
+  .refund-quantity button { width: 44px; height: 44px; }
+  .modal-actions { flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
   .selection-bar { align-items: flex-start; flex-direction: column; }
   .selection-bar > div { width: 100%; }
   .selection-bar > button:last-child { padding-left: 0; }
-  .refund-actions { grid-template-columns: 1fr; }
   .user-filters { flex-direction: column; }
   .date-range { align-items: stretch; flex-direction: column; }
   .filter-select input[type="date"] { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid label.wide { grid-column: auto; }
-  .modal { padding: 25px 20px; }
+  .modal-backdrop { padding: 12px; }
+  .modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); padding: 22px 16px; border-radius: 12px; }
+  .modal-close { top: 12px; right: 12px; width: 44px; height: 44px; }
+  .modal h2 { padding-right: 42px; font-size: 26px; }
+  .modal-actions > button { flex: 1 1 auto; }
 }

@@ -205,7 +205,7 @@ export function OrderDetailPage() {
 
   return (
     <>
-      <Link to="/admin/orders" className="inline-flex items-center gap-2 text-xs font-bold text-muted hover:text-berry">
+      <Link to="/admin/orders" className="inline-flex min-h-11 items-center gap-2 text-xs font-bold text-muted hover:text-berry">
         <Icon name="back" size={15} /> Back to orders
       </Link>
       <div className="mt-4">
@@ -232,6 +232,7 @@ export function OrderDetailPage() {
                     <Button
                       key={status}
                       size="sm"
+                      className="max-sm:min-h-11"
                       disabled={mutations.isMutating}
                       onClick={() => void mutations.setStatus(order.id, order.status, status)}
                     >
@@ -289,7 +290,7 @@ export function OrderDetailPage() {
                   ) : (
                     <span className="grid h-12 w-[52px] place-items-center rounded-[7px] bg-sand text-[9px] font-bold text-muted" aria-hidden="true">—</span>
                   )}
-                  <div>
+                  <div className="min-w-0 break-words">
                     <strong>{item.name}</strong>
                     <small>Quantity {item.quantity} · {formatMoney(item.unitPrice, order.currency)} each</small>
                     {item.notes && <small>{item.notes}</small>}
@@ -297,7 +298,7 @@ export function OrderDetailPage() {
                       <small>Options: {item.modifiers?.map((modifier) => modifier.name).join(", ")}</small>
                     )}
                   </div>
-                  <strong>{formatMoney(item.subtotal, order.currency)}</strong>
+                  <strong className="whitespace-nowrap">{formatMoney(item.subtotal, order.currency)}</strong>
                 </div>
               ))}
             </div>
@@ -333,7 +334,7 @@ export function OrderDetailPage() {
               <div className="mt-3 grid gap-3">
                 {order.payments.map((payment) => (
                   <div key={payment.id} className="rounded-[9px] border border-line bg-white p-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-[12px] text-ink-soft">{payment.method}</strong>
                       <StatusPill tone={paymentStatusTones[payment.status]} withDot={false}>
                         {paymentStatusLabels[payment.status]}
@@ -384,7 +385,7 @@ export function OrderDetailPage() {
                     const line = order.lineItems.find((item) => item.id === refund.order_item_id)
                     return (
                       <div key={refund.id} className="rounded-[9px] border border-line bg-white p-3">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <strong className="text-[12px] text-ink-soft">
                             {formatMoney(refund.amount, order.currency)}
                           </strong>
@@ -423,8 +424,8 @@ export function OrderDetailPage() {
                       {order.lineItems.map((line) => {
                         const quantity = refundQuantities[line.id] ?? 0
                         return (
-                          <div key={line.id} className="flex items-center justify-between gap-3 rounded-[8px] border border-line bg-white px-3 py-2">
-                            <div>
+                          <div key={line.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-line bg-white px-3 py-2">
+                            <div className="min-w-0">
                               <strong className="block text-[12px] text-ink-soft">{line.name}</strong>
                               <small className="text-[10px] text-muted">
                                 {formatMoney(line.unitPrice, order.currency)} · ordered {line.quantity}

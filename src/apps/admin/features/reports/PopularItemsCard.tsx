@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@shared/ui/shadcn/card"
+import { ResponsiveTable } from "../../components/ResponsiveTable"
 
 type PopularItemsCardProps = {
   items: SalesReportTopItem[]
@@ -27,7 +28,7 @@ export function PopularItemsCard({ items, currency }: PopularItemsCardProps) {
   )
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Popular items</CardTitle>
         <CardDescription>
@@ -40,56 +41,58 @@ export function PopularItemsCard({ items, currency }: PopularItemsCardProps) {
             No items sold in this period.
           </p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <caption className="sr-only">
-              Popular items ranked by quantity sold
-            </caption>
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
-                <th scope="col" className="w-12 py-2 pr-2 font-bold">
-                  Rank
-                </th>
-                <th scope="col" className="py-2 pr-2 font-bold">
-                  Item
-                </th>
-                <th scope="col" className="py-2 pr-2 text-right font-bold">
-                  Quantity
-                </th>
-                <th scope="col" className="py-2 text-right font-bold">
-                  Revenue
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((item, index) => (
-                <tr
-                  key={item.name}
-                  className="border-b border-line-soft last:border-0"
-                >
-                  <td className="py-2.5 pr-2">
-                    <span
-                      aria-label={`Rank ${index + 1}`}
-                      className={cn(
-                        "inline-flex size-7 items-center justify-center rounded-full text-xs font-bold tabular-nums",
-                        index < 3
-                          ? "bg-berry-soft text-berry-strong"
-                          : "text-muted",
-                      )}
-                    >
-                      {index + 1}
-                    </span>
-                  </td>
-                  <td className="py-2.5 pr-2 text-ink">{item.name}</td>
-                  <td className="py-2.5 pr-2 text-right tabular-nums font-bold text-ink">
-                    {item.quantity.toLocaleString("en-AU")}
-                  </td>
-                  <td className="py-2.5 text-right tabular-nums text-ink-mid">
-                    {formatMoney(item.revenue, currency)}
-                  </td>
+          <ResponsiveTable label="Popular items by quantity">
+            <table className="w-full min-w-[360px] border-collapse text-sm">
+              <caption className="sr-only">
+                Popular items ranked by quantity sold
+              </caption>
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th scope="col" className="w-12 py-2 pr-2 font-bold">
+                    Rank
+                  </th>
+                  <th scope="col" className="py-2 pr-2 font-bold">
+                    Item
+                  </th>
+                  <th scope="col" className="py-2 pr-2 text-right font-bold">
+                    Quantity
+                  </th>
+                  <th scope="col" className="py-2 text-right font-bold">
+                    Revenue
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ranked.map((item, index) => (
+                  <tr
+                    key={item.name}
+                    className="border-b border-line-soft last:border-0"
+                  >
+                    <td className="py-2.5 pr-2">
+                      <span
+                        aria-label={`Rank ${index + 1}`}
+                        className={cn(
+                          "inline-flex size-7 items-center justify-center rounded-full text-xs font-bold tabular-nums",
+                          index < 3
+                            ? "bg-berry-soft text-berry-strong"
+                            : "text-muted",
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-2 text-ink">{item.name}</td>
+                    <td className="py-2.5 pr-2 text-right tabular-nums font-bold text-ink">
+                      {item.quantity.toLocaleString("en-AU")}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums text-ink-mid">
+                      {formatMoney(item.revenue, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ResponsiveTable>
         )}
       </CardContent>
     </Card>

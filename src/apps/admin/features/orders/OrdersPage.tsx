@@ -5,6 +5,7 @@ import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
 import { Button } from "@shared/ui/Button"
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
+import { ResponsiveTable } from "../../components/ResponsiveTable"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
 import { endOfDayInZone, startOfDayInZone } from "@shared/lib/time"
@@ -225,7 +226,10 @@ export function OrdersPage() {
       ) : orders.length === 0 ? (
         <EmptyState title="No orders found" description="Try changing your search, status, or date filters." />
       ) : (
-        <div className={`${styles["table-card"]} ${styles["order-table"]} selection-table`}>
+        <ResponsiveTable
+          label="Orders table"
+          className={`${styles["table-card"]} ${styles["order-table"]} selection-table`}
+        >
           <div className={`${styles["table-heading"]}`}>
             <label className={`${styles["inline-select"]}`}>
               <input
@@ -286,7 +290,7 @@ export function OrdersPage() {
               </div>
             )
           })}
-        </div>
+        </ResponsiveTable>
       )}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

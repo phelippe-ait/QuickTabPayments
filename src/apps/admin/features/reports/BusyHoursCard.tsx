@@ -81,7 +81,7 @@ export function BusyHoursCard({ hours, timezone }: BusyHoursCardProps) {
   const peak = findPeakHour(bars)
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Busy hours</CardTitle>
         <CardDescription>
@@ -140,7 +140,7 @@ export function BusyHoursCard({ hours, timezone }: BusyHoursCardProps) {
           {bars.map((entry) => (
             <span
               key={entry.hour}
-              className="text-center text-[10px] text-muted"
+              className="whitespace-nowrap text-center text-[10px] text-muted"
             >
               {entry.hour % LABEL_EVERY === 0
                 ? formatHourShort(entry.hour)

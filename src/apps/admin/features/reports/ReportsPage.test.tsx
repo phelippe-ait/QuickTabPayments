@@ -138,6 +138,12 @@ describe("ReportsPage", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Busiest: 1pm")).toBeInTheDocument()
     expect(screen.getAllByText("Flat White")).toHaveLength(2)
+    expect(
+      screen.getByRole("region", { name: "Top items by revenue" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Popular items by quantity" }),
+    ).toBeInTheDocument()
   })
 
   it("shows the period selector", () => {
