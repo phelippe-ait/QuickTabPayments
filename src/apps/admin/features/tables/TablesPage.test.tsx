@@ -106,6 +106,21 @@ const needsCleaning: TableVM = {
   openOrder: null,
 }
 
+const freedByStaff: TableVM = {
+  id: "table-5",
+  number: "T05",
+  locationLabel: "Indoors",
+  seats: 4,
+  isActive: true,
+  qrToken: "dddddddddddddddd",
+  status: "available",
+  openOrder: {
+    orderNumber: "1003",
+    status: "confirmed",
+    startedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+  },
+}
+
 describe("TablesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -129,7 +144,7 @@ describe("TablesPage", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument()
   })
 
-  it("derives occupancy from open orders and staff status, and keeps seats real", async () => {
+  it("shows the staff-managed occupancy and keeps seats real", async () => {
     mocks.rows = [occupied, free]
     render(<TablesPage />)
 
@@ -151,6 +166,14 @@ describe("TablesPage", () => {
     expect(screen.getByText("Seated by staff · no order yet")).toBeInTheDocument()
     expect(screen.getByText("Needs cleaning")).toBeInTheDocument()
     expect(screen.getByText("Awaiting cleaning")).toBeInTheDocument()
+  })
+
+  it("lets a staff-marked free table win over an old open order", () => {
+    mocks.rows = [freedByStaff]
+    render(<TablesPage />)
+
+    expect(screen.getByText("Free")).toBeInTheDocument()
+    expect(screen.queryByText("#1003")).not.toBeInTheDocument()
   })
 
   it("offers deactivation instead of deleting a table with past orders", async () => {

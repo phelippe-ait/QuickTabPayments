@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import {
-  naturalSortTableNumber,
-  updateStaffTableStatus,
-} from "./staffTables"
+import { naturalSortTableNumber, updateStaffTableStatus } from "./staffTables"
 
 const mocks = vi.hoisted(() => {
   const builder = {

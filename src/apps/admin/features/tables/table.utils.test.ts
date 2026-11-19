@@ -20,15 +20,10 @@ describe("formatElapsed", () => {
 })
 
 describe("tableOccupancyState", () => {
-  it("treats an open order or staff-seated table as occupied", () => {
-    expect(tableOccupancyState("available", true)).toBe("occupied")
-    expect(tableOccupancyState("occupied", false)).toBe("occupied")
-  })
-
-  it("keeps cleaning distinct only while no order is open", () => {
-    expect(tableOccupancyState("needs_cleaning", false)).toBe("needs_cleaning")
-    expect(tableOccupancyState("needs_cleaning", true)).toBe("occupied")
-    expect(tableOccupancyState("available", false)).toBe("free")
+  it("maps the staff-managed table status directly", () => {
+    expect(tableOccupancyState("occupied")).toBe("occupied")
+    expect(tableOccupancyState("needs_cleaning")).toBe("needs_cleaning")
+    expect(tableOccupancyState("available")).toBe("free")
   })
 })
 

@@ -18,7 +18,7 @@
 -- demo accounts, or any menu/order data. See README.md → "Database setup" for
 -- the data import steps.
 --
--- Generated from 36 migrations:
+-- Generated from 37 migrations:
 --   - 0001_profiles.sql
 --   - 0002_roles.sql
 --   - 0003_schema.sql
@@ -46,6 +46,7 @@
 --   - 20261105094127_order_geofence_toggle.sql
 --   - 20261119000000_restore_place_order_contract.sql
 --   - 20261119010000_staff_place_order.sql
+--   - 20261119040000_orders_mark_table_occupied.sql
 --   - 0020_restaurant_plans.sql
 --   - 0021_sales_reporting.sql
 --   - 0022_order_status_transition_guard.sql
@@ -5910,6 +5911,54 @@ grant execute on function public.staff_place_order(uuid, text, text, jsonb, bool
 
 comment on function public.staff_place_order(uuid, text, text, jsonb, boolean) is
   'Staff-facing counter/table order creation: active-staff only, server-priced, validated modifiers, confirmed immediately, optional counter payment record.';
+
+-- ===========================================================================
+-- Source: supabase/migrations/20261119040000_orders_mark_table_occupied.sql
+-- ===========================================================================
+
+-- =====================================================================
+-- Confirmed orders occupy their table
+-- ---------------------------------------------------------------------
+-- Staff asked for the floor plan to reflect service automatically:
+--   * when a customer order is confirmed (payment succeeded) the table
+--     becomes occupied;
+--   * when staff create an order it is confirmed immediately, so the same
+--     rule applies;
+--   * staff still own the reverse transition — nothing auto-frees a table.
+--
+-- The trigger keeps this out of `place_order` / `staff_place_order` bodies
+-- (and away from the Stripe webhook), so every confirmation path behaves the
+-- same. Pending/unpaid checkouts do not occupy a table.
+--
+-- Safe to re-run.
+-- =====================================================================
+
+create or replace function public.mark_table_occupied_for_order()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.table_id is not null
+     and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.tables
+       set status = 'occupied'
+     where id = new.table_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_orders_mark_table_occupied on public.orders;
+create trigger trg_orders_mark_table_occupied
+  after insert or update of status on public.orders
+  for each row execute function public.mark_table_occupied_for_order();
+
+comment on function public.mark_table_occupied_for_order() is
+  'Marks a table occupied when an order becomes confirmed. Staff still mark tables free/cleaning; orders never auto-free a table.';
 
 -- ===========================================================================
 -- Source: supabase/migrations/0020_restaurant_plans.sql

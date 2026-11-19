@@ -319,6 +319,10 @@ only as a documented development fallback.
   the kitchen board immediately. A table is optional (counter/takeaway); staff
   can optionally record payment collected at the counter. Without that flag no
   payment row is written, so the app never reports money it did not capture.
+- A confirmed order marks its table `occupied` automatically. Staff remain in
+  control of freeing or cleaning the table. Additional orders are still allowed
+  on an occupied table, and the floor plan shows the latest order's customer
+  name.
 - Customers can view their Stripe receipt and see whether an order was
   **partially refunded** or **fully refunded** in order history and on the
   public tracking page.

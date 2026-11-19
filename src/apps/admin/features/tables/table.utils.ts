@@ -3,15 +3,14 @@ import type { TableStatus } from "@shared/lib/database.types"
 export type TableOccupancyState = "occupied" | "needs_cleaning" | "free"
 
 /**
- * The admin card must agree with the staff floor plan. An open order is
- * authoritative (a guest can order before staff seat them), then the manual
- * `tables.status`; `needs_cleaning` only wins when no order is open.
+ * Staff own the floor plan. Confirmed orders mark their table occupied
+ * automatically (database trigger), so `tables.status` is the single source of
+ * truth here. Only staff can free or mark a table for cleaning.
  */
 export function tableOccupancyState(
   status: TableStatus,
-  hasOpenOrder: boolean,
 ): TableOccupancyState {
-  if (hasOpenOrder || status === "occupied") return "occupied"
+  if (status === "occupied") return "occupied"
   if (status === "needs_cleaning") return "needs_cleaning"
   return "free"
 }

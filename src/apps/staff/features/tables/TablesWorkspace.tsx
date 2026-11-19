@@ -157,7 +157,6 @@ export function TableEditor({
   onSave: (table: Table) => void
 }) {
   const [status, setStatus] = useState<TableStatus>(table.status)
-  const [guest, setGuest] = useState(table.guest ?? "")
   const [occupants, setOccupants] = useState(table.occupants)
   const occupied = status === "occupied"
   const panelRef = useDialogFocus<HTMLElement>(onClose)
@@ -167,7 +166,7 @@ export function TableEditor({
     onSave({
       ...table,
       status,
-      guest: occupied ? guest.trim() || "Walk-in guest" : undefined,
+      guest: occupied ? table.guest : undefined,
       occupants: occupied ? Math.max(1, Math.min(table.seats ?? Infinity, occupants)) : 0,
       since: occupied ? (table.since ?? "Just now") : undefined,
       total: occupied ? (table.total ?? 0) : undefined,
@@ -246,16 +245,16 @@ export function TableEditor({
             occupied ? "" : "pointer-events-none opacity-40"
           }`}
         >
-          <label className="block">
-            <span className={`${styles["detail-label"]}`}>Guest name</span>
-            <input
-              className="mt-2.5 w-full rounded-xl border border-line-strong bg-white px-4 py-3 text-sm outline-none transition placeholder:text-placeholder focus:border-berry focus:ring-2 focus:ring-berry/10"
-              disabled={!occupied}
-              onChange={(event) => setGuest(event.target.value)}
-              placeholder="Enter guest or party name"
-              value={guest}
-            />
-          </label>
+          <div>
+            <span className={`${styles["detail-label"]}`}>Guest</span>
+            <p className="mt-2.5 rounded-xl border border-line bg-cream-2 px-4 py-3 text-sm">
+              {table.guest || "No open order"}
+            </p>
+            <span className="mt-1.5 block text-[11px] leading-relaxed text-muted">
+              Guest names come from the table&apos;s latest order and update
+              automatically when a new order is placed.
+            </span>
+          </div>
 
           <div>
             <div className="flex items-center justify-between">

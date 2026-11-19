@@ -94,9 +94,8 @@ function StaffWorkspace() {
     const statusChanged =
       selectedTable !== null && table.status !== selectedTable.status
     workspace.updateTable(table)
-    // The editor's guest/occupant fields are local-only, but the operational
-    // status is real state: persist it through the same scoped mutation the
-    // one-tap card button uses so a reload doesn't undo the change.
+    // The guest name is derived from the table's latest open order; only the
+    // operational status is a staff-owned field that needs persisting here.
     if (statusChanged) {
       void workspace.updateTableStatus(String(table.id), table.status)
     }

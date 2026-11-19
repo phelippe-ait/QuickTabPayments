@@ -36,9 +36,7 @@ export function TablesPage() {
   )
   const enabledCount = tables.tables.filter((table) => table.isActive).length
   const occupiedCount = tables.tables.filter(
-    (table) =>
-      tableOccupancyState(table.status, Boolean(table.openOrder)) ===
-      "occupied",
+    (table) => tableOccupancyState(table.status) === "occupied",
   ).length
 
   useEffect(
@@ -176,10 +174,7 @@ export function TablesPage() {
             <EmptyState title="No tables found" description="Try another location filter or add a new table." />
           ) : <div className={`${styles["tables-grid"]}`}>
             {visible.map((table) => {
-              const occupancy = tableOccupancyState(
-                table.status,
-                Boolean(table.openOrder),
-              )
+              const occupancy = tableOccupancyState(table.status)
               return (
               <article className={`${styles["table-card-item"]} ${selected.includes(table.id) ? styles["selected"] : ""}`} key={table.id}>
                 <div className={`${styles["table-card-top"]}`}>
