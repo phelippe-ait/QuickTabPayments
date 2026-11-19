@@ -47,10 +47,6 @@ export type AuthContextValue = {
 
 const notConfigured = new Error(SUPABASE_NOT_CONFIGURED_MESSAGE);
 
-/**
- * Safe defaults so any component (and the test suite) can render without a
- * mounted provider. `AuthProvider` supplies the real implementation.
- */
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   user: null,

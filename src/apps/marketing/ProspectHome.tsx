@@ -11,8 +11,7 @@ export default function ProspectHome() {
     <main className={styles.page}>
       <header className={styles.header}>
         <a className={styles.brand} href="#top" aria-label="QuickTab home">
-          <span className={styles.brandMark}>q</span>
-          <span>quicktab<span className={styles.brandDot}>.</span></span>
+          <img src="/assets/quicktab-logo.png" alt="QuickTab — Scan · Order · Pay · Enjoy" />
         </a>
         <nav className={styles.nav} aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
@@ -101,7 +100,7 @@ export default function ProspectHome() {
         <div className={styles.contactRight}><p>See how a smoother ordering flow could work for your guests and your team.</p><a href="#cafe" className={styles.lightButton}>Explore the café example <span aria-hidden="true">↗</span></a><small>QuickTab Payments · Built for Australian hospitality</small></div>
       </section>
 
-      <footer className={styles.footer}><a className={styles.brand} href="#top"><span className={styles.brandMark}>q</span><span>quicktab<span className={styles.brandDot}>.</span></span></a><span>Less admin. More good service.</span><a href="#top">Back to top ↑</a></footer>
+      <footer className={styles.footer}><a className={styles.brand} href="#top" aria-label="QuickTab home"><img src="/assets/quicktab-logo.png" alt="QuickTab — Scan · Order · Pay · Enjoy" /></a><span>Less admin. More good service.</span><a href="#top">Back to top ↑</a></footer>
     </main>
   )
 }
