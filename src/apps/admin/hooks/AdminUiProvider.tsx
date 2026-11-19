@@ -58,6 +58,8 @@ export function AdminUiProvider({ children }: { children: ReactNode }) {
         <div
           className={`${styles["toast"]} ${toast.tone === "error" ? styles["toast-error"] : ""}`}
           role={toast.tone === "error" ? "alert" : "status"}
+          aria-live={toast.tone === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
         >
           {toast.message}
         </div>

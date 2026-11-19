@@ -13,7 +13,7 @@ import {
 const FIXED_PRESETS: FixedPeriodPreset[] = ["today", "7d", "30d"]
 
 const inputClassName =
-  "min-h-9 rounded-[9px] border border-line bg-white px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+  "min-h-9 rounded-[9px] border border-line-strong bg-white px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
 
 type ReportPeriodSelectorProps = {
   timezone: string

@@ -96,7 +96,7 @@ export function TableCard({
           </div>
         ) : (
           <div className="mt-8 flex items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-[#858c80]">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-muted">
               <Icon name="users" size={16} />
               {table.seats != null ? `Seats ${table.seats}` : "Capacity not set"}
             </span>
@@ -231,7 +231,7 @@ export function TableEditor({
           <label className="block">
             <span className={`${styles["detail-label"]}`}>Guest name</span>
             <input
-              className="mt-2.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition placeholder:text-placeholder focus:border-berry focus:ring-2 focus:ring-berry/10"
+              className="mt-2.5 w-full rounded-xl border border-line-strong bg-white px-4 py-3 text-sm outline-none transition placeholder:text-placeholder focus:border-berry focus:ring-2 focus:ring-berry/10"
               disabled={!occupied}
               onChange={(event) => setGuest(event.target.value)}
               placeholder="Enter guest or party name"
@@ -410,7 +410,7 @@ export function TablesWorkspace({
       {error && (
         <div
           role="alert"
-          className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="mb-5 rounded-xl border border-danger/40 bg-danger-soft p-4 text-sm text-danger"
         >
           <span className="font-bold">Tables:</span> {error}
         </div>

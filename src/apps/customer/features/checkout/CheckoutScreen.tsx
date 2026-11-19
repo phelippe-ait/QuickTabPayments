@@ -226,7 +226,7 @@ export function CheckoutScreen({
                   aria-describedby={
                     tipError ? "tip-custom-amount-error" : undefined
                   }
-                  className="h-11 w-28 rounded-[7px] border border-line bg-white px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:bg-cream disabled:text-muted"
+                  className="h-11 w-28 rounded-[7px] border border-line-strong bg-white px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry disabled:cursor-not-allowed disabled:bg-cream disabled:text-muted"
                 />
               </div>
               {tipError && (

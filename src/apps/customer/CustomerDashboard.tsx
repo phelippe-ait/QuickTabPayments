@@ -59,6 +59,7 @@ function CustomerShell() {
   const [selected, setSelected] = useState<MenuItem | null>(null)
   const [createdOrder, setCreatedOrder] = useState<PlacedOrder | null>(null)
   const [checkoutError, setCheckoutError] = useState("")
+  const [cartAnnouncement, setCartAnnouncement] = useState("")
   const [authReturnScreen, setAuthReturnScreen] =
     useState<"menu" | "confirmation">("menu")
   const restoredLastOrder = useRef(false)
@@ -324,7 +325,13 @@ function CustomerShell() {
         <OrdersScreen
           customerId={user.id}
           restaurantId={currentContext.restaurantId}
-          onAddToCart={cart.addLines}
+          onAddToCart={(lines) => {
+            cart.addLines(lines)
+            const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0)
+            setCartAnnouncement(
+              `${itemCount} ${itemCount === 1 ? "item" : "items"} added to your cart from a previous order.`,
+            )
+          }}
           onOpenCart={() => setScreen("cart")}
           onClose={() => setScreen("menu")}
         />
@@ -339,6 +346,9 @@ function CustomerShell() {
       <footer className={styles["technology-footer"]}>
         Developed by QuickTab Payments Team
       </footer>
+      <p className="sr-only" role="status" aria-live="polite">
+        {cartAnnouncement}
+      </p>
       {selected && (
         <ProductModal
           key={selected.id}
@@ -347,6 +357,9 @@ function CustomerShell() {
           onClose={() => setSelected(null)}
           onAdd={(amount, modifiers) => {
             cart.add(selected, amount, modifiers)
+            setCartAnnouncement(
+              `${amount} × ${selected.name} added to cart. ${cart.count + amount} ${cart.count + amount === 1 ? "item" : "items"} in your cart.`,
+            )
             setSelected(null)
           }}
         />

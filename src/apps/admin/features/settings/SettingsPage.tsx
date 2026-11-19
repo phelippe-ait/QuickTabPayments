@@ -475,6 +475,7 @@ export function SettingsPage() {
                 <small
                   className={styles["field-error"]}
                   id="settings-tax-error"
+                  role="alert"
                 >
                   {taxError}
                 </small>

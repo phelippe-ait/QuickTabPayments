@@ -132,4 +132,15 @@ describe("CatalogPage", () => {
 
     expect(screen.getByText(/no menu items found/i)).toBeInTheDocument()
   })
+
+  it("gives the search field a programmatic label", () => {
+    mocks.menu.categories = [category]
+    mocks.menu.items = [item]
+    render(<CatalogPage />)
+
+    expect(screen.getByLabelText(/search menu items/i)).toHaveAttribute(
+      "placeholder",
+      "Search menu items",
+    )
+  })
 })

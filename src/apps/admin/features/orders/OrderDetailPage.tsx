@@ -432,7 +432,10 @@ export function OrderDetailPage() {
                             </div>
                             <div className={`${styles["refund-quantity"]}`}>
                               <button type="button" aria-label={`Remove one ${line.name} from refund`} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.max(0, quantity - 1) })}>−</button>
-                              <strong>{quantity}</strong>
+                              <strong aria-live="polite">
+                                <span className="sr-only">{line.name} refund quantity </span>
+                                {quantity}
+                              </strong>
                               <button type="button" aria-label={`Add one ${line.name} to refund`} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.min(line.quantity, quantity + 1) })}>+</button>
                             </div>
                           </div>
@@ -445,7 +448,7 @@ export function OrderDetailPage() {
                     <div className={`${styles["refund-confirmation"]}`}>
                       <div>
                         <span>{refundMode === "full" ? "Remaining balance" : refundMode === "custom" ? "Custom refund" : "Selected refund"}</span>
-                        <strong>{formatMoney(refundAmount, order.currency)}</strong>
+                        <strong aria-live="polite" aria-atomic="true">{formatMoney(refundAmount, order.currency)}</strong>
                       </div>
                       {refundMode === "custom" ? (
                         <label className={`${styles["custom-refund"]}`}>

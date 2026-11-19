@@ -18,4 +18,14 @@ describe("StatusPill", () => {
     );
     expect(withoutDot.querySelectorAll("span")).toHaveLength(1);
   });
+
+  it("conveys status with a text label and treats the dot as decorative", () => {
+    const { container } = render(<StatusPill tone="success">Ready</StatusPill>);
+
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(container.querySelector("span span")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
 });

@@ -215,6 +215,7 @@ function KpiCard({
 function LoadingCards() {
   return (
     <div role="status" aria-label="Loading sales report">
+      <span className="sr-only">Loading sales report…</span>
       <div className={kpiGridClassName}>
         {Array.from({ length: 5 }, (_, index) => (
           <Card key={index}>

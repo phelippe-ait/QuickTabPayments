@@ -99,7 +99,7 @@ describe("KitchenWorkspace new-order indicator", () => {
       onOrderSeen,
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Prepare" }))
+    fireEvent.click(screen.getByRole("button", { name: /prepare order qt-1042/i }))
 
     expect(onOrderSeen).toHaveBeenCalledWith("QT-1042")
     expect(
@@ -116,7 +116,7 @@ describe("KitchenWorkspace new-order indicator", () => {
       onStatusChange,
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }))
+    fireEvent.click(screen.getByRole("button", { name: /acknowledge order qt-1042/i }))
 
     expect(onOrderSeen).toHaveBeenCalledWith("QT-1042")
     expect(onStatusChange).not.toHaveBeenCalled()
@@ -166,7 +166,7 @@ describe("KitchenWorkspace board ordering, SLA and actions", () => {
       onStatusChange,
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Ready" }))
+    fireEvent.click(screen.getByRole("button", { name: /ready order qt-1042/i }))
     fireEvent.click(screen.getByRole("button", { name: /yes, mark as ready/i }))
 
     expect(onStatusChange).toHaveBeenCalledWith("QT-1042", "Ready")
@@ -175,11 +175,11 @@ describe("KitchenWorkspace board ordering, SLA and actions", () => {
   it("does not offer illegal transitions", () => {
     renderKitchen({ orders: [order({ kitchenStatus: "New" })] })
 
-    expect(screen.getByRole("button", { name: "Prepare" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /prepare order qt-1042/i })).toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: "Complete" }),
+      screen.queryByRole("button", { name: /complete order qt-1042/i }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Ready" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /ready order qt-1042/i })).not.toBeInTheDocument()
   })
 
   it("renders an allergen warning for menu items that contain allergens", () => {
@@ -205,5 +205,42 @@ describe("KitchenWorkspace board ordering, SLA and actions", () => {
     renderKitchen()
 
     expect(screen.queryByText(/contains /i)).not.toBeInTheDocument()
+  })
+})
+
+describe("KitchenWorkspace accessibility", () => {
+  it("labels the icon-only sound toggle and exposes its pressed state", () => {
+    renderKitchen()
+
+    const toggle = screen.getByRole("button", {
+      name: /unmute new order sound/i,
+    })
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("conveys kitchen status with a text label, not colour alone", () => {
+    renderKitchen({ orders: [order({ kitchenStatus: "Preparing" })] })
+
+    expect(screen.getAllByText("Preparing").length).toBeGreaterThan(0)
+  })
+
+  it("names each order action so repeated buttons stay distinguishable", () => {
+    renderKitchen({
+      orders: [
+        order({ id: "QT-1042", kitchenStatus: "New" }),
+        order({ id: "QT-1043", kitchenStatus: "New" }),
+      ],
+      unseenOrderIds: new Set(["QT-1042", "QT-1043"]),
+    })
+
+    expect(
+      screen.getByRole("button", { name: /acknowledge order qt-1042/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /acknowledge order qt-1043/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /prepare order qt-1043/i }),
+    ).toBeInTheDocument()
   })
 })

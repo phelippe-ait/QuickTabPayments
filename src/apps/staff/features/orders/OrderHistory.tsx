@@ -45,9 +45,10 @@ export function OrderHistory({
         </p>
       </section>
       <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row">
-        <label className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-line bg-paper px-4 py-3 text-muted focus-within:border-berry">
+        <label className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-line-strong bg-paper px-4 py-3 text-muted focus-within:border-berry focus-within:ring-2 focus-within:ring-berry/20">
           <Icon name="search" size={18} />
           <input
+            aria-label="Search orders by guest, table or order number"
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-placeholder"
             placeholder="Search guest, table or order"
             value={query}
