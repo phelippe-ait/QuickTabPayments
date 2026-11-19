@@ -35,6 +35,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const admin = adminClient();
   const stripe = getStripe();
 
+  function reconciliationFailed(error: unknown) {
+    console.error("stripe webhook RPC failed", {
+      eventId: event.id,
+      type: event.type,
+      error,
+    });
+    return res.status(500).json({ error: "reconciliation_failed" });
+  }
+
   switch (event.type) {
     case "payment_intent.succeeded": {
       const intent = event.data.object as Stripe.PaymentIntent;
@@ -47,20 +56,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .catch(() => null)
           : intent.latest_charge?.receipt_url ?? null;
 
-      await admin.rpc("apply_payment_succeeded", {
+      const { error } = await admin.rpc("apply_payment_succeeded", {
         p_stripe_payment_intent_id: intent.id,
         p_receipt_url: receipt,
         p_method: method,
       });
+      if (error) return reconciliationFailed(error);
       break;
     }
     case "payment_intent.payment_failed": {
       const intent = event.data.object as Stripe.PaymentIntent;
       const reason = intent.last_payment_error?.message ?? "Payment failed";
-      await admin.rpc("apply_payment_failed", {
+      const { error } = await admin.rpc("apply_payment_failed", {
         p_stripe_payment_intent_id: intent.id,
         p_reason: reason,
       });
+      if (error) return reconciliationFailed(error);
       break;
     }
     case "charge.refunded": {
@@ -71,12 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : charge.payment_intent?.id ?? null;
       if (intentId) {
         const latestRefund = charge.refunds?.data?.[0];
-        await admin.rpc("apply_refund_succeeded", {
+        const { error } = await admin.rpc("apply_refund_succeeded", {
           p_stripe_payment_intent_id: intentId,
           p_stripe_refund_id: latestRefund?.id ?? null,
           p_amount: (charge.amount_refunded ?? 0) / 100,
           p_full: charge.amount_refunded >= charge.amount,
         });
+        if (error) return reconciliationFailed(error);
       }
       break;
     }
