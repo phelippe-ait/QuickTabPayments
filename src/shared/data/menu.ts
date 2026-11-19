@@ -112,7 +112,11 @@ export async function updateMenuItem(
 
 export async function deleteMenuItem(id: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from("menu_items").delete().eq("id", id);
+  const { data, error } = await client
+    .from("menu_items")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) {
     throw new Error(
       error.code === "23503"
@@ -120,17 +124,31 @@ export async function deleteMenuItem(id: string): Promise<void> {
         : error.message,
     );
   }
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Menu item was not deleted. It may already be gone, or you may not have permission.",
+    );
+  }
 }
 
 export async function deleteMenuItems(ids: string[]): Promise<void> {
   if (!ids.length) return;
   const client = requireSupabase();
-  const { error } = await client.from("menu_items").delete().in("id", ids);
+  const { data, error } = await client
+    .from("menu_items")
+    .delete()
+    .in("id", ids)
+    .select("id");
   if (error) {
     throw new Error(
       error.code === "23503"
         ? "Some items appear on past orders. Mark them unavailable instead."
         : error.message,
+    );
+  }
+  if (!data || data.length !== ids.length) {
+    throw new Error(
+      "Some menu items were not deleted. Refresh and check your permissions.",
     );
   }
 }
@@ -141,12 +159,18 @@ export async function setMenuItemsAvailability(
 ): Promise<void> {
   if (!ids.length) return;
   const client = requireSupabase();
-  const { error } = await client
+  const { data, error } = await client
     .from("menu_items")
     .update({ is_available: isAvailable })
-    .in("id", ids);
+    .in("id", ids)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if (!data || data.length !== ids.length) {
+    throw new Error(
+      "Menu availability was not updated. Refresh and check your permissions.",
+    );
+  }
 }
 
 /** Bulk patch used for moving items between categories (and similar actions). */
@@ -156,12 +180,18 @@ export async function updateMenuItems(
 ): Promise<void> {
   if (!ids.length) return;
   const client = requireSupabase();
-  const { error } = await client
+  const { data, error } = await client
     .from("menu_items")
     .update(patch)
-    .in("id", ids);
+    .in("id", ids)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if (!data || data.length !== ids.length) {
+    throw new Error(
+      "Some menu items were not updated. Refresh and check your permissions.",
+    );
+  }
 }
 
 /** Persist a drag-free explicit order (one update per row). */
@@ -172,11 +202,17 @@ export async function reorderMenuItems(
   await Promise.all(
     orders.map(async ({ id, display_order }) => {
       const client = requireSupabase();
-      const { error } = await client
+      const { data, error } = await client
         .from("menu_items")
         .update({ display_order })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
       if (error) throw new Error(error.message);
+      if (!data || data.length !== 1) {
+        throw new Error(
+          "Menu item order was not saved. Refresh and check your permissions.",
+        );
+      }
     }),
   );
 }
@@ -188,11 +224,17 @@ export async function updateCategories(
   await Promise.all(
     orders.map(async ({ id, display_order }) => {
       const client = requireSupabase();
-      const { error } = await client
+      const { data, error } = await client
         .from("menu_categories")
         .update({ display_order })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
       if (error) throw new Error(error.message);
+      if (!data || data.length !== 1) {
+        throw new Error(
+          "Category order was not saved. Refresh and check your permissions.",
+        );
+      }
     }),
   );
 }

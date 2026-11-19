@@ -61,15 +61,33 @@ export async function updateTable(
 
 export async function deleteTable(id: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from("tables").delete().eq("id", id);
+  const { data, error } = await client
+    .from("tables")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Table was not deleted. It may already be gone, or you may not have permission.",
+    );
+  }
 }
 
 export async function deleteTables(ids: string[]): Promise<void> {
   if (!ids.length) return;
   const client = requireSupabase();
-  const { error } = await client.from("tables").delete().in("id", ids);
+  const { data, error } = await client
+    .from("tables")
+    .delete()
+    .in("id", ids)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data || data.length !== ids.length) {
+    throw new Error(
+      "Some tables were not deleted. Refresh and check your permissions.",
+    );
+  }
 }
 
 export async function setTablesActive(
@@ -78,12 +96,18 @@ export async function setTablesActive(
 ): Promise<void> {
   if (!ids.length) return;
   const client = requireSupabase();
-  const { error } = await client
+  const { data, error } = await client
     .from("tables")
     .update({ is_active: isActive })
-    .in("id", ids);
+    .in("id", ids)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if (!data || data.length !== ids.length) {
+    throw new Error(
+      "Table status was not updated. Refresh and check your permissions.",
+    );
+  }
 }
 
 export const tableKeys = {
