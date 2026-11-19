@@ -2,8 +2,9 @@ import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
-import { StatusPill } from "@shared/ui/StatusPill"
+import { StatusPill, type StatusTone } from "@shared/ui/StatusPill"
 import { Button, buttonVariants } from "@shared/ui/Button"
+import { cn } from "@shared/lib/cn"
 import { EmptyState, PageHeader } from "../../components/AdminUi"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
 import { formatMoney } from "@shared/lib/money"
@@ -33,6 +34,35 @@ import {
 } from "./refund.utils"
 
 const flow = ["pending", "confirmed", "preparing", "ready", "completed"] as const
+
+/**
+ * Soft, status-coloured action buttons. Mirrors the tone palette used by
+ * StatusPill and the staff action buttons so a transition action reads with
+ * the same colour as the status it moves the order to.
+ */
+const statusActionClasses: Record<StatusTone, string> = {
+  primary:
+    "border-berry/40 bg-berry-soft text-berry-strong hover:border-berry/40 hover:bg-berry-soft/70",
+  success:
+    "border-sage/40 bg-sage-soft text-sage-strong hover:border-sage/40 hover:bg-sage-soft/70",
+  warning:
+    "border-amber/40 bg-amber-soft text-amber hover:border-amber/40 hover:bg-amber-soft/70",
+  info: "border-info/40 bg-info-soft text-info hover:border-info/40 hover:bg-info-soft/70",
+  danger:
+    "border-danger/40 bg-danger-soft text-danger hover:border-danger/40 hover:bg-danger-soft/70",
+  neutral:
+    "border-line bg-neutral-soft text-neutral hover:border-line hover:bg-neutral-soft/70",
+}
+
+/** Tone-coloured progress chips for the order status timeline. */
+const statusStepClasses: Record<StatusTone, string> = {
+  primary: "border-berry bg-berry-soft text-berry-strong",
+  success: "border-sage bg-sage-soft text-sage-strong",
+  warning: "border-amber bg-amber-soft text-amber",
+  info: "border-info bg-info-soft text-info",
+  danger: "border-danger bg-danger-soft text-danger",
+  neutral: "border-neutral bg-neutral-soft text-neutral",
+}
 
 function formatTimestamp(iso: string | null, timezone: string): string {
   if (!iso) return "—"
@@ -254,7 +284,11 @@ export function OrderDetailPage() {
                     <Button
                       key={status}
                       size="sm"
-                      className="max-sm:min-h-11"
+                      variant="secondary"
+                      className={cn(
+                        "max-sm:min-h-11",
+                        statusActionClasses[orderStatusTones[status]],
+                      )}
                       disabled={mutations.isMutating}
                       onClick={() => void mutations.setStatus(order.id, order.status, status)}
                     >
@@ -278,7 +312,7 @@ export function OrderDetailPage() {
                       key={status}
                       className={`rounded-pill border px-3 py-1.5 text-[10px] font-bold ${
                         reached
-                          ? "border-berry bg-berry-soft text-berry-strong"
+                          ? statusStepClasses[orderStatusTones[status]]
                           : "border-line bg-white text-muted"
                       }`}
                       aria-current={order.status === status ? "step" : undefined}
