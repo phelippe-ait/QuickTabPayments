@@ -132,4 +132,79 @@ describe("POST /api/webhooks/stripe", () => {
       p_full: true,
     });
   });
+
+  it("returns 500 when apply_payment_succeeded fails so Stripe retries", async () => {
+    mocks.rpc.mockResolvedValue({ error: { message: "db down" } });
+    mocks.constructEvent.mockReturnValue({
+      type: "payment_intent.succeeded",
+      data: {
+        object: {
+          id: "pi_1",
+          payment_method_types: ["card"],
+          latest_charge: "ch_1",
+        },
+      },
+    });
+    const res = makeRes();
+    await handler(req, res as never);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "reconciliation_failed" });
+  });
+
+  it("returns 500 when apply_payment_failed fails so Stripe retries", async () => {
+    mocks.rpc.mockResolvedValue({ error: { message: "db down" } });
+    mocks.constructEvent.mockReturnValue({
+      type: "payment_intent.payment_failed",
+      data: {
+        object: {
+          id: "pi_2",
+          last_payment_error: { message: "Declined" },
+        },
+      },
+    });
+    const res = makeRes();
+    await handler(req, res as never);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "reconciliation_failed" });
+  });
+
+  it("returns 500 when apply_refund_succeeded fails so Stripe retries", async () => {
+    mocks.rpc.mockResolvedValue({ error: { message: "db down" } });
+    mocks.constructEvent.mockReturnValue({
+      type: "charge.refunded",
+      data: {
+        object: {
+          payment_intent: "pi_3",
+          amount: 4200,
+          amount_refunded: 4200,
+          refunds: { data: [{ id: "re_1" }] },
+        },
+      },
+    });
+    const res = makeRes();
+    await handler(req, res as never);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "reconciliation_failed" });
+  });
+
+  it("still acknowledges the event when the RPC succeeds", async () => {
+    mocks.constructEvent.mockReturnValue({
+      type: "payment_intent.succeeded",
+      data: {
+        object: {
+          id: "pi_1",
+          payment_method_types: ["card"],
+          latest_charge: "ch_1",
+        },
+      },
+    });
+    const res = makeRes();
+    await handler(req, res as never);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+  });
 });
