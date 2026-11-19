@@ -73,6 +73,7 @@ export function SettingsPage() {
   const [taxError, setTaxError] = useState("");
   const [slugError, setSlugError] = useState("");
   const [locationPoint, setLocationPoint] = useState<LocationPoint | null>(null);
+  const [addressEdited, setAddressEdited] = useState(false);
   const [addressMatches, setAddressMatches] = useState<AddressMatch[]>([]);
   const [isLookingUpAddress, setIsLookingUpAddress] = useState(false);
   const [addressLookupError, setAddressLookupError] = useState("");
@@ -94,6 +95,7 @@ export function SettingsPage() {
     );
     setGeofenceEnabled(settings.location?.geofence_enabled ?? false);
     setClearSavedLocation(false);
+    setAddressEdited(false);
   }, [settings.isLocationPending, settings.location]);
   const [timezoneError, setTimezoneError] = useState("");
 
@@ -172,6 +174,7 @@ export function SettingsPage() {
     setClearSavedLocation(true);
     setGeofenceEnabled(false);
     setGeofenceError("");
+    setAddressEdited(false);
   };
 
   const lookupAddress = async () => {
@@ -325,12 +328,14 @@ export function SettingsPage() {
                 placeholder="A short description of your café"
               />
             </label>
-            <label className={styles["wide"]}>
-              Street address
+            <div className={styles["wide"]}>
+              <label htmlFor="settings-address">Street address</label>
               <input
+                id="settings-address"
                 value={form.address}
                 onChange={(event) => {
                   update({ address: event.target.value });
+                  setAddressEdited(true);
                   setAddressMatches([]);
                   setAddressLookupError("");
                 }}
@@ -341,8 +346,8 @@ export function SettingsPage() {
                 className="mt-1.5 block text-[10px] font-normal text-muted"
                 id="settings-location-hint"
               >
-                Keep entering the address as usual, then find and confirm the
-                matching map location for the 500 m ordering area.
+                Find and confirm the matching map point to use it for the 500 m
+                ordering area. Guest orders work with or without it.
               </small>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button
@@ -385,6 +390,17 @@ export function SettingsPage() {
                   </small>
                 </div>
               )}
+              {addressEdited && locationPoint && (
+                <p
+                  className="mt-2 rounded-lg bg-sand px-3 py-2 text-[10px] leading-relaxed text-ink-mid"
+                  role="status"
+                >
+                  The street address changed after this map point was chosen.
+                  Use <strong>Find address</strong> again so the 500 m area
+                  follows the new address — otherwise the saved point stays
+                  where it is.
+                </p>
+              )}
               {addressLookupError && (
                 <p className="mt-2 text-xs text-danger" role="alert">
                   {addressLookupError}
@@ -403,6 +419,7 @@ export function SettingsPage() {
                           geofence_enabled: geofenceEnabled,
                         });
                         setClearSavedLocation(false);
+                        setAddressEdited(false);
                         setAddressMatches([]);
                         setAddressLookupError("");
                       }}
@@ -413,8 +430,9 @@ export function SettingsPage() {
                 </div>
               )}
               {!locationPoint && !settings.isLocationPending && (
-                <small className="mt-2 block text-[10px] font-medium text-danger">
-                  Select a matching location to enable customer orders.
+                <small className="mt-2 block text-[10px] font-normal text-muted">
+                  No map point saved yet. Find the address to enable the 500 m
+                  ordering area.
                 </small>
               )}
               {settings.locationError && (
@@ -436,7 +454,8 @@ export function SettingsPage() {
                 <span>
                   Enforce the 500 m ordering area
                   <small className="mt-1 block text-[10px] font-normal text-muted">
-                    Off by default. Turn this on after the team finishes testing.
+                    Off by default. When on, guests must share their location and
+                    be within 500 m of this map point to order.
                   </small>
                 </span>
               </label>
@@ -445,7 +464,7 @@ export function SettingsPage() {
                   {geofenceError}
                 </p>
               )}
-            </label>
+            </div>
             <label>
               Phone
               <input
