@@ -251,4 +251,70 @@ describe("SettingsPage", () => {
       geofence_enabled: false,
     });
   });
+
+  it("saves the geofence toggle with the selected map point", () => {
+    mocks.location = {
+      latitude: -33.86,
+      longitude: 151.2,
+      label: "1 Test Lane, Sydney",
+      geofence_enabled: false,
+    };
+    render(<SettingsPage />);
+
+    fireEvent.click(
+      screen.getByLabelText(/enforce the 500 m ordering area/i),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(mocks.save.mock.calls[0][1]).toEqual({
+      latitude: -33.86,
+      longitude: 151.2,
+      label: "1 Test Lane, Sydney",
+      geofence_enabled: true,
+    });
+  });
+
+  it("keeps the geofence disabled until a map point is selected", () => {
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByLabelText(/enforce the 500 m ordering area/i),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/find the address to enable the 500 m ordering area/i),
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the address changes after a map point was chosen", async () => {
+    mocks.location = {
+      latitude: -33.86,
+      longitude: 151.2,
+      label: "1 Test Lane, Sydney",
+      geofence_enabled: true,
+    };
+    const match = {
+      latitude: -33.9,
+      longitude: 151.3,
+      label: "2 Other Street, Sydney",
+    };
+    mocks.findAddressMatches.mockResolvedValue([match]);
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByText(/the street address changed after this map point/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/12 Harbour Lane/i), {
+      target: { value: "2 Other Street" },
+    });
+    expect(
+      screen.getByText(/the street address changed after this map point/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /find address/i }));
+    fireEvent.click(await screen.findByRole("button", { name: match.label }));
+    expect(
+      screen.queryByText(/the street address changed after this map point/i),
+    ).not.toBeInTheDocument();
+  });
 });
