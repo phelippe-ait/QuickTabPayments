@@ -45,10 +45,24 @@ function sortedBusyHours(report: SalesReport) {
   return [...report.busy_hours].sort((a, b) => a.hour - b.hour)
 }
 
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const
+
+function sortedBusyDays(report: SalesReport) {
+  return [...report.busy_days].sort((a, b) => a.day - b.day)
+}
+
 /**
  * Renders the aggregated sales report as CSV: a small header block followed by
- * Summary, Top items, and Busy hours sections. Column order is fixed and money
- * is always two decimal places.
+ * Summary, Top items, Busy hours, and Busy days sections. Column order is fixed
+ * and money is always two decimal places.
  */
 export function buildReportCsv(
   report: SalesReport,
@@ -83,6 +97,12 @@ export function buildReportCsv(
     row(["Hour", "Orders"]),
     ...sortedBusyHours(report).map((entry) =>
       row([entry.hour, entry.orders]),
+    ),
+    "",
+    "Busy days",
+    row(["Day", "Orders"]),
+    ...sortedBusyDays(report).map((entry) =>
+      row([DAY_NAMES[entry.day] ?? String(entry.day), entry.orders]),
     ),
   ]
 

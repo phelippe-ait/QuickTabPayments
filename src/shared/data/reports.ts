@@ -16,6 +16,12 @@ export type SalesReportBusyHour = {
   orders: number;
 };
 
+/** `day` is 0 = Sunday … 6 = Saturday in the restaurant timezone. */
+export type SalesReportBusyDay = {
+  day: number;
+  orders: number;
+};
+
 export type SalesReport = {
   currency: string;
   from: string;
@@ -30,6 +36,7 @@ export type SalesReport = {
   /** Quantity-led top 10 for kitchen prep (migration 0026). */
   popular_items: SalesReportTopItem[];
   busy_hours: SalesReportBusyHour[];
+  busy_days: SalesReportBusyDay[];
 };
 
 function toNumber(value: unknown): number {
@@ -79,6 +86,10 @@ export function parseSalesReport(payload: unknown): SalesReport {
     popular_items: itemRecords(row.popular_items),
     busy_hours: asRecords(row.busy_hours).map((entry) => ({
       hour: toInteger(entry.hour),
+      orders: toInteger(entry.orders),
+    })),
+    busy_days: asRecords(row.busy_days).map((entry) => ({
+      day: toInteger(entry.day),
       orders: toInteger(entry.orders),
     })),
   };

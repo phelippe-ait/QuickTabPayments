@@ -36,6 +36,7 @@ const report: SalesReport = {
   top_items: [],
   popular_items: [],
   busy_hours: [],
+  busy_days: [],
 }
 
 describe("useSalesReport", () => {
