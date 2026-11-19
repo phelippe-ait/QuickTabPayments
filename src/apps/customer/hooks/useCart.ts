@@ -2,12 +2,18 @@ import { useCallback, useEffect, useState } from "react"
 import { roundMoney } from "@shared/lib/money"
 import type { CartItem, MenuItem, ModifierChoice } from "../types"
 import type { QrSource } from "../data/qrContext"
+import { readStoredQrSource } from "../data/qrContext"
 import { buildOrderItemKey } from "../data/orderItemKey"
 
 export const CART_STORAGE_PREFIX = "quicktab:cart"
+export const PENDING_ORDER_STORAGE_PREFIX = "quicktab:pending-order"
 
 export function cartStorageKey(source: QrSource): string {
   return `${CART_STORAGE_PREFIX}:${source.slug}:${source.tableToken}`
+}
+
+export function pendingOrderStorageKey(source: QrSource): string {
+  return `${PENDING_ORDER_STORAGE_PREFIX}:${source.slug}:${source.tableToken}`
 }
 
 export function serializeCart(items: CartItem[]): string {
@@ -102,6 +108,68 @@ export function writeStoredCart(
   } catch {
     // Storage may be unavailable; the in-memory cart still works.
   }
+}
+
+/**
+ * Remove a context's persisted cart. Used when a redirect payment returns and
+ * the order turns out to be paid, because `onPlaceOrder` never ran.
+ */
+export function clearStoredCart(storageKey: string | null): void {
+  writeStoredCart(storageKey, [])
+}
+
+/**
+ * Remember which order this QR context is paying for. A redirect payment
+ * navigates away before `onPlaceOrder` can clear the cart, so the tracking
+ * page uses this token to recognise its own cart on return.
+ */
+export function rememberPendingOrder(
+  source: QrSource,
+  trackingToken: string,
+): void {
+  try {
+    window.sessionStorage.setItem(
+      pendingOrderStorageKey(source),
+      trackingToken,
+    )
+  } catch {
+    // Storage may be unavailable; the in-memory cart still works.
+  }
+}
+
+export function readPendingOrderToken(source: QrSource): string | null {
+  try {
+    return window.sessionStorage.getItem(pendingOrderStorageKey(source))
+  } catch {
+    return null
+  }
+}
+
+export function clearPendingOrder(source: QrSource): void {
+  try {
+    window.sessionStorage.removeItem(pendingOrderStorageKey(source))
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Clear the stored cart only when this paid order is the one the stored QR
+ * context checked out. Polling calls this repeatedly, so it is idempotent and
+ * a no-op for unpaid or unrelated orders.
+ */
+export function reconcilePaidOrderCart(
+  trackingToken: string,
+  paymentStatus: string | null | undefined,
+): boolean {
+  if (paymentStatus !== "succeeded" || !trackingToken.trim()) return false
+  const source = readStoredQrSource()
+  if (!source) return false
+  if (readPendingOrderToken(source) !== trackingToken) return false
+
+  clearStoredCart(cartStorageKey(source))
+  clearPendingOrder(source)
+  return true
 }
 
 type CartState = { key: string | null; items: CartItem[] }

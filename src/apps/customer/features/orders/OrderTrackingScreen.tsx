@@ -29,6 +29,7 @@ import {
   TRACKING_POLL_INTERVAL_MS,
   type TrackingOrder,
 } from "../../data/tracking"
+import { reconcilePaidOrderCart } from "../../hooks/useCart"
 
 const STEPS: Array<{ status: OrderStatus; label: string; description: string }> = [
   { status: "pending", label: "Payment confirming", description: "Waiting for your bank to confirm the payment." },
@@ -72,6 +73,7 @@ function useTracking(token: string) {
     }))
     try {
       const order = await fetchOrderTracking(token)
+      if (order) reconcilePaidOrderCart(token, order.paymentStatus)
       terminalRef.current = order ? isTerminalStatus(order.status) : true
       setState({
         phase: order ? "ready" : "notfound",
