@@ -44,6 +44,7 @@ export function useDialogFocus<T extends HTMLElement>(
         return;
       }
       if (event.key !== "Tab") return;
+      if (!panelRef.current) return;
 
       const items = getFocusable(panelRef.current);
       if (!items.length) {
