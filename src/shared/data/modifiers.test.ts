@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createModifier,
   createModifierGroup,
+  deleteModifier,
   deleteModifierGroup,
   fetchModifierCatalog,
   linkModifierGroup,
@@ -225,7 +226,7 @@ describe("modifiers data layer", () => {
   })
 
   it("deletes a group by id", async () => {
-    mocks.enqueue({ data: null, error: null })
+    mocks.enqueue({ data: [{ id: "group-1" }], error: null })
 
     await deleteModifierGroup("group-1")
 
@@ -239,11 +240,49 @@ describe("modifiers data layer", () => {
       method: "eq",
       args: ["id", "group-1"],
     })
+    expect(mocks.calls).toContainEqual({
+      table: "modifier_groups",
+      method: "select",
+      args: ["id"],
+    })
+  })
+
+  it("rejects a group delete that matches no rows", async () => {
+    mocks.enqueue({ data: [], error: null })
+
+    await expect(deleteModifierGroup("group-1")).rejects.toThrow(
+      /was not deleted/i,
+    )
+  })
+
+  it("deletes an option by id", async () => {
+    mocks.enqueue({ data: [{ id: "modifier-1" }], error: null })
+
+    await deleteModifier("modifier-1")
+
+    expect(mocks.calls).toContainEqual({
+      table: "modifiers",
+      method: "delete",
+      args: [],
+    })
+    expect(mocks.calls).toContainEqual({
+      table: "modifiers",
+      method: "select",
+      args: ["id"],
+    })
+  })
+
+  it("rejects an option delete that matches no rows", async () => {
+    mocks.enqueue({ data: [], error: null })
+
+    await expect(deleteModifier("modifier-1")).rejects.toThrow(
+      /was not deleted/i,
+    )
   })
 
   it("persists an explicit option order", async () => {
-    mocks.enqueue({ data: null, error: null })
-    mocks.enqueue({ data: null, error: null })
+    mocks.enqueue({ data: [{ id: "modifier-1" }], error: null })
+    mocks.enqueue({ data: [{ id: "modifier-2" }], error: null })
 
     await reorderModifiers([
       { id: "modifier-1", display_order: 0 },
@@ -260,6 +299,19 @@ describe("modifiers data layer", () => {
       method: "update",
       args: [{ display_order: 1 }],
     })
+    expect(mocks.calls).toContainEqual({
+      table: "modifiers",
+      method: "select",
+      args: ["id"],
+    })
+  })
+
+  it("rejects a reorder row that was filtered out", async () => {
+    mocks.enqueue({ data: [], error: null })
+
+    await expect(
+      reorderModifiers([{ id: "modifier-1", display_order: 0 }]),
+    ).rejects.toThrow(/order was not saved/i)
   })
 
   it("surfaces supabase errors", async () => {

@@ -196,22 +196,34 @@ export async function updateStaffMembership(
   patch: TablesUpdate<"restaurant_staff">,
 ): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client
+  const { data, error } = await client
     .from("restaurant_staff")
     .update(patch)
-    .eq("id", staffId);
+    .eq("id", staffId)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Staff member was not updated. Refresh and check your permissions.",
+    );
+  }
 }
 
 export async function removeStaffMembership(staffId: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client
+  const { data, error } = await client
     .from("restaurant_staff")
     .delete()
-    .eq("id", staffId);
+    .eq("id", staffId)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Staff member was not removed. Refresh and check your permissions.",
+    );
+  }
 }
 
 export async function fetchStaff(

@@ -102,8 +102,17 @@ export async function updateModifierGroup(
 
 export async function deleteModifierGroup(id: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from("modifier_groups").delete().eq("id", id);
+  const { data, error } = await client
+    .from("modifier_groups")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Modifier group was not deleted. It may already be gone, or you may not have permission.",
+    );
+  }
 }
 
 export async function createModifier(
@@ -138,8 +147,17 @@ export async function updateModifier(
 
 export async function deleteModifier(id: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from("modifiers").delete().eq("id", id);
+  const { data, error } = await client
+    .from("modifiers")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data || data.length !== 1) {
+    throw new Error(
+      "Modifier option was not deleted. It may already be gone, or you may not have permission.",
+    );
+  }
 }
 
 /** Persist an explicit option order (one update per row). */
@@ -150,11 +168,17 @@ export async function reorderModifiers(
   await Promise.all(
     orders.map(async ({ id, display_order }) => {
       const client = requireSupabase();
-      const { error } = await client
+      const { data, error } = await client
         .from("modifiers")
         .update({ display_order })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
       if (error) throw new Error(error.message);
+      if (!data || data.length !== 1) {
+        throw new Error(
+          "Modifier order was not saved. Refresh and check your permissions.",
+        );
+      }
     }),
   );
 }
