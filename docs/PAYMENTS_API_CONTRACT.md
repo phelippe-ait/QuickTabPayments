@@ -17,9 +17,17 @@ Request:
   "tableToken": "<tables.qr_token>",
   "customerName": "Jane",
   "notes": "No sauce",
-  "items": [{ "menu_item_id": "<uuid>", "quantity": 2 }]
+  "items": [{ "menu_item_id": "<uuid>", "quantity": 2 }],
+  "idempotencyKey": "<uuid, optional>"
 }
 ```
+
+`idempotencyKey` is stable for one checkout attempt. A retry with the same
+key returns the original order and its existing PaymentIntent instead of
+creating a second pending order; the response carries `paymentStatus` so the
+client can skip confirmation when the payment already succeeded. Keys are
+scoped per restaurant, max 128 characters, and a cancelled order releases its
+key so the next attempt starts fresh.
 
 Response `200`:
 
@@ -31,9 +39,13 @@ Response `200`:
   "trackingToken": "<opaque hex>",
   "amount": 42.0,
   "currency": "AUD",
-  "status": "pending"
+  "status": "pending",
+  "paymentStatus": "pending"
 }
 ```
+
+`paymentStatus` mirrors the `payments` row (`pending`, `succeeded`, `failed`,
+`refunded`).
 
 Errors: `400 invalid_request`, `400 <place_order error>` (for example
 `menu_item_unavailable`), `405`, `500 could_not_record_payment`.

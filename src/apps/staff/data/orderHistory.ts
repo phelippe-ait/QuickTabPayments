@@ -4,7 +4,12 @@ import { roundMoney } from "@shared/lib/money";
 import { paymentStatusLabel } from "@shared/orders/paymentLabels";
 import { selectLatestPayment } from "./latestPayment";
 
-type DatabaseOrder = Database["public"]["Tables"]["orders"]["Row"];
+// The history query selects explicit columns and never needs the checkout
+// idempotency key, so omit it from the row contract.
+type DatabaseOrder = Omit<
+  Database["public"]["Tables"]["orders"]["Row"],
+  "idempotency_key"
+>;
 
 type HistoryItemRow = {
   item_name_snapshot: string;

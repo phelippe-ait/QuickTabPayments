@@ -6,26 +6,49 @@ const mocks = vi.hoisted(() => ({
   userRpc: vi.fn(),
   adminRpc: vi.fn(),
   createIntent: vi.fn(),
+  retrieveIntent: vi.fn(),
   cancelIntent: vi.fn(),
   userClient: vi.fn(),
+  adminFrom: vi.fn(),
+  existingPayments: [] as Record<string, unknown>[],
 }));
 
 vi.mock("./_lib/stripe", () => ({
   getStripe: () => ({
     paymentIntents: {
       create: mocks.createIntent,
+      retrieve: mocks.retrieveIntent,
       cancel: mocks.cancelIntent,
     },
   }),
 }));
 
-vi.mock("./_lib/supabaseAdmin", () => ({
-  userClient: (accessToken: string | null) => {
-    mocks.userClient(accessToken);
-    return { rpc: mocks.userRpc };
-  },
-  adminClient: () => ({ rpc: mocks.adminRpc }),
-}));
+vi.mock("./_lib/supabaseAdmin", () => {
+  function paymentsChain() {
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      not: () => chain,
+      order: () => chain,
+      limit: async () => ({ data: mocks.existingPayments, error: null }),
+    };
+    return chain;
+  }
+
+  return {
+    userClient: (accessToken: string | null) => {
+      mocks.userClient(accessToken);
+      return { rpc: mocks.userRpc };
+    },
+    adminClient: () => ({
+      rpc: mocks.adminRpc,
+      from: (table: string) => {
+        mocks.adminFrom(table);
+        return paymentsChain();
+      },
+    }),
+  };
+});
 
 type FakeRes = {
   statusCode: number;
@@ -74,11 +97,17 @@ const placed = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.existingPayments = [];
   mocks.userRpc.mockResolvedValue({ data: placed, error: null });
   mocks.adminRpc.mockResolvedValue({ error: null });
   mocks.createIntent.mockResolvedValue({
     id: "pi_1",
     client_secret: "pi_1_secret",
+  });
+  mocks.retrieveIntent.mockResolvedValue({
+    id: "pi_old",
+    client_secret: "pi_old_secret",
+    status: "succeeded",
   });
   mocks.cancelIntent.mockResolvedValue({});
 });
@@ -122,6 +151,7 @@ describe("POST /api/create-payment-intent", () => {
     expect(mocks.userClient).toHaveBeenCalledWith("token");
     expect(mocks.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4200, currency: "aud" }),
+      { idempotencyKey: "order-intent-order-1" },
     );
     expect(mocks.adminRpc).toHaveBeenCalledWith(
       "record_payment_intent",
@@ -204,6 +234,7 @@ describe("POST /api/create-payment-intent", () => {
         amount: 4620,
         metadata: expect.objectContaining({ tipAmount: "4.2" }),
       }),
+      { idempotencyKey: "order-intent-order-1" },
     );
     expect(mocks.adminRpc).toHaveBeenCalledWith(
       "record_payment_intent",
@@ -301,6 +332,90 @@ describe("POST /api/create-payment-intent", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ error: "invalid_request" });
     expect(mocks.userRpc).not.toHaveBeenCalled();
+  });
+
+  it("forwards the checkout idempotency key to place_order", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        idempotencyKey: "checkout-1",
+      }),
+      res as never,
+    );
+
+    expect(mocks.userRpc).toHaveBeenCalledWith(
+      "place_order",
+      expect.objectContaining({ p_idempotency_key: "checkout-1" }),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects an overlong idempotency key before calling the RPC", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        idempotencyKey: "x".repeat(129),
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_request" });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
+  });
+
+  it("reuses the existing PaymentIntent on a retried checkout", async () => {
+    mocks.existingPayments = [
+      { stripe_payment_intent_id: "pi_old", status: "succeeded" },
+    ];
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+        idempotencyKey: "checkout-1",
+      }),
+      res as never,
+    );
+
+    expect(mocks.retrieveIntent).toHaveBeenCalledWith("pi_old");
+    expect(mocks.createIntent).not.toHaveBeenCalled();
+    expect(mocks.adminRpc).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      clientSecret: "pi_old_secret",
+      paymentStatus: "succeeded",
+      orderId: "order-1",
+    });
+  });
+
+  it("treats a duplicate payment row as success", async () => {
+    mocks.adminRpc.mockResolvedValueOnce({
+      error: { code: "23505", message: "duplicate key value" },
+    });
+    const res = makeRes();
+    await handler(
+      makeReq({
+        restaurantSlug: "cafe",
+        tableToken: "table",
+        customerName: "Jane",
+        items: [{ menu_item_id: "item-1", quantity: 1 }],
+      }),
+      res as never,
+    );
+
+    expect(mocks.cancelIntent).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
   });
 
   it("cancels the intent when the payment row cannot be recorded", async () => {

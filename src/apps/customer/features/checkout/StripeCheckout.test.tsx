@@ -159,6 +159,78 @@ describe("StripeCheckout", () => {
     expect(mocks.onPaid).not.toHaveBeenCalled();
   });
 
+  it("keeps the checkout idempotency key when the intent request fails", async () => {
+    mocks.createPaymentIntent.mockImplementationOnce(async () => {
+      mocks.calls.push("intent");
+      throw new Error("network down");
+    });
+    setup();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+    expect(await screen.findByText(/network down/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+
+    const keyCalls = mocks.createPaymentIntent.mock
+      .calls as unknown as Array<[{ idempotencyKey?: string } | undefined]>;
+    const keys = keyCalls.map((call) => call[0]?.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toEqual(expect.any(String));
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("rotates the idempotency key after a definitive card decline", async () => {
+    mocks.confirmPayment.mockImplementationOnce(async () => {
+      mocks.calls.push("confirm");
+      return {
+        error: {
+          type: "card_error",
+          code: "card_declined",
+          message: "Declined",
+        },
+      };
+    });
+    setup();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+    expect(
+      await screen.findByText(/your card was declined/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+
+    const keyCalls = mocks.createPaymentIntent.mock
+      .calls as unknown as Array<[{ idempotencyKey?: string } | undefined]>;
+    const keys = keyCalls.map((call) => call[0]?.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("skips confirmation when the retry finds the order already paid", async () => {
+    mocks.createPaymentIntent.mockImplementationOnce(async () => {
+      mocks.calls.push("intent");
+      return {
+        clientSecret: "pi_1_secret",
+        orderId: "order-1",
+        orderNumber: "QT-1",
+        trackingToken: "tok",
+        amount: 4.7,
+        currency: "AUD",
+        status: "pending" as const,
+        paymentStatus: "succeeded" as const,
+      };
+    });
+    setup();
+
+    fireEvent.click(screen.getByRole("button", { name: /pay a\$4\.70/i }));
+
+    await waitFor(() => expect(mocks.onPaid).toHaveBeenCalledTimes(1));
+    expect(mocks.confirmPayment).not.toHaveBeenCalled();
+    expect(mocks.calls).toEqual(["submit", "intent"]);
+  });
+
   it("disables payment until the form is valid", () => {
     setup(false);
     expect(

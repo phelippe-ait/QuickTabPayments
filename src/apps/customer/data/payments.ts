@@ -37,6 +37,11 @@ export type CreatePaymentIntentInput = {
   location?: CustomerLocation;
   /** Optional tip; `null` means no tip. The RPC recomputes the amount. */
   tip?: TipSelection | null;
+  /**
+   * Stable per-checkout key. Retries reuse it so a lost response returns the
+   * original order instead of creating a second one.
+   */
+  idempotencyKey?: string;
 };
 
 export type PaymentIntentResponse = {
@@ -53,6 +58,11 @@ export type PaymentIntentResponse = {
   amountDue?: number;
   currency: string;
   status: "pending";
+  /**
+   * Server-side payment row state. `succeeded` means an earlier attempt
+   * already paid, so the client can skip confirming the intent again.
+   */
+  paymentStatus?: "pending" | "succeeded" | "failed" | "refunded";
 };
 
 /** Map an API error string back to the checkout error codes we already show. */
@@ -117,6 +127,7 @@ export async function createPaymentIntent(
         })),
       location: input.location,
       tip: input.tip ?? null,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     }),
   });
 

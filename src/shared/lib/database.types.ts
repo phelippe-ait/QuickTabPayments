@@ -341,6 +341,7 @@ export type Database = {
           customer_id: string | null
           customer_name_snapshot: string | null
           id: string
+          idempotency_key: string | null
           notes: string | null
           order_number: string
           pickup_time_estimate: string | null
@@ -360,6 +361,7 @@ export type Database = {
           customer_id?: string | null
           customer_name_snapshot?: string | null
           id?: string
+          idempotency_key?: string | null
           notes?: string | null
           order_number: string
           pickup_time_estimate?: string | null
@@ -379,6 +381,7 @@ export type Database = {
           customer_id?: string | null
           customer_name_snapshot?: string | null
           id?: string
+          idempotency_key?: string | null
           notes?: string | null
           order_number?: string
           pickup_time_estimate?: string | null
@@ -992,6 +995,7 @@ export type Database = {
           p_customer_latitude?: number | null
           p_customer_longitude?: number | null
           p_tip?: Json | null
+          p_idempotency_key?: string | null
         }
         Returns: Json
       }
