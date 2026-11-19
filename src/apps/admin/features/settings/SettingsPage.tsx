@@ -563,7 +563,7 @@ export function SettingsPage() {
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <BrandingField
               label="Logo"
-              description="Square image for your restaurant branding."
+              description="Square image shown next to the restaurant name on the customer menu."
               variant="logo"
               imageUrl={source.logo_url}
               alt="Current restaurant logo"
@@ -573,7 +573,7 @@ export function SettingsPage() {
             />
             <BrandingField
               label="Cover image"
-              description="Wide 16:9 image for your restaurant branding."
+              description="Wide 16:9 banner shown at the top of the customer menu."
               variant="cover"
               imageUrl={source.cover_image_url}
               alt="Current restaurant cover"

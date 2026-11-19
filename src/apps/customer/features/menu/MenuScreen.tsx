@@ -12,6 +12,7 @@ import { EditNameDialog } from "../profile/EditNameDialog"
 import { ProductPhoto } from "./ProductPhoto"
 import { StaffAssistNotice } from "./StaffAssistNotice"
 import { fetchMenu } from "../../data/menuApi"
+import { fetchRestaurantBranding } from "../../data/branding"
 import type { MenuItem, QrContext } from "../../types"
 
 export function MenuScreen({
@@ -41,6 +42,8 @@ export function MenuScreen({
   const [drawer, setDrawer] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [activeCategory, setActiveCategory] = useState("");
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
   useBodyScrollLock(drawer);
   const drawerRef = useDialogFocus<HTMLElement>(() => setDrawer(false), drawer);
 
@@ -49,6 +52,16 @@ export function MenuScreen({
     queryFn: () => fetchMenu(qr.restaurantId),
     staleTime: 30_000,
   });
+  // Branding is decorative: a failed or missing asset falls back to the
+  // restaurant name and the default menu banner.
+  const brandingQuery = useQuery({
+    queryKey: ["customer-branding", qr.restaurantId],
+    queryFn: () => fetchRestaurantBranding(qr.restaurantId),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const logoUrl = logoFailed ? null : (brandingQuery.data?.logoUrl ?? null);
+  const coverUrl = coverFailed ? null : (brandingQuery.data?.coverUrl ?? null);
   const categories = useMemo(() => menuQuery.data ?? [], [menuQuery.data]);
 
   // Keep the cart aligned with the live menu (removed/sold-out items, price
@@ -223,15 +236,35 @@ export function MenuScreen({
             onClick={() => setDrawer(true)}
             expanded={drawer}
           />
-          <span className={`${styles["menu-brand"]}`}>{qr.restaurantName}</span>
+          <span className={`${styles["menu-brand"]}`}>
+            {logoUrl && (
+              <img
+                className={`${styles["menu-brand-logo"]}`}
+                src={logoUrl}
+                alt=""
+                onError={() => setLogoFailed(true)}
+              />
+            )}
+            <span className={`${styles["menu-brand-name"]}`}>
+              {qr.restaurantName}
+            </span>
+          </span>
           <h1 className="sr-only">{qr.restaurantName} menu</h1>
         </header>
 
         <section
-          className={`${styles["hero"]}`}
+          className={`${styles["hero"]} ${coverUrl ? styles["hero-custom"] : ""}`}
           aria-label={`${qr.restaurantName} menu`}
         >
-          <span className="absolute right-3 top-3 rounded-full bg-cream/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-berry-alt shadow-sm backdrop-blur-sm">
+          {coverUrl && (
+            <img
+              className={`${styles["hero-image"]}`}
+              src={coverUrl}
+              alt=""
+              onError={() => setCoverFailed(true)}
+            />
+          )}
+          <span className="absolute right-3 top-3 z-10 rounded-full bg-cream/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-berry-alt shadow-sm backdrop-blur-sm">
             Table {qr.tableNumber}
           </span>
         </section>
