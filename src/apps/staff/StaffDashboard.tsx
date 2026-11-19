@@ -5,6 +5,7 @@ import { TableEditor, TablesWorkspace } from "./features/tables/TablesWorkspace"
 import { KitchenWorkspace } from "./features/kitchen/KitchenWorkspace"
 import { HistoryOrderDrawer, OrderHistory } from "./features/orders/OrderHistory"
 import { ReservationWorkspace } from "./features/reservations/ReservationWorkspace"
+import { NewOrderWorkspace } from "./features/newOrder/NewOrderWorkspace"
 import type { Order, Table, TableStatus, View } from "./types"
 import { useAuth } from "@shared/auth/AuthContext"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
@@ -127,6 +128,16 @@ function StaffWorkspace() {
           currency={currency}
           isLoading={workspace.tablesLoading}
           error={workspace.tablesError}
+        />
+      )}
+      {view === "new-order" && (
+        <NewOrderWorkspace
+          restaurantId={restaurantId}
+          currency={currency}
+          taxRate={restaurant?.tax_rate ?? 0}
+          tables={workspace.tableList}
+          onOrderCreated={workspace.refreshWorkspace}
+          onViewKitchen={() => setView("kitchen")}
         />
       )}
       {view === "kitchen" && (

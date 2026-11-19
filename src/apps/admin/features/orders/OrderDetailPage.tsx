@@ -109,7 +109,13 @@ export function OrderDetailPage() {
   const currentIndex = flow.indexOf(order.status as (typeof flow)[number])
   const transitions = nextStatuses(order.status).filter((status) => status !== "cancelled")
 
-  const succeededPayments = order.payments.filter((payment) => payment.status === "succeeded")
+  // Only Stripe-backed payments can be refunded from the app. Counter
+  // payments recorded by staff carry no PaymentIntent and are settled
+  // outside QuickTab.
+  const succeededPayments = order.payments.filter(
+    (payment) =>
+      payment.status === "succeeded" && Boolean(payment.stripePaymentIntentId),
+  )
   const refundsUnavailable = Boolean(refundsQuery.error)
   const refundedToDate =
     refundsQuery.isLoading || refundsUnavailable
@@ -129,7 +135,7 @@ export function OrderDetailPage() {
     },
     {},
   )
-  const refundable = refundableBalance(order.payments, refundedToDate)
+  const refundable = refundableBalance(succeededPayments, refundedToDate)
   const partialAmount = partialRefundAmount(order.lineItems, refundQuantities)
   const refundAmount =
     refundMode === "full"

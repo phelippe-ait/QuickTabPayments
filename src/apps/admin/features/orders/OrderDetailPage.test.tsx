@@ -40,6 +40,7 @@ const order: OrderVM = {
       paidAt: "2026-10-21T08:30:05Z",
       receiptUrl: null,
       failureReason: null,
+      stripePaymentIntentId: "pi_test_123",
     },
   ],
   refundedTotal: 0,

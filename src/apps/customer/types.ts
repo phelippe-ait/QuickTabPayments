@@ -1,3 +1,19 @@
+/**
+ * Customer ordering types.
+ *
+ * Menu and modifier shapes live in `@shared/orders/orderingTypes` so the
+ * staff order-entry screen uses exactly the same pricing/selection model.
+ */
+
+export type {
+  OrderingCartItem as CartItem,
+  OrderingMenuCategory as MenuCategory,
+  OrderingMenuItem as MenuItem,
+  OrderingModifierChoice as ModifierChoice,
+  OrderingModifierGroup as ModifierGroup,
+  OrderingModifierOption as ModifierOption,
+} from "@shared/orders/orderingTypes"
+
 export type Screen =
   | "menu"
   | "cart"
@@ -6,69 +22,6 @@ export type Screen =
   | "login"
   | "signup"
   | "orders";
-
-/** A sellable menu item loaded from `public.menu_items`. */
-export type MenuItem = {
-  id: string;
-  name: string;
-  description: string;
-  /** GST-inclusive price, exactly as stored in the database. */
-  price: number;
-  imageUrl: string | null;
-  /** Optional CSS background position retained for seeded demo imagery. */
-  imagePosition?: string;
-  allergens: string[];
-  dietaryTags: string[];
-  categoryId: string;
-  displayOrder: number;
-  /** Customer-selectable groups loaded with the menu, in display order. */
-  modifierGroups?: ModifierGroup[];
-};
-
-/** Customer selectable options configured for a menu item. */
-export type ModifierOption = {
-  id: string;
-  name: string;
-  priceAdjustment: number;
-};
-
-export type ModifierGroup = {
-  id: string;
-  name: string;
-  selectionType: "single" | "multiple";
-  minSelections: number;
-  maxSelections: number;
-  isRequired: boolean;
-  options: ModifierOption[];
-};
-
-export type ModifierChoice = {
-  id: string;
-  name: string;
-  priceAdjustment: number;
-  groupName: string;
-};
-
-/** A menu section loaded from `public.menu_categories`, with its items. */
-export type MenuCategory = {
-  id: string;
-  name: string;
-  description: string;
-  displayOrder: number;
-  items: MenuItem[];
-};
-
-/** Cart lines are keyed by menu item id + the selected modifier ids. */
-export type CartItem = {
-  /** Stable key for a menu item + its selected modifier set. */
-  lineId?: string;
-  menuItemId: string;
-  name: string;
-  baseUnitPrice?: number;
-  unitPrice: number;
-  quantity: number;
-  modifiers?: ModifierChoice[];
-};
 
 /** Resolved QR destination, held for the life of the session. */
 export type QrContext = {

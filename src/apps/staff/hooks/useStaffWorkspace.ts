@@ -104,6 +104,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
   // re-sync without duplicating query logic (or the new-order dedupe).
   const refreshOrdersRef = useRef<(() => Promise<void>) | null>(null)
   const refreshHistoryRef = useRef<(() => Promise<void>) | null>(null)
+  const refreshTablesRef = useRef<(() => Promise<void>) | null>(null)
 
   const applyConnectionSignal = useCallback((signal: ConnectionSignal) => {
     const current = connectionStateRef.current
@@ -207,6 +208,8 @@ export function useStaffWorkspace(restaurantId: string | null) {
 
     refreshOrdersRef.current = () => loadOrders(restaurantId)
 
+    refreshTablesRef.current = () => loadTables(restaurantId)
+
     async function loadTables(id: string) {
       try {
         const rows = await fetchStaffTables(id)
@@ -242,6 +245,7 @@ export function useStaffWorkspace(restaurantId: string | null) {
     return () => {
       cancelled = true
       refreshOrdersRef.current = null
+      refreshTablesRef.current = null
     }
   }, [restaurantId, playOrderSound, observeOrders, resetNewOrders])
 
@@ -554,6 +558,18 @@ export function useStaffWorkspace(restaurantId: string | null) {
     }
   }
 
+  /**
+   * Re-fetch the board, history and table occupancy after a write that the
+   * caller knows about (for example a staff-created order). Realtime remains
+   * the normal path; this makes the creating device update immediately and
+   * also covers sockets that are still connecting.
+   */
+  const refreshWorkspace = useCallback(() => {
+    void refreshOrdersRef.current?.()
+    void refreshHistoryRef.current?.()
+    void refreshTablesRef.current?.()
+  }, [])
+
   return {
     tableList,
     tablesLoading,
@@ -577,5 +593,6 @@ export function useStaffWorkspace(restaurantId: string | null) {
     createReservation,
     cancelReservation,
     updateKitchenStatus,
+    refreshWorkspace,
   }
 }

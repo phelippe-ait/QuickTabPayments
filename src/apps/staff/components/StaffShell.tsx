@@ -73,6 +73,7 @@ export function StaffShell({
         </div>
         <nav className="mt-12 space-y-1.5" aria-label="Staff sections">
           <NavButton active={view === "tables"} icon="grid" label="Table overview" onClick={() => onViewChange("tables")} />
+          <NavButton active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
           <NavButton active={view === "kitchen"} icon="kitchen" label="Kitchen" onClick={() => onViewChange("kitchen")} />
           <NavButton active={view === "history"} icon="receipt" label="Order history" onClick={() => onViewChange("history")} />
           {RESERVATIONS_ENABLED && (
@@ -135,6 +136,7 @@ export function StaffShell({
         </footer>
         <nav aria-label="Staff sections" className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-line bg-paper lg:hidden">
           <MobileNav active={view === "tables"} icon="grid" label="Tables" onClick={() => onViewChange("tables")} />
+          <MobileNav active={view === "new-order"} icon="plus" label="New order" onClick={() => onViewChange("new-order")} />
           <MobileNav active={view === "kitchen"} icon="kitchen" label="Kitchen" onClick={() => onViewChange("kitchen")} />
           <MobileNav active={view === "history"} icon="receipt" label="History" onClick={() => onViewChange("history")} />
           {RESERVATIONS_ENABLED && (
