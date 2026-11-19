@@ -132,4 +132,37 @@ describe("TablesWorkspace table status", () => {
     expect(button).toHaveAttribute("aria-busy", "true")
     expect(button).toHaveTextContent("Updating…")
   })
+
+  it("shows the open order's guest, seated time and total without fabricated counts", () => {
+    renderTables([
+      table({
+        id: "t2",
+        tableNumber: "2",
+        status: "occupied",
+        guest: "Olivia",
+        since: "12:30",
+        total: 24.5,
+        items: 3,
+        occupants: 0,
+      }),
+    ])
+
+    const card = screen.getByRole("article")
+    expect(within(card).getByText("Olivia")).toBeInTheDocument()
+    expect(within(card).getByText("12:30")).toBeInTheDocument()
+    expect(within(card).getByText(/24\.50/)).toBeInTheDocument()
+    expect(within(card).queryByText(/0 guests/)).not.toBeInTheDocument()
+    expect(within(card).queryByText(/\$0\.00/)).not.toBeInTheDocument()
+  })
+
+  it("hides derived occupancy fields when the occupied table has no open order", () => {
+    renderTables([
+      table({ id: "t2", tableNumber: "2", status: "occupied" }),
+    ])
+
+    const card = screen.getByRole("article")
+    expect(within(card).getByText("No open order")).toBeInTheDocument()
+    expect(within(card).queryByText(/guests/)).not.toBeInTheDocument()
+    expect(within(card).queryByText(/\$0\.00/)).not.toBeInTheDocument()
+  })
 })

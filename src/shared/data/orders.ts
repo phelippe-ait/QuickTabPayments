@@ -13,12 +13,22 @@ export type OpenTableOrder = {
   orderNumber: string
   status: OrderStatus
   createdAt: string
+  /** Guest name captured when the order was placed, if available. */
+  customerName: string | null
+  /** Order total (items + tax + tip). */
+  total: number
+  /** Total quantity across the order's line items. */
+  items: number
 }
 
 type OpenOrderRow = Pick<
   Order,
   "id" | "table_id" | "order_number" | "status" | "created_at"
->
+> & {
+  customer_name_snapshot?: string | null
+  total?: number | null
+  order_items?: { quantity?: number | null }[] | null
+}
 
 /**
  * One open order per table (the latest by `created_at`). Kept pure so the
@@ -38,6 +48,12 @@ export function reduceOpenOrdersByTable(
       orderNumber: row.order_number,
       status: row.status,
       createdAt: row.created_at,
+      customerName: row.customer_name_snapshot ?? null,
+      total: Number(row.total ?? 0),
+      items: (row.order_items ?? []).reduce(
+        (sum, item) => sum + Number(item.quantity ?? 0),
+        0,
+      ),
     }
   }
 
@@ -135,7 +151,9 @@ export async function fetchOpenOrdersByTable(
   const client = requireSupabase()
   const { data, error } = await client
     .from("orders")
-    .select("id, table_id, order_number, status, created_at")
+    .select(
+      "id, table_id, order_number, status, created_at, customer_name_snapshot, total, order_items(quantity)",
+    )
     .eq("restaurant_id", restaurantId)
     .in("status", ["pending", "confirmed", "preparing", "ready"])
     .order("created_at", { ascending: false })

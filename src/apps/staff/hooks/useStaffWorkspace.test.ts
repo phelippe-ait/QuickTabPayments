@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { act, renderHook, waitFor } from "@testing-library/react"
-import { useStaffWorkspace } from "./useStaffWorkspace"
+import { toStaffTable, useStaffWorkspace } from "./useStaffWorkspace"
 import { fetchStaffOrders } from "../services/staffOrders"
+import type { StaffTableRow } from "../services/staffTables"
 
 const mocks = vi.hoisted(() => {
   const query = {
@@ -56,10 +57,19 @@ vi.mock("../services/staffTables", () => ({
   updateStaffTableStatus: tablesService.updateStaffTableStatus,
 }))
 
+const occupancyService = vi.hoisted(() => ({
+  fetchOpenOrdersByTable: vi.fn(),
+}))
+
+vi.mock("@shared/data/orders", () => ({
+  fetchOpenOrdersByTable: occupancyService.fetchOpenOrdersByTable,
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   tablesService.fetchStaffTables.mockResolvedValue([])
   tablesService.updateStaffTableStatus.mockResolvedValue(undefined)
+  occupancyService.fetchOpenOrdersByTable.mockResolvedValue({})
 })
 
 describe("useStaffWorkspace realtime scoping", () => {
@@ -255,5 +265,86 @@ describe("useStaffWorkspace table status", () => {
     expect(result.current.tablesError).toBe(
       "permission denied for table tables",
     )
+  })
+})
+
+const openOrder = {
+  orderId: "order-1",
+  orderNumber: "1001",
+  status: "preparing" as const,
+  createdAt: "2026-11-19T08:30:00Z",
+  customerName: "Olivia",
+  total: 24.5,
+  items: 3,
+}
+
+describe("toStaffTable occupancy mapping", () => {
+  it("derives guest, seated time, total and items from the open order", () => {
+    const table = toStaffTable(
+      staffTable({ status: "occupied" }) as StaffTableRow,
+      openOrder,
+    )
+
+    expect(table).toMatchObject({
+      guest: "Olivia",
+      since: "2026-11-19T08:30:00Z",
+      total: 24.5,
+      items: 3,
+      status: "occupied",
+    })
+  })
+
+  it("omits derived fields when there is no open order", () => {
+    const table = toStaffTable(
+      staffTable({ status: "occupied" }) as StaffTableRow,
+      undefined,
+    )
+
+    expect(table).not.toHaveProperty("guest")
+    expect(table).not.toHaveProperty("since")
+    expect(table).not.toHaveProperty("total")
+    expect(table).not.toHaveProperty("items")
+  })
+})
+
+describe("useStaffWorkspace table occupancy", () => {
+  it("merges the open order's guest, time, total and items into the table", async () => {
+    tablesService.fetchStaffTables.mockResolvedValue([
+      staffTable({ status: "occupied" }),
+    ])
+    occupancyService.fetchOpenOrdersByTable.mockResolvedValue({
+      "table-1": openOrder,
+    })
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+
+    await waitFor(() =>
+      expect(result.current.tableList[0]?.total).toBe(24.5),
+    )
+    expect(result.current.tableList[0]).toMatchObject({
+      guest: "Olivia",
+      since: "2026-11-19T08:30:00Z",
+      items: 3,
+    })
+    expect(occupancyService.fetchOpenOrdersByTable).toHaveBeenCalledWith(
+      "restaurant-1",
+    )
+  })
+
+  it("keeps metadata-only tables when the occupancy query fails", async () => {
+    tablesService.fetchStaffTables.mockResolvedValue([
+      staffTable({ status: "occupied" }),
+    ])
+    occupancyService.fetchOpenOrdersByTable.mockRejectedValue(
+      new Error("occupancy unavailable"),
+    )
+
+    const { result } = renderHook(() => useStaffWorkspace("restaurant-1"))
+
+    await waitFor(() => expect(result.current.tableList).toHaveLength(1))
+    expect(result.current.tablesError).toBeNull()
+    expect(result.current.tableList[0].status).toBe("occupied")
+    expect(result.current.tableList[0]).not.toHaveProperty("total")
+    expect(result.current.tableList[0]).not.toHaveProperty("since")
   })
 })
