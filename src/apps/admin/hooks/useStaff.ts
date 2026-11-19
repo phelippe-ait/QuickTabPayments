@@ -25,6 +25,8 @@ export function useStaff(restaurantId: string, options: Options = {}) {
     queryKey: restaurantKeys.staff(restaurantId),
     queryFn: () => fetchStaffDirectory(restaurantId),
     enabled: Boolean(restaurantId),
+    // Team changes from another admin show up when this tab regains focus.
+    refetchOnWindowFocus: true,
   })
 
   const rows = useMemo(() => query.data ?? [], [query.data])

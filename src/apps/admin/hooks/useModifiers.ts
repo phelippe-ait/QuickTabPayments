@@ -65,6 +65,9 @@ export function useModifiers(
     queryKey: modifierKeys.catalog(restaurantId),
     queryFn: () => fetchModifierCatalog(restaurantId),
     enabled: Boolean(restaurantId),
+    // No Realtime channel for the modifier catalog; refetch when the tab
+    // regains focus so a second admin's edits are not stale forever.
+    refetchOnWindowFocus: true,
   })
 
   const catalog = useMemo<ModifierCatalog>(

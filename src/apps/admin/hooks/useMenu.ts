@@ -53,15 +53,19 @@ export function useMenu(
 ) {
   const queryClient = useQueryClient()
 
+  // The catalog has no Realtime channel, so a second admin's edits only land
+  // when this tab regains focus (the global default disables it).
   const categoriesQuery = useQuery({
     queryKey: menuKeys.categories(restaurantId),
     queryFn: () => fetchCategories(restaurantId),
     enabled: Boolean(restaurantId),
+    refetchOnWindowFocus: true,
   })
   const itemsQuery = useQuery({
     queryKey: menuKeys.items(restaurantId),
     queryFn: () => fetchMenuItems(restaurantId),
     enabled: Boolean(restaurantId),
+    refetchOnWindowFocus: true,
   })
 
   // Keep derived arrays referentially stable: pages depend on them in effects
