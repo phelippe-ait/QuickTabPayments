@@ -154,6 +154,7 @@ export function toTableVM(
     seats: row.seats,
     isActive: row.is_active,
     qrToken: row.qr_token,
+    status: row.status,
     openOrder: openOrder
       ? {
           orderNumber: openOrder.orderNumber,

@@ -1074,6 +1074,7 @@ export type Order = Tables<"orders">;
 export type OrderItem = Tables<"order_items">;
 export type Payment = Tables<"payments">;
 export type OrderStatus = Enums<"order_status">;
+export type TableStatus = Enums<"table_status">;
 export type PaymentStatus = Enums<"payment_status">;
 export type PaymentMethodType = Enums<"payment_method_type">;
 export type Refund = Tables<"refunds">;

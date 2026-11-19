@@ -1,3 +1,21 @@
+import type { TableStatus } from "@shared/lib/database.types"
+
+export type TableOccupancyState = "occupied" | "needs_cleaning" | "free"
+
+/**
+ * The admin card must agree with the staff floor plan. An open order is
+ * authoritative (a guest can order before staff seat them), then the manual
+ * `tables.status`; `needs_cleaning` only wins when no order is open.
+ */
+export function tableOccupancyState(
+  status: TableStatus,
+  hasOpenOrder: boolean,
+): TableOccupancyState {
+  if (hasOpenOrder || status === "occupied") return "occupied"
+  if (status === "needs_cleaning") return "needs_cleaning"
+  return "free"
+}
+
 /** Human-readable elapsed time from a real ISO timestamp. */
 export function formatElapsed(startedAt: string, now: number): string {
   const started = new Date(startedAt).getTime()

@@ -155,7 +155,11 @@ export async function fetchOpenOrdersByTable(
       "id, table_id, order_number, status, created_at, customer_name_snapshot, total, order_items(quantity)",
     )
     .eq("restaurant_id", restaurantId)
-    .in("status", ["pending", "confirmed", "preparing", "ready"])
+    // `pending` means the guest has not paid yet (or abandoned checkout).
+    // It must never hold a table open: the kitchen board filters it out too,
+    // and stale pending rows would otherwise show a table as occupied for
+    // days after staff marked it free.
+    .in("status", ["confirmed", "preparing", "ready"])
     .order("created_at", { ascending: false })
 
   if (error) throw new Error(error.message)

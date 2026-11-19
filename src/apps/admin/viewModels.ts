@@ -2,6 +2,7 @@ import type {
   OrderStatus,
   PaymentStatus,
   StaffRole,
+  TableStatus,
 } from "@shared/lib/database.types";
 
 /**
@@ -37,6 +38,8 @@ export type TableVM = {
   seats: number | null;
   isActive: boolean;
   qrToken: string;
+  /** Staff-managed operational state from `public.tables.status`. */
+  status: TableStatus;
   openOrder: {
     orderNumber: string;
     status: OrderStatus;

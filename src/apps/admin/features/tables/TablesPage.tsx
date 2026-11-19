@@ -11,7 +11,7 @@ import { countOrdersForTables } from "@shared/data/orders"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useTables } from "../../hooks/useTables"
 import { buildTableQrUrl, escapeHtml } from "./tableQr.utils"
-import { formatElapsed } from "./table.utils"
+import { formatElapsed, tableOccupancyState } from "./table.utils"
 import { TableModal } from "./TableDialog"
 import type { TableVM } from "../../viewModels"
 
@@ -35,7 +35,11 @@ export function TablesPage() {
     (table) => location === "All tables" || (table.locationLabel ?? "Unassigned") === location,
   )
   const enabledCount = tables.tables.filter((table) => table.isActive).length
-  const occupiedCount = tables.tables.filter((table) => table.openOrder).length
+  const occupiedCount = tables.tables.filter(
+    (table) =>
+      tableOccupancyState(table.status, Boolean(table.openOrder)) ===
+      "occupied",
+  ).length
 
   useEffect(
     () => setSelected((current) => current.filter((id) => tables.tables.some((table) => table.id === id))),
@@ -171,7 +175,12 @@ export function TablesPage() {
           {visible.length === 0 ? (
             <EmptyState title="No tables found" description="Try another location filter or add a new table." />
           ) : <div className={`${styles["tables-grid"]}`}>
-            {visible.map((table) => (
+            {visible.map((table) => {
+              const occupancy = tableOccupancyState(
+                table.status,
+                Boolean(table.openOrder),
+              )
+              return (
               <article className={`${styles["table-card-item"]} ${selected.includes(table.id) ? styles["selected"] : ""}`} key={table.id}>
                 <div className={`${styles["table-card-top"]}`}>
                   <label className={`${styles["inline-select"]}`}><input type="checkbox" aria-label={`Select table ${table.number}`} checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
@@ -198,11 +207,22 @@ export function TablesPage() {
                   </div>
                   <TableQrCode tableNumber={table.number} slug={slug} qrToken={table.qrToken} onNotify={notify} />
                 </div>
-                {table.openOrder ? (
+                {occupancy === "occupied" ? (
                   <div className={`${styles["active-seating"]}`}>
                     <span><StatusPill tone="warning" withDot={false}>Occupied</StatusPill></span>
-                    <span>Order <strong>#{table.openOrder.orderNumber}</strong></span>
-                    <span>Seated <strong>{formatElapsed(table.openOrder.startedAt, now)}</strong></span>
+                    {table.openOrder ? (
+                      <>
+                        <span>Order <strong>#{table.openOrder.orderNumber}</strong></span>
+                        <span>Seated <strong>{formatElapsed(table.openOrder.startedAt, now)}</strong></span>
+                      </>
+                    ) : (
+                      <span>Seated by staff · no order yet</span>
+                    )}
+                  </div>
+                ) : occupancy === "needs_cleaning" ? (
+                  <div className={`${styles["active-seating"]}`}>
+                    <span><StatusPill tone="warning" withDot={false}>Needs cleaning</StatusPill></span>
+                    <span>Awaiting cleaning</span>
                   </div>
                 ) : (
                   <div className={`${styles["active-seating"]}`}>
@@ -215,7 +235,8 @@ export function TablesPage() {
                   <div><span>Seats</span><strong>{table.seats ?? "—"}</strong></div>
                 </div>
               </article>
-            ))}
+              )
+            })}
           </div>}
         </>
       )}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { formatElapsed, normaliseSeats } from "./table.utils"
+import {
+  formatElapsed,
+  normaliseSeats,
+  tableOccupancyState,
+} from "./table.utils"
 
 describe("formatElapsed", () => {
   const now = new Date("2026-10-21T10:00:00Z").getTime()
@@ -12,6 +16,19 @@ describe("formatElapsed", () => {
 
   it("copes with an invalid timestamp", () => {
     expect(formatElapsed("not-a-date", now)).toBe("just now")
+  })
+})
+
+describe("tableOccupancyState", () => {
+  it("treats an open order or staff-seated table as occupied", () => {
+    expect(tableOccupancyState("available", true)).toBe("occupied")
+    expect(tableOccupancyState("occupied", false)).toBe("occupied")
+  })
+
+  it("keeps cleaning distinct only while no order is open", () => {
+    expect(tableOccupancyState("needs_cleaning", false)).toBe("needs_cleaning")
+    expect(tableOccupancyState("needs_cleaning", true)).toBe("occupied")
+    expect(tableOccupancyState("available", false)).toBe("free")
   })
 })
 
