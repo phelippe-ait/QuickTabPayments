@@ -190,13 +190,11 @@ rollback;
 
 -- (m) Over-refunding a succeeded payment is rejected by the trigger.
 -- Expected: ERROR 23514 "Refund amount exceeds the remaining payment balance".
+--
+-- After 0028 (P30 audit) refunds have no client INSERT policy — rows are
+-- written by api/refunds.ts with the service role. The trigger is therefore
+-- exercised as the migration runner, which is the same path the API uses.
 begin;
-select set_config(
-  'request.jwt.claims',
-  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
-  true
-);
-set local role authenticated;
 insert into public.refunds (order_id, payment_id, amount, reason)
 select o.id, p.id, 999, 'RLS over-refund check'
 from public.orders o
@@ -1173,15 +1171,19 @@ rollback;
 
 -- (aj) Staff cannot skip pending -> ready. Expected: NOTICE
 --      "P03 illegal status transition rejected ok".
+--
+-- After 0028 orders have no client INSERT policy (place_order is the only
+-- writer), so the scratch order is created as the migration runner — the same
+-- path the RPC uses — before impersonating the manager.
 begin;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-ILLEGAL', 'pending');
 select set_config(
   'request.jwt.claims',
   json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
   true
 );
 set local role authenticated;
-insert into public.orders (restaurant_id, order_number, status)
-values ('<restaurant-uuid>', 'RLS-P03-ILLEGAL', 'pending');
 do $$
 declare
   v_err text;
@@ -1208,14 +1210,14 @@ rollback;
 --      matrix can be walked, and completing the order stamps completed_at.
 --      Expected: NOTICE "P03 legal status transition allowed ok".
 begin;
+insert into public.orders (restaurant_id, order_number, status)
+values ('<restaurant-uuid>', 'RLS-P03-LEGAL', 'pending');
 select set_config(
   'request.jwt.claims',
   json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
   true
 );
 set local role authenticated;
-insert into public.orders (restaurant_id, order_number, status)
-values ('<restaurant-uuid>', 'RLS-P03-LEGAL', 'pending');
 update public.orders
    set status = 'confirmed'
  where restaurant_id = '<restaurant-uuid>'
@@ -2437,3 +2439,684 @@ begin
 
   raise notice 'P12 get_sales_report has no spoofable restaurant argument ok';
 end $$;
+
+-- =====================================================================
+-- P30 — full-table RLS + auth audit (0028_rls_audit_fixes.sql)
+-- =====================================================================
+-- Table-by-table verification of the post-audit policy set. Run top to
+-- bottom after applying 0028. Every read/write check impersonates a real
+-- role through `request.jwt.claims` + `set role` inside a transaction and
+-- rolls back; no data is kept.
+--
+-- Placeholders used below (same demo fixtures as the sections above):
+--   <restaurant-uuid>        demo restaurant A id
+--   <table-uuid>             an active table of restaurant A
+--   <menu-item-uuid>         an available menu item of restaurant A
+--   <modifier-uuid>          a modifier of restaurant A
+--   <order-uuid>             any order of restaurant A
+--   <payment-uuid>           a succeeded payment of restaurant A (same order)
+--   <manager-user-uuid>      active manager of restaurant A
+--   <kitchen-user-uuid>      active kitchen staff of restaurant A
+--   <customer-user-uuid>     signed-in user with no staff role
+--
+-- What green looks like:
+--   (bh) every public table has RLS + an explicit policy set
+--   (bi) profiles are self-only and the email is read-only
+--   (bj) self-serve restaurant INSERT is closed; plan is owner-only
+--   (bk) managers cannot grant owner; staff reads are self-only
+--   (bl) kitchen may change table status only
+--   (bm) kitchen cannot write catalog data
+--   (bn) no direct order INSERT; money fields are immutable; status works
+--   (bo) order lines/modifiers are RPC-only
+--   (bp) payments/refunds are read-only for clients
+--   (bq) restaurant_invites are RPC-only
+--   (br) qr_sessions are service-role only
+--   (bs) locations are owner/manager settings, kitchen read-only
+--   (bt) no client INSERT policies remain on RPC/service-role tables
+--   (bu) anon cannot execute privileged RPCs
+
+-- (bh) Structural sweep: RLS enabled everywhere, and zero-policy tables are
+--      limited to the documented RPC/service-role-only set.
+-- Expected: NOTICE P30 every public table has RLS with an explicit policy set ok.
+do $$
+declare
+  r            record;
+  v_missing    text[] := '{}';
+  v_policy_cnt int;
+begin
+  for r in
+    select c.oid, c.relname, c.relrowsecurity
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+  loop
+    if not r.relrowsecurity then
+      v_missing := v_missing || (r.relname || ' (rls off)');
+    end if;
+
+    select count(*) into v_policy_cnt
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = r.relname;
+
+    -- These two are intentionally write/read through definer RPCs only.
+    if v_policy_cnt = 0
+       and r.relname not in ('qr_sessions', 'restaurant_invites') then
+      v_missing := v_missing || (r.relname || ' (no policies)');
+    end if;
+  end loop;
+
+  if array_length(v_missing, 1) > 0 then
+    raise exception 'P30 RLS audit gaps: %', v_missing;
+  end if;
+
+  raise notice 'P30 every public table has RLS with an explicit policy set ok';
+end $$;
+
+-- (bi) Profiles: a user reads only their own row, and cannot rewrite the
+--      email that add_staff_by_email() matches on.
+-- Expected: NOTICE P30 profiles self-only + email read-only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_count int;
+  v_state text;
+begin
+  select count(*) into v_count
+  from public.profiles
+  where id <> auth.uid();
+
+  if v_count <> 0 then
+    raise exception 'customer read % foreign profiles', v_count;
+  end if;
+
+  begin
+    update public.profiles
+       set email = 'attacker@example.test'
+     where id = auth.uid();
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'expected 42501 changing profile email, got %', v_state;
+  end if;
+
+  raise notice 'P30 profiles self-only + email read-only ok';
+end $$;
+rollback;
+
+-- (bj) Restaurants: organisational onboarding is invitation-only, and a
+--      manager cannot upgrade the subscription plan.
+-- Expected: NOTICE P30 self-serve insert closed + plan owner-only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into public.restaurants (owner_id, slug, name)
+    values (auth.uid(), 'rls-p30-selfserve', 'RLS P30 Self Serve');
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'self-serve insert: expected 42501, got %', v_state;
+  end if;
+end $$;
+rollback;
+
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    update public.restaurants
+       set plan = 'premium'
+     where id = '<restaurant-uuid>';
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'manager plan: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 self-serve insert closed + plan owner-only ok';
+end $$;
+rollback;
+
+-- (bk) restaurant_staff: a manager cannot INSERT an owner row, and a kitchen
+--      account cannot read peer memberships.
+-- Expected: NOTICE P30 manager cannot grant owner; self-read only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into public.restaurant_staff (restaurant_id, user_id, role, is_active)
+    values ('<restaurant-uuid>', '<customer-user-uuid>', 'owner', true);
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'manager owner grant: expected 42501, got %', v_state;
+  end if;
+end $$;
+rollback;
+
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_foreign int;
+begin
+  select count(*) into v_foreign
+  from public.restaurant_staff
+  where user_id <> auth.uid();
+
+  if v_foreign <> 0 then
+    raise exception 'kitchen read % peer memberships', v_foreign;
+  end if;
+
+  raise notice 'P30 manager cannot grant owner; self-read only ok';
+end $$;
+rollback;
+
+-- (bl) tables: kitchen may move the operational status, but cannot mutate
+--      the table identity (QR token) or delete the table.
+-- Expected: NOTICE P30 kitchen may change table status only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_rows  int;
+  v_state text;
+begin
+  update public.tables
+     set status = 'needs_cleaning'
+   where id = '<table-uuid>';
+  get diagnostics v_rows = row_count;
+
+  if v_rows <> 1 then
+    raise exception 'kitchen status update affected % rows', v_rows;
+  end if;
+
+  begin
+    update public.tables
+       set qr_token = 'p30-change'
+     where id = '<table-uuid>';
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'qr_token change: expected 42501, got %', v_state;
+  end if;
+
+  v_state := null;
+  begin
+    delete from public.tables where id = '<table-uuid>';
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'table delete: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 kitchen may change table status only ok';
+end $$;
+rollback;
+
+-- (bm) Catalog writes are owner/manager only: kitchen updates match zero rows
+--      and an insert into a link table is rejected outright.
+-- Expected: NOTICE P30 kitchen cannot write catalog data ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_rows  int;
+  v_state text;
+begin
+  update public.menu_items set price = 0.01 where id = '<menu-item-uuid>';
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'kitchen updated a menu item price';
+  end if;
+
+  update public.menu_categories
+     set name = name
+   where restaurant_id = '<restaurant-uuid>';
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'kitchen updated menu categories';
+  end if;
+
+  update public.modifier_groups
+     set name = name
+   where restaurant_id = '<restaurant-uuid>';
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'kitchen updated modifier groups';
+  end if;
+
+  update public.modifiers set name = name where id = '<modifier-uuid>';
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'kitchen updated modifiers';
+  end if;
+
+  begin
+    insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id)
+    select '<menu-item-uuid>', g.id
+    from public.modifier_groups g
+    where g.id = (select modifier_group_id from public.modifiers where id = '<modifier-uuid>');
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'kitchen link insert: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 kitchen cannot write catalog data ok';
+end $$;
+rollback;
+
+-- (bn) orders: no direct INSERT; money/identity fields are immutable for API
+--      callers; the legal status workflow still works.
+-- Expected: NOTICE P30 orders insert closed + money immutable + status ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into public.orders (restaurant_id, order_number, status, total)
+    values ('<restaurant-uuid>', 'RLS-P30-ANON', 'confirmed', 0);
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'anon order insert: expected 42501, got %', v_state;
+  end if;
+end $$;
+rollback;
+
+begin;
+insert into public.orders (restaurant_id, order_number, status, subtotal, tax, total)
+values ('<restaurant-uuid>', 'RLS-P30-MONEY', 'confirmed', 10.00, 0.91, 10.00);
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+  v_rows  int;
+begin
+  begin
+    update public.orders
+       set total = 0
+     where restaurant_id = '<restaurant-uuid>'
+       and order_number = 'RLS-P30-MONEY';
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'order total edit: expected 42501, got %', v_state;
+  end if;
+
+  update public.orders
+     set status = 'preparing'
+   where restaurant_id = '<restaurant-uuid>'
+     and order_number = 'RLS-P30-MONEY';
+  get diagnostics v_rows = row_count;
+
+  if v_rows <> 1 then
+    raise exception 'legal status update affected % rows', v_rows;
+  end if;
+
+  raise notice 'P30 orders insert closed + money immutable + status ok';
+end $$;
+rollback;
+
+-- (bo) order_items / order_item_modifiers: clients cannot append lines, even
+--      to their own pending order.
+-- Expected: NOTICE P30 order lines are RPC-only ok.
+begin;
+insert into public.orders (restaurant_id, order_number, status, customer_id)
+values ('<restaurant-uuid>', 'RLS-P30-LINES', 'pending', '<customer-user-uuid>');
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into public.order_items (
+      order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, subtotal
+    )
+    select o.id, '<menu-item-uuid>', 'Injected line', 0.01, 1, 0.01
+    from public.orders o
+    where o.order_number = 'RLS-P30-LINES';
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'order_items insert: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 order lines are RPC-only ok';
+end $$;
+rollback;
+
+-- (bp) payments / refunds: clients are read-only. A customer cannot see
+--      another customer's payments; a manager cannot mint a refund row.
+-- Expected: NOTICE P30 payments/refunds are read-only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_foreign int;
+begin
+  select count(*) into v_foreign
+  from public.payments p
+  join public.orders o on o.id = p.order_id
+  where o.customer_id is distinct from auth.uid();
+
+  if v_foreign <> 0 then
+    raise exception 'customer read % foreign payments', v_foreign;
+  end if;
+end $$;
+rollback;
+
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into public.refunds (order_id, payment_id, amount, reason)
+    values ('<order-uuid>', '<payment-uuid>', 1.00, 'P30 audit');
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'manager refund insert: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 payments/refunds are read-only ok';
+end $$;
+rollback;
+
+-- (bq) restaurant_invites: no client reads/writes; invitations are claimed
+--      through get_my_restaurant_invite() / claim_restaurant_invite().
+-- Expected: NOTICE P30 restaurant_invites are RPC-only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<customer-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_count int;
+  v_state text;
+begin
+  select count(*) into v_count from public.restaurant_invites;
+  if v_count <> 0 then
+    raise exception 'customer read % invitation rows', v_count;
+  end if;
+
+  begin
+    insert into public.restaurant_invites (email, restaurant_name, restaurant_slug)
+    values ('attacker@example.test', 'P30', 'p30-attacker');
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'invite insert: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 restaurant_invites are RPC-only ok';
+end $$;
+rollback;
+
+-- (br) qr_sessions: table privileges are revoked from anon/authenticated.
+-- Expected: NOTICE P30 qr_sessions are service-role only ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    perform count(*) from public.qr_sessions;
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'anon qr_sessions read: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 qr_sessions are service-role only ok';
+end $$;
+rollback;
+
+-- (bs) restaurant_locations: kitchen reads but cannot change the geofence;
+--      a manager can save the location.
+-- Expected: NOTICE P30 locations are owner/manager settings ok.
+begin;
+insert into public.restaurant_locations (restaurant_id, latitude, longitude, label, geofence_enabled)
+values ('<restaurant-uuid>', -33.8688, 151.2093, 'P30 fixture', false)
+on conflict (restaurant_id) do update set label = excluded.label;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_rows int;
+begin
+  update public.restaurant_locations
+     set geofence_enabled = true
+   where restaurant_id = '<restaurant-uuid>';
+  get diagnostics v_rows = row_count;
+
+  if v_rows <> 0 then
+    raise exception 'kitchen changed the geofence (% rows)', v_rows;
+  end if;
+end $$;
+rollback;
+
+begin;
+insert into public.restaurant_locations (restaurant_id, latitude, longitude, label, geofence_enabled)
+values ('<restaurant-uuid>', -33.8688, 151.2093, 'P30 fixture', false)
+on conflict (restaurant_id) do update set label = excluded.label;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<manager-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_rows int;
+begin
+  update public.restaurant_locations
+     set label = 'P30 manager edit'
+   where restaurant_id = '<restaurant-uuid>';
+  get diagnostics v_rows = row_count;
+
+  if v_rows <> 1 then
+    raise exception 'manager location update affected % rows', v_rows;
+  end if;
+
+  raise notice 'P30 locations are owner/manager settings ok';
+end $$;
+rollback;
+
+-- (bt) No client INSERT/ALL policies exist on the RPC/service-role tables.
+-- Expected: NOTICE P30 no client write policies on RPC tables ok.
+do $$
+declare
+  v_table text;
+begin
+  select string_agg(tablename, ', ')
+    into v_table
+  from pg_policies
+  where schemaname = 'public'
+    and cmd in ('INSERT', 'ALL')
+    and tablename in (
+      'orders',
+      'order_items',
+      'order_item_modifiers',
+      'payments',
+      'refunds',
+      'qr_sessions'
+    );
+
+  if v_table is not null then
+    raise exception 'unexpected client write policies on: %', v_table;
+  end if;
+
+  raise notice 'P30 no client write policies on RPC tables ok';
+end $$;
+
+-- (bu) Privileged RPC grants stay closed to anon.
+-- Expected: all four columns false, then NOTICE P30 anon RPC grants closed ok.
+do $$
+declare
+  v_claim   boolean;
+  v_stats   boolean;
+  v_onboard boolean;
+  v_list    boolean;
+begin
+  v_claim := has_function_privilege('anon', 'public.claim_guest_order(text)', 'EXECUTE');
+  v_stats := has_function_privilege('anon', 'public.restaurant_daily_stats(uuid, text)', 'EXECUTE');
+  v_onboard := has_function_privilege('anon', 'public.create_restaurant_with_owner(text, text)', 'EXECUTE');
+  v_list := has_function_privilege('anon', 'public.list_staff_directory(uuid)', 'EXECUTE');
+
+  if v_claim or v_stats or v_onboard or v_list then
+    raise exception 'anon RPC grants open: claim=% stats=% onboard=% list=%',
+      v_claim, v_stats, v_onboard, v_list;
+  end if;
+
+  raise notice 'P30 anon RPC grants closed ok';
+end $$;
+
+-- (bv) storage.objects: branding/menu uploads are owner/manager work; a
+--      kitchen account cannot replace the restaurant logo.
+-- Expected: NOTICE P30 kitchen cannot write storage assets ok.
+begin;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '<kitchen-user-uuid>', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+do $$
+declare
+  v_state text;
+begin
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('restaurant-assets', '<restaurant-uuid>/p30-kitchen.png', '<kitchen-user-uuid>');
+  exception
+    when insufficient_privilege then v_state := sqlstate;
+  end;
+
+  if v_state is distinct from '42501' then
+    raise exception 'kitchen asset upload: expected 42501, got %', v_state;
+  end if;
+
+  raise notice 'P30 kitchen cannot write storage assets ok';
+end $$;
+rollback;

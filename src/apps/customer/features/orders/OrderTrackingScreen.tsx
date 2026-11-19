@@ -193,6 +193,16 @@ export function OrderTrackingScreen() {
         <h1 className="sr-only">
           Order tracking for {orderNumber || "this order"}
         </h1>
+        {tracking.phase === "ready" && order && (
+          <p
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Order status: {orderStatusLabels[order.status]}
+          </p>
+        )}
         {redirectStatus === "failed" && (
           <p
             role="alert"

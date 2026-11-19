@@ -89,4 +89,35 @@ describe("Customer app", () => {
     });
     expect(reopenedTrigger).toHaveFocus();
   });
+
+  it("announces a successful add-to-cart through a live region", async () => {
+    render(<CustomerApp />, { wrapper });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /view flat white/i }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add to order/i }),
+    );
+
+    const live = screen.getByRole("status");
+    expect(live).toHaveAttribute("aria-live", "polite");
+    expect(live).toHaveTextContent(/1 × Flat White added to cart/i);
+  });
+
+  it("closes the menu drawer on Escape and restores focus", async () => {
+    render(<CustomerApp />, { wrapper });
+
+    const toggle = await screen.findByRole("button", { name: "Open menu" });
+    toggle.focus();
+    fireEvent.click(toggle);
+
+    const drawer = screen.getByRole("dialog", { name: /menu and account/i });
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(toggle).toHaveFocus();
+    expect(drawer).not.toHaveAttribute("aria-modal");
+  });
 });

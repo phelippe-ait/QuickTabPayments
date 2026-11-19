@@ -4,6 +4,7 @@ import styles from "../../App.module.css"
 import { usePlan } from "@shared/plans/usePlan"
 import { Icon, type IconName } from "@shared/ui/Icon"
 import { Badge } from "@shared/ui/shadcn/badge"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import type { Section } from "../../types"
 
 type AdminShellProps = {
@@ -41,6 +42,8 @@ const sectionIcons: Record<Section, IconName> = {
 export function AdminShell({ sections, restaurantName, userName, userRole, userInitials, onOpenProfile, onSignOut, mobileNavOpen, onToggleMobileNav, onCloseMobileNav, children }: AdminShellProps) {
   const { has } = usePlan()
   const reportsLocked = !has("reports")
+  const sidebarRef = useDialogFocus<HTMLElement>(onCloseMobileNav, mobileNavOpen)
+  useBodyScrollLock(mobileNavOpen)
 
   return (
     <div className={styles["app-shell"]}>
@@ -55,7 +58,7 @@ export function AdminShell({ sections, restaurantName, userName, userRole, userI
         <span /><span /><span />
       </button>
       {mobileNavOpen && <button type="button" className={styles["nav-scrim"]} onClick={onCloseMobileNav} aria-label="Close navigation" />}
-      <aside id="admin-sidebar" className={`${styles["sidebar"]} ${mobileNavOpen ? styles["open"] : ""}`}>
+      <aside ref={sidebarRef} id="admin-sidebar" className={`${styles["sidebar"]} ${mobileNavOpen ? styles["open"] : ""}`}>
         <div className={styles["brand"]}><span><Icon name="coffee" size={23} /></span><div><strong>{restaurantName}</strong><small>Admin workspace</small></div></div>
         <nav className={styles["sidebar-nav"]} aria-label="Admin sections">
           <p>Workspace</p>

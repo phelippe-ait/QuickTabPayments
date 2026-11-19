@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@shared/ui/shadcn/card"
+import { ResponsiveTable } from "../../components/ResponsiveTable"
 
 type TopItemsCardProps = {
   items: SalesReportTopItem[]
@@ -21,7 +22,7 @@ export function TopItemsCard({ items, currency }: TopItemsCardProps) {
   )
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Top items</CardTitle>
         <CardDescription>Highest revenue in this period.</CardDescription>
@@ -32,46 +33,48 @@ export function TopItemsCard({ items, currency }: TopItemsCardProps) {
             No items sold in this period.
           </p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <caption className="sr-only">
-              Top items ranked by revenue
-            </caption>
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
-                <th scope="col" className="w-12 py-2 pr-2 font-bold">
-                  Rank
-                </th>
-                <th scope="col" className="py-2 pr-2 font-bold">
-                  Item
-                </th>
-                <th scope="col" className="py-2 pr-2 text-right font-bold">
-                  Qty
-                </th>
-                <th scope="col" className="py-2 text-right font-bold">
-                  Revenue
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((item, index) => (
-                <tr
-                  key={item.name}
-                  className="border-b border-line-soft last:border-0"
-                >
-                  <td className="py-2.5 pr-2">
-                    <RankBadge rank={index + 1} />
-                  </td>
-                  <td className="py-2.5 pr-2 text-ink">{item.name}</td>
-                  <td className="py-2.5 pr-2 text-right tabular-nums text-ink-mid">
-                    {item.quantity.toLocaleString("en-AU")}
-                  </td>
-                  <td className="py-2.5 text-right tabular-nums text-ink">
-                    {formatMoney(item.revenue, currency)}
-                  </td>
+          <ResponsiveTable label="Top items by revenue">
+            <table className="w-full min-w-[360px] border-collapse text-sm">
+              <caption className="sr-only">
+                Top items ranked by revenue
+              </caption>
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th scope="col" className="w-12 py-2 pr-2 font-bold">
+                    Rank
+                  </th>
+                  <th scope="col" className="py-2 pr-2 font-bold">
+                    Item
+                  </th>
+                  <th scope="col" className="py-2 pr-2 text-right font-bold">
+                    Qty
+                  </th>
+                  <th scope="col" className="py-2 text-right font-bold">
+                    Revenue
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ranked.map((item, index) => (
+                  <tr
+                    key={item.name}
+                    className="border-b border-line-soft last:border-0"
+                  >
+                    <td className="py-2.5 pr-2">
+                      <RankBadge rank={index + 1} />
+                    </td>
+                    <td className="py-2.5 pr-2 text-ink">{item.name}</td>
+                    <td className="py-2.5 pr-2 text-right tabular-nums text-ink-mid">
+                      {item.quantity.toLocaleString("en-AU")}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums text-ink">
+                      {formatMoney(item.revenue, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ResponsiveTable>
         )}
       </CardContent>
     </Card>

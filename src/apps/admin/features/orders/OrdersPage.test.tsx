@@ -125,6 +125,9 @@ describe("OrdersPage", () => {
     expect(screen.getAllByText("Preparing").length).toBeGreaterThan(0)
     expect(screen.getAllByText(/14\.84/).length).toBeGreaterThan(0)
     expect(screen.getByText(/incl\. .*1\.20 tip/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Orders table" }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /order history/i })).toBeNull()
   })
 

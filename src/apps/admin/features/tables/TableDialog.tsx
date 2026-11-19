@@ -118,7 +118,7 @@ export function TableModal({
               }}
               placeholder={isPickUp ? "Not applicable" : "Optional"}
             />
-            {seatsError && <small className={`${styles["field-error"]}`} id="table-seats-error">{seatsError}</small>}
+            {seatsError && <small className={`${styles["field-error"]}`} id="table-seats-error" role="alert">{seatsError}</small>}
           </label>
           <label className={`${styles["switch-row"]} ${styles["wide"]}`}><span><strong>Enabled for ordering</strong><small>Disabled tables keep their QR code but reject new orders.</small></span><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /></label>
         </div>

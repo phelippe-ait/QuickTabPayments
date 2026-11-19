@@ -140,6 +140,16 @@ describe("OrderTrackingScreen", () => {
     expect(screen.queryByText("Flat White")).not.toBeInTheDocument()
   })
 
+  it("announces the current order status through a polite live region", async () => {
+    mocks.fetchOrderTracking.mockResolvedValue(trackedOrder)
+    renderTracking()
+
+    await screen.findByText("QT-261025-0001")
+    const live = screen.getByRole("status")
+    expect(live).toHaveAttribute("aria-live", "polite")
+    expect(live).toHaveTextContent(/order status: preparing/i)
+  })
+
   it("shows an error state and allows a retry", async () => {
     mocks.fetchOrderTracking.mockRejectedValue(new Error("Network down"))
     renderTracking()

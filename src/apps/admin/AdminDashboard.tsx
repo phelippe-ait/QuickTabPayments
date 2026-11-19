@@ -53,6 +53,7 @@ function AdminLayoutContent() {
   const userName = getProfileName(profile, user?.email)
 
   const requestSignOut = () => {
+    setMobileNavOpen(false)
     confirm({
       title: "Sign out of QuickTab?",
       description:
@@ -72,7 +73,10 @@ function AdminLayoutContent() {
         userName={userName}
         userRole={role ? roleLabels[role] : ""}
         userInitials={getInitials(userName)}
-        onOpenProfile={() => setProfileOpen(true)}
+        onOpenProfile={() => {
+          setMobileNavOpen(false)
+          setProfileOpen(true)
+        }}
         onSignOut={requestSignOut}
         mobileNavOpen={mobileNavOpen}
         onToggleMobileNav={() => setMobileNavOpen((open) => !open)}

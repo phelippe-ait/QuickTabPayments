@@ -21,13 +21,15 @@
   --font-serif: "DM Serif Display", ui-serif, Georgia, serif;
   --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Brand — berry */
-  --color-berry: #c84d64;
-  --color-berry-strong: #b84057;
+  /* Brand — berry
+     Text/background pairs are tuned for WCAG AA: berry on cream and white
+     clears 4.5:1, as does white on berry and berry-strong on berry-soft. */
+  --color-berry: #b6405a;
+  --color-berry-strong: #a83a50;
   --color-berry-deep: #a3374c;
   --color-berry-dark: #8f2f42;
   --color-berry-soft: #f6e5e8;
-  --color-berry-alt: #ba4f60;
+  --color-berry-alt: #a8485c;
 
   /* Surfaces — cream / paper */
   --color-cream: #f7f4ea;
@@ -36,27 +38,29 @@
   --color-paper: #fffdfa;
   --color-sand: #e8e4dc;
 
-  /* Text — ink */
+  /* Text — ink (muted tones stay ≥ 4.5:1 on cream and paper) */
   --color-ink: #332d29;
   --color-ink-dark: #37333a;
   --color-ink-soft: #595663;
   --color-ink-mid: #625e68;
   --color-muted: #6f6a75;
-  --color-muted-2: #777181;
-  --color-placeholder: #aaa6ad;
+  --color-muted-2: #6b6573;
+  --color-placeholder: #6f6975;
 
   /* Borders / dividers */
   --color-line: #ded8cf;
   --color-line-soft: #e6e1d8;
   --color-line-2: #e4e3e1;
+  /* Stronger boundary for interactive controls (≥ 3:1 against cream/paper). */
+  --color-line-strong: #857f8c;
 
-  /* Status */
+  /* Status (text tones clear AA on their soft backgrounds) */
   --color-sage: #73956f;
-  --color-sage-strong: #678362;
+  --color-sage-strong: #55704f;
   --color-sage-soft: #e7eee4;
-  --color-amber: #a66a25;
+  --color-amber: #8a5a1c;
   --color-amber-soft: #f7ead8;
-  --color-info: #4f718f;
+  --color-info: #456480;
   --color-info-soft: #e3ebf3;
   --color-danger: #9b5252;
   --color-danger-soft: #f3e4e4;
@@ -125,7 +129,22 @@ textarea {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
-  outline: 2px solid rgba(200, 77, 100, 0.38);
+select:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-berry);
   outline-offset: 2px;
+}
+
+/* Honour the OS motion preference for every transition/animation, including
+   the P15 new-order pulse and drawer slides. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

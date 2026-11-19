@@ -2,6 +2,7 @@ import { useState } from "react"
 import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { StatusPill } from "@shared/ui/StatusPill"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import { tables } from "../../data/fixtures"
 import type { Reservation } from "../../types"
 
@@ -58,6 +59,7 @@ export function ReservationWorkspace({
                   : "text-muted-2 hover:text-ink"
               }`}
               key={option}
+              aria-pressed={reservationView === option}
               onClick={() => setReservationView(option)}
             >
               {option} (
@@ -167,6 +169,8 @@ function NewReservationDrawer({
   const [guests, setGuests] = useState(2)
   const [table, setTable] = useState("")
   const [notes, setNotes] = useState("")
+  const panelRef = useDialogFocus<HTMLElement>(onClose)
+  useBodyScrollLock()
 
   function submitReservation(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -182,7 +186,7 @@ function NewReservationDrawer({
   }
 
   const fieldClass =
-    "mt-2.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-berry focus:ring-2 focus:ring-berry/10"
+    "mt-2.5 w-full rounded-xl border border-line-strong bg-white px-4 py-3 text-sm outline-none transition focus:border-berry focus:ring-2 focus:ring-berry/10"
 
   return (
     <>
@@ -191,7 +195,13 @@ function NewReservationDrawer({
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[460px] sm:p-8`}>
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-reservation-title"
+        className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[460px] sm:p-8`}
+      >
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>New booking</p>
           <button
@@ -203,7 +213,7 @@ function NewReservationDrawer({
           </button>
         </div>
         <div className="mt-8 border-b border-line pb-7">
-          <h2 className="font-serif text-4xl">Create reservation</h2>
+          <h2 className="font-serif text-4xl" id="new-reservation-title">Create reservation</h2>
           <p className="mt-2 text-sm text-muted-2">
             Add the guest’s details and seating preferences.
           </p>
@@ -213,7 +223,6 @@ function NewReservationDrawer({
           <label className="block">
             <span className={`${styles["detail-label"]}`}>Guest or party name</span>
             <input
-              autoFocus
               className={fieldClass}
               onChange={(event) => setGuest(event.target.value)}
               placeholder="Enter guest name"
@@ -326,6 +335,8 @@ function ReservationDetailDrawer({
   const [confirming, setConfirming] = useState(false)
   const isUpcoming = reservation.status === "upcoming"
   const isCancelled = reservation.status === "cancelled"
+  const panelRef = useDialogFocus<HTMLElement>(onClose)
+  useBodyScrollLock()
 
   return (
     <>
@@ -334,7 +345,13 @@ function ReservationDetailDrawer({
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <aside className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}>
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reservation-detail-title"
+        className={`${styles["drawer-scroll"]} fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-paper p-6 shadow-2xl sm:w-[440px] sm:p-8`}
+      >
         <div className="flex items-center justify-between">
           <p className={`${styles["eyebrow"]}`}>Reservation details</p>
           <button
@@ -348,7 +365,7 @@ function ReservationDetailDrawer({
 
         <div className="mt-8 flex items-start justify-between border-b border-line pb-7">
           <div>
-            <h2 className="font-serif text-4xl">{reservation.guest}</h2>
+            <h2 className="font-serif text-4xl" id="reservation-detail-title">{reservation.guest}</h2>
             <p className="mt-2 text-sm text-muted-2">
               {reservation.date} · {reservation.time}
             </p>

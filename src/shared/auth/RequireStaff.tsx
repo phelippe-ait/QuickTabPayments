@@ -147,7 +147,7 @@ function LoginScreen({
           <label className="grid gap-1.5 text-[12px] font-bold text-ink-soft">
             Email
             <input
-              className="h-[42px] rounded-[9px] border border-line bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
+              className="h-[42px] rounded-[9px] border border-line-strong bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
               type="email"
               autoComplete="email"
               value={email}
@@ -158,7 +158,7 @@ function LoginScreen({
           <label className="grid gap-1.5 text-[12px] font-bold text-ink-soft">
             Password
             <input
-              className="h-[42px] rounded-[9px] border border-line bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
+              className="h-[42px] rounded-[9px] border border-line-strong bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -299,7 +299,7 @@ function ClaimInvite({
           <label className="grid gap-1.5 text-[12px] font-bold text-ink-soft">
             Restaurant name
             <input
-              className="h-[42px] rounded-[9px] border border-line bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
+              className="h-[42px] rounded-[9px] border border-line-strong bg-white px-3 text-[13px] font-normal text-ink outline-none focus:border-berry"
               value={name}
               onChange={(event) => setName(event.target.value)}
               autoFocus
@@ -308,7 +308,7 @@ function ClaimInvite({
           </label>
           <label className="grid gap-1.5 text-[12px] font-bold text-ink-soft">
             Web address
-            <span className="flex items-center overflow-hidden rounded-[9px] border border-line bg-white focus-within:border-berry">
+            <span className="flex items-center overflow-hidden rounded-[9px] border border-line-strong bg-white focus-within:border-berry">
               <span className="border-r border-line px-3 py-3 text-[12px] font-normal text-muted">
                 quicktab.app/
               </span>

@@ -6,6 +6,7 @@ import { roleLabels } from "@shared/restaurant/restaurantHelpers";
 import { useRestaurant } from "@shared/restaurant/useRestaurant";
 import type { StaffRole } from "@shared/lib/database.types";
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi";
+import { ResponsiveTable } from "../../components/ResponsiveTable";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
 import { useStaff } from "../../hooks/useStaff";
 import type { StaffVM } from "../../viewModels";
@@ -123,7 +124,7 @@ export function UsersPage() {
           <div className={`${styles["toolbar"]} user-toolbar`}>
             <label className={`${styles["search-box"]}`}>
               <Icon name="search" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or email" />
+              <input aria-label="Search team by name or email" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or email" />
             </label>
             <div className={`${styles["user-filters"]}`}>
               <label className={`${styles["filter-select"]}`}>
@@ -157,11 +158,15 @@ export function UsersPage() {
           {visible.length === 0 ? (
             <EmptyState title="No users found" description="Try changing the name, status, or role filters." />
           ) : (
-            <div className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}>
+            <ResponsiveTable
+              label="Team members table"
+              className={`${styles["table-card"]} ${styles["users-table"]} selection-table`}
+            >
               <div className={`${styles["table-heading"]}`}>
-                <label className={`${styles["inline-select"]}`} aria-label="Select all visible users">
+                <label className={`${styles["inline-select"]}`}>
                   <input
                     type="checkbox"
+                    aria-label="Select all visible users"
                     checked={selectable.length > 0 && selectable.every((member) => selected.includes(member.staffId))}
                     onChange={() =>
                       setSelected((current) =>
@@ -186,9 +191,10 @@ export function UsersPage() {
                 })
                 return (
                   <div className={`${styles["table-row"]}`} key={member.staffId}>
-                    <label className={`${styles["inline-select"]}`} aria-label={`Select ${member.name}`}>
+                    <label className={`${styles["inline-select"]}`}>
                       <input
                         type="checkbox"
+                        aria-label={`Select ${member.name}`}
                         checked={selected.includes(member.staffId)}
                         disabled={!permissions.canToggleActive}
                         onChange={() =>
@@ -238,7 +244,7 @@ export function UsersPage() {
                   </div>
                 )
               })}
-            </div>
+            </ResponsiveTable>
           )}
         </>
       )}

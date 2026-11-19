@@ -93,7 +93,7 @@ export function CatalogPage() {
       ) : (
         <>
           <div className={`${styles["toolbar"]}`}>
-            <label className={`${styles["search-box"]}`}><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search menu items" /></label>
+            <label className={`${styles["search-box"]}`}><Icon name="search" /><input aria-label="Search menu items" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search menu items" /></label>
             <div className={`${styles["section-tools"]}`}>
               <div className={`${styles["filter-pills"]}`}>
                 <button type="button" aria-pressed={categoryId === ALL_ITEMS} className={categoryId === ALL_ITEMS ? styles["active"] : ""} onClick={() => setCategoryId(ALL_ITEMS)}>All items</button>
@@ -111,6 +111,7 @@ export function CatalogPage() {
               <button type="button" className={`${styles["danger"]}`} onClick={requestBulkDelete}>Delete</button>
             </SelectionBar>
           )}
+          <h2 className="sr-only">Menu items</h2>
           {visible.length === 0 ? (
             <EmptyState title="No menu items found" description="Try changing your search or section filter." />
           ) : <div className={`${styles["catalog-grid"]}`}>
@@ -122,11 +123,11 @@ export function CatalogPage() {
                   ) : (
                     <span className="grid h-full min-h-[150px] place-items-center bg-sand text-[11px] font-bold text-muted" aria-hidden="true">No image</span>
                   )}
-                  <label className={`${styles["card-select"]}`} aria-label={`Select ${item.name}`}>
-                    <input type="checkbox" checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
+                  <label className={`${styles["card-select"]}`}>
+                    <input type="checkbox" aria-label={`Select ${item.name}`} checked={selected.includes(item.id)} onChange={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
                   </label>
                   {item.isAvailable ? (
-                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3">Available</StatusPill>
+                    <StatusPill tone="success" withDot={false} className="absolute left-[45px] top-3 max-[760px]:left-[61px]">Available</StatusPill>
                   ) : (
                     <span className={`${styles["unavailable-banner"]}`}>Unavailable</span>
                   )}

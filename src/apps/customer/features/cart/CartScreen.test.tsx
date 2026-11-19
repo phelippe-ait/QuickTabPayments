@@ -93,4 +93,21 @@ describe("CartScreen", () => {
     fireEvent.keyDown(browse, { key: "Tab" })
     expect(close).toHaveFocus()
   })
+
+  it("announces quantity changes with the item name", () => {
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole("button", { name: /open cart/i }))
+
+    expect(
+      screen.getByRole("button", { name: "Decrease Flat White quantity" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Increase Flat White quantity" }),
+    ).toBeInTheDocument()
+
+    const live = screen.getByText("Flat White quantity").parentElement
+    expect(live).toHaveAttribute("aria-live", "polite")
+    expect(live).toHaveTextContent("Flat White quantity 2")
+  })
 })

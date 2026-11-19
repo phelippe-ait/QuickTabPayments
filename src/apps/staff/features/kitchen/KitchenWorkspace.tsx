@@ -158,7 +158,7 @@ export function KitchenWorkspace({
         </div>
       </section>
      {ordersError && (
-  <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+  <div role="alert" className="mb-5 rounded-xl border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
     Unable to refresh orders: {ordersError}
   </div>
 )}
@@ -267,6 +267,8 @@ export function KitchenWorkspace({
                 <div className="flex flex-wrap gap-3 border-t border-line-soft bg-cream-3 p-4">
                   {isUnseen(order) && (
                     <button
+                      type="button"
+                      aria-label={`Acknowledge order ${order.id}`}
                       className="min-h-11 min-w-32 flex-1 rounded-xl border border-amber/40 bg-paper px-3 py-3 text-xs font-bold text-amber transition hover:bg-amber-soft"
                       onClick={() => onOrderSeen(order.id)}
                     >
@@ -276,6 +278,8 @@ export function KitchenWorkspace({
 
                   {bumpStatus && (
                     <button
+                      type="button"
+                      aria-label={`${bumpLabels[bumpStatus]} order ${order.id}`}
                       className={cn(
                         "min-h-11 min-w-32 flex-1 rounded-xl border px-3 py-3 text-xs font-bold transition",
                         bumpButtonClasses[bumpStatus],
@@ -289,6 +293,8 @@ export function KitchenWorkspace({
 
                   {canCancel && (
                     <button
+                      type="button"
+                      aria-label={`Cancel order ${order.id}`}
                       className="min-h-11 min-w-32 flex-1 rounded-xl border border-danger/40 bg-paper px-3 py-3 text-xs font-bold text-danger transition hover:bg-danger-soft"
                       onClick={() => requestStatusChange(order, "Cancelled")}
                     >

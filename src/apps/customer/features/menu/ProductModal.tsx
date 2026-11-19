@@ -159,18 +159,21 @@ export function ProductModal({
           </p>
         )}
         <div className={`${styles["modal-footer"]}`}>
-          <div className={`${styles["quantity"]}`}>
+          <div className={`${styles["quantity"]}`} role="group" aria-label={`Quantity for ${item.name}`}>
             <button
               type="button"
-              aria-label="Decrease quantity"
+              aria-label={`Decrease quantity of ${item.name}`}
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
             >
               −
             </button>
-            <span aria-live="polite">{quantity}</span>
+            <span aria-live="polite">
+              <span className="sr-only">{item.name} quantity </span>
+              {quantity}
+            </span>
             <button
               type="button"
-              aria-label="Increase quantity"
+              aria-label={`Increase quantity of ${item.name}`}
               onClick={() => setQuantity(quantity + 1)}
             >
               +

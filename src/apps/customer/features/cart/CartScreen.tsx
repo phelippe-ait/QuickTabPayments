@@ -62,7 +62,10 @@ export function CartScreen({
                 >
                   −
                 </button>
-                <span aria-live="polite">{item.quantity}</span>
+                <span aria-live="polite">
+                  <span className="sr-only">{item.name} quantity </span>
+                  {item.quantity}
+                </span>
                 <button
                   type="button"
                   aria-label={`Increase ${item.name} quantity`}

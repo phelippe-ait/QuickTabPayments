@@ -35,7 +35,7 @@ export function StatusPill({ tone, children, withDot = true, className }: Status
         className,
       )}
     >
-      {withDot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+      {withDot && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
       {children}
     </span>
   );

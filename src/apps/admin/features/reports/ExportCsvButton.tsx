@@ -48,6 +48,7 @@ export function ExportCsvButton({
         <Button
           size="sm"
           variant="secondary"
+          className="max-sm:min-h-11"
           disabled={disabled}
           aria-label="Export report as CSV"
           aria-describedby={canExport ? undefined : hintId}

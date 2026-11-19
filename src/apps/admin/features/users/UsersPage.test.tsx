@@ -87,6 +87,9 @@ describe("UsersPage", () => {
     expect(screen.getByText("maya@example.com")).toBeInTheDocument()
     expect(screen.getAllByText("Manager").length).toBeGreaterThan(0)
     expect(screen.getByText("You")).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Team members table" }),
+    ).toBeInTheDocument()
   })
 
   it("locks your own row and leaves other rows editable", () => {

@@ -136,10 +136,12 @@ export function TablesPage() {
             {visible.map((table) => (
               <article className={`${styles["table-card-item"]} ${selected.includes(table.id) ? styles["selected"] : ""}`} key={table.id}>
                 <div className={`${styles["table-card-top"]}`}>
-                  <label className={`${styles["inline-select"]}`} aria-label={`Select table ${table.number}`}><input type="checkbox" checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
+                  <label className={`${styles["inline-select"]}`}><input type="checkbox" aria-label={`Select table ${table.number}`} checked={selected.includes(table.id)} onChange={() => setSelected((current) => current.includes(table.id) ? current.filter((id) => id !== table.id) : [...current, table.id])} /></label>
                   <button
                     type="button"
                     className={`${styles["table-state"]} ${table.isActive ? styles["available"] : styles["occupied"]}`}
+                    aria-label={`${table.isActive ? "Disable" : "Enable"} table ${table.number}`}
+                    aria-pressed={table.isActive}
                     onClick={() => void tables.setActive([table.id], !table.isActive)}
                     title={table.isActive ? `Disable table ${table.number}` : `Enable table ${table.number}`}
                   >

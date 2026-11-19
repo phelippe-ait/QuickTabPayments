@@ -13,7 +13,7 @@ import {
 const FIXED_PRESETS: FixedPeriodPreset[] = ["today", "7d", "30d"]
 
 const inputClassName =
-  "min-h-9 rounded-[9px] border border-line bg-white px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
+  "min-h-9 rounded-[9px] border border-line-strong bg-white px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-berry"
 
 type ReportPeriodSelectorProps = {
   timezone: string
@@ -72,6 +72,7 @@ export function ReportPeriodSelector({
               key={value}
               size="sm"
               variant={preset === value ? "default" : "secondary"}
+              className="max-sm:min-h-11"
               aria-pressed={preset === value}
               onClick={() => selectPreset(value)}
             >
@@ -81,6 +82,7 @@ export function ReportPeriodSelector({
           <Button
             size="sm"
             variant={preset === "custom" ? "default" : "secondary"}
+            className="max-sm:min-h-11"
             aria-pressed={preset === "custom"}
             onClick={() => setPreset("custom")}
           >
@@ -116,7 +118,7 @@ export function ReportPeriodSelector({
               onChange={(event) => setCustomTo(event.target.value)}
             />
           </label>
-          <Button size="sm" onClick={applyCustom} disabled={Boolean(customError)}>
+          <Button size="sm" className="max-sm:min-h-11" onClick={applyCustom} disabled={Boolean(customError)}>
             Apply
           </Button>
           {customError && (

@@ -7,7 +7,7 @@ import { Skeleton } from "@shared/ui/shadcn/skeleton"
 import { useAuth } from "@shared/auth/AuthContext"
 import { formatMoney } from "@shared/lib/money"
 import { HeaderButton } from "../../components/CustomerUi"
-import { useBodyScrollLock } from "@shared/ui/useDialogFocus"
+import { useBodyScrollLock, useDialogFocus } from "@shared/ui/useDialogFocus"
 import { EditNameDialog } from "../profile/EditNameDialog"
 import { ProductPhoto } from "./ProductPhoto"
 import { StaffAssistNotice } from "./StaffAssistNotice"
@@ -42,6 +42,7 @@ export function MenuScreen({
   const [editingName, setEditingName] = useState(false);
   const [activeCategory, setActiveCategory] = useState("");
   useBodyScrollLock(drawer);
+  const drawerRef = useDialogFocus<HTMLElement>(() => setDrawer(false), drawer);
 
   const menuQuery = useQuery({
     queryKey: ["customer-menu", qr.restaurantId],
@@ -120,6 +121,7 @@ export function MenuScreen({
         />
       )}
       <aside
+        ref={drawerRef}
         className={`${styles["drawer"]} ${drawer ? styles["open"] : ""}`}
         role="dialog"
         aria-modal={drawer ? true : undefined}
@@ -146,6 +148,7 @@ export function MenuScreen({
             <button
               key={category.id}
               className={currentCategory === category.id ? styles["active"] : ""}
+              aria-pressed={currentCategory === category.id}
               onClick={() => chooseCategory(category.id)}
             >
               {category.name}
@@ -306,6 +309,7 @@ export function MenuScreen({
                   className={
                     currentCategory === category.id ? styles["active"] : ""
                   }
+                  aria-pressed={currentCategory === category.id}
                   onClick={() => chooseCategory(category.id)}
                 >
                   {category.name}
@@ -329,7 +333,7 @@ export function MenuScreen({
                       <button
                         className={`${styles["product-card"]}`}
                         key={item.id}
-                        aria-label={`View ${item.name}`}
+                        aria-label={`View ${item.name}, ${formatMoney(item.price, qr.currency)}`}
                         onClick={() => onSelect(item)}
                       >
                         <span className={`${styles["product-copy"]}`}>
