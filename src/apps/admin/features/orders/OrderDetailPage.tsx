@@ -110,11 +110,25 @@ export function OrderDetailPage() {
   const transitions = nextStatuses(order.status).filter((status) => status !== "cancelled")
 
   const succeededPayments = order.payments.filter((payment) => payment.status === "succeeded")
-  const refundedToDate = refundsQuery.isLoading
-    ? order.refundedTotal
-    : refundsQuery.refunds
-        .filter((refund) => refund.status === "succeeded")
-        .reduce((total, refund) => total + refund.amount, 0)
+  const refundsUnavailable = Boolean(refundsQuery.error)
+  const refundedToDate =
+    refundsQuery.isLoading || refundsUnavailable
+      ? order.refundedTotal
+      : refundsQuery.refunds
+          .filter((refund) => refund.status === "succeeded")
+          .reduce((total, refund) => total + refund.amount, 0)
+  // Succeeded and in-flight ('requested') refunds both consume line quantity;
+  // counting them closes the double-submit race.
+  const refundedQtyByLine = refundsQuery.refunds.reduce<Record<string, number>>(
+    (totals, refund) => {
+      if (!refund.order_item_id) return totals
+      if (refund.status !== "succeeded" && refund.status !== "requested") return totals
+      totals[refund.order_item_id] =
+        (totals[refund.order_item_id] ?? 0) + (refund.quantity ?? 0)
+      return totals
+    },
+    {},
+  )
   const refundable = refundableBalance(order.payments, refundedToDate)
   const partialAmount = partialRefundAmount(order.lineItems, refundQuantities)
   const refundAmount =
@@ -128,7 +142,7 @@ export function OrderDetailPage() {
   const canRecordRefund =
     REFUNDS_ENABLED && canManage && succeededPayments.length > 0 && refundable > 0
   const showRefundSection =
-    REFUNDS_ENABLED && (canRecordRefund || refundsQuery.refunds.length > 0)
+    REFUNDS_ENABLED && (canRecordRefund || refundsQuery.refunds.length > 0 || refundsUnavailable)
 
   const resetRefundForm = () => {
     setRefundMode(null)
@@ -151,6 +165,7 @@ export function OrderDetailPage() {
           quantity,
           amount: roundMoney(line.unitPrice * quantity),
           reason: "Line refund",
+          idempotencyKey: crypto.randomUUID(),
         })
         if (!ok) return
       }
@@ -161,6 +176,7 @@ export function OrderDetailPage() {
         paymentId: payment.id,
         amount,
         reason: refundMode === "full" ? "Full refund" : "Custom refund",
+        idempotencyKey: crypto.randomUUID(),
       })
       if (!ok) return
     }
@@ -376,7 +392,10 @@ export function OrderDetailPage() {
               </p>
 
               {refundsQuery.error && (
-                <p className="mt-3 text-[12px] text-danger" role="alert">{refundsQuery.error.message}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <p className="text-[12px] text-danger" role="alert">{refundsQuery.error.message}</p>
+                  <Button size="sm" variant="secondary" onClick={refundsQuery.refetch}>Retry</Button>
+                </div>
               )}
 
               {refundsQuery.refunds.length > 0 && (
@@ -413,7 +432,9 @@ export function OrderDetailPage() {
                 <>
                   {!refundMode && (
                     <div className={`${styles["refund-actions"]}`}>
-                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("partial")}>Partial refund</button>
+                      {!refundsUnavailable && (
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("partial")}>Partial refund</button>
+                      )}
                       <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setRefundMode("custom")}>Other amount</button>
                       <button type="button" className={`${styles["refund-button"]}`} onClick={() => setRefundMode("full")}>Refund full order</button>
                     </div>
@@ -422,6 +443,9 @@ export function OrderDetailPage() {
                   {refundMode === "partial" && (
                     <div className="mt-4 grid gap-2">
                       {order.lineItems.map((line) => {
+                        const refundedQty = refundedQtyByLine[line.id] ?? 0
+                        const remainingQty = Math.max(0, line.quantity - refundedQty)
+                        if (remainingQty === 0) return null
                         const quantity = refundQuantities[line.id] ?? 0
                         return (
                           <div key={line.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-line bg-white px-3 py-2">
@@ -429,6 +453,7 @@ export function OrderDetailPage() {
                               <strong className="block text-[12px] text-ink-soft">{line.name}</strong>
                               <small className="text-[10px] text-muted">
                                 {formatMoney(line.unitPrice, order.currency)} · ordered {line.quantity}
+                                {refundedQty > 0 ? ` · ${refundedQty} of ${line.quantity} refunded` : ""}
                               </small>
                             </div>
                             <div className={`${styles["refund-quantity"]}`}>
@@ -437,7 +462,7 @@ export function OrderDetailPage() {
                                 <span className="sr-only">{line.name} refund quantity </span>
                                 {quantity}
                               </strong>
-                              <button type="button" aria-label={`Add one ${line.name} to refund`} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.min(line.quantity, quantity + 1) })}>+</button>
+                              <button type="button" aria-label={`Add one ${line.name} to refund`} disabled={quantity >= remainingQty} onClick={() => setRefundQuantities({ ...refundQuantities, [line.id]: Math.min(remainingQty, quantity + 1) })}>+</button>
                             </div>
                           </div>
                         )

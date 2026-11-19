@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     paymentAmount: 100,
     line: null as Row | null,
     existingRefunds: [] as Row[],
+    lineRefunds: [] as Row[],
     inserted: null as unknown,
   },
 }));
@@ -24,7 +25,10 @@ vi.mock("./_lib/stripe", () => ({
 }));
 
 vi.mock("./_lib/supabaseAdmin", () => {
-  function tableResult(table: string): { data: unknown; error: unknown } {
+  function tableResult(
+    table: string,
+    columns?: string,
+  ): { data: unknown; error: unknown } {
     if (table === "orders") {
       return { data: { id: "order-1", restaurant_id: "r1" }, error: null };
     }
@@ -61,18 +65,28 @@ vi.mock("./_lib/supabaseAdmin", () => {
       return { data: mocks.state.line, error: null };
     }
     if (table === "refunds") {
-      return { data: mocks.state.existingRefunds, error: null };
+      return {
+        data: columns?.includes("quantity")
+          ? mocks.state.lineRefunds
+          : mocks.state.existingRefunds,
+        error: null,
+      };
     }
     return { data: null, error: null };
   }
 
   function readChain(table: string) {
     const chain = {
-      select: () => chain,
+      columns: undefined as string | undefined,
+      select: (columns?: string) => {
+        chain.columns = columns;
+        return chain;
+      },
       eq: () => chain,
-      maybeSingle: async () => tableResult(table),
+      in: () => chain,
+      maybeSingle: async () => tableResult(table, chain.columns),
       then: (resolve: (value: unknown) => unknown) =>
-        Promise.resolve(tableResult(table)).then(resolve),
+        Promise.resolve(tableResult(table, chain.columns)).then(resolve),
     };
     return chain;
   }
@@ -133,6 +147,7 @@ beforeEach(() => {
   mocks.state.paymentAmount = 100;
   mocks.state.line = null;
   mocks.state.existingRefunds = [];
+  mocks.state.lineRefunds = [];
   mocks.state.inserted = null;
   mocks.getUser.mockResolvedValue({
     data: { user: { id: "user-1" } },
@@ -287,6 +302,7 @@ describe("POST /api/refunds", () => {
 
     expect(mocks.refundsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ payment_intent: "pi_1", amount: 470 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(mocks.state.inserted).toMatchObject({
       stripe_refund_id: "re_1",
@@ -318,12 +334,106 @@ describe("POST /api/refunds", () => {
 
     expect(mocks.refundsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 450 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(mocks.state.inserted).toMatchObject({
       order_item_id: "line-1",
       quantity: 1,
       amount: 4.5,
     });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects a second full-quantity refund of an already refunded line", async () => {
+    mocks.state.line = {
+      id: "line-1",
+      order_id: "order-1",
+      unit_price_snapshot: 4.5,
+      quantity: 1,
+    };
+    mocks.state.lineRefunds = [{ quantity: 1, status: "succeeded" }];
+    const res = makeRes();
+    await handler(
+      makeReq({
+        orderId: "order-1",
+        paymentId: "payment-1",
+        orderItemId: "line-1",
+        quantity: 1,
+        amount: 4.5,
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "quantity_exceeds_remaining" });
+    expect(mocks.refundsCreate).not.toHaveBeenCalled();
+  });
+
+  it("counts in-flight requested refunds against the line cap", async () => {
+    mocks.state.line = {
+      id: "line-1",
+      order_id: "order-1",
+      unit_price_snapshot: 4.5,
+      quantity: 2,
+    };
+    mocks.state.lineRefunds = [{ quantity: 2, status: "requested" }];
+    const res = makeRes();
+    await handler(
+      makeReq({
+        orderId: "order-1",
+        paymentId: "payment-1",
+        orderItemId: "line-1",
+        quantity: 1,
+        amount: 4.5,
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "quantity_exceeds_remaining" });
+    expect(mocks.refundsCreate).not.toHaveBeenCalled();
+  });
+
+  it("allows a line refund up to the remaining quantity", async () => {
+    mocks.state.line = {
+      id: "line-1",
+      order_id: "order-1",
+      unit_price_snapshot: 4.5,
+      quantity: 3,
+    };
+    mocks.state.lineRefunds = [{ quantity: 1, status: "succeeded" }];
+    const res = makeRes();
+    await handler(
+      makeReq({
+        orderId: "order-1",
+        paymentId: "payment-1",
+        orderItemId: "line-1",
+        quantity: 2,
+        amount: 9,
+      }),
+      res as never,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mocks.refundsCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the client idempotency key to Stripe", async () => {
+    const res = makeRes();
+    await handler(
+      makeReq({
+        orderId: "order-1",
+        paymentId: "payment-1",
+        amount: 4.7,
+        idempotencyKey: "submit-123",
+      }),
+      res as never,
+    );
+
+    expect(mocks.refundsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 470 }),
+      { idempotencyKey: "submit-123" },
+    );
     expect(res.statusCode).toBe(200);
   });
 });
