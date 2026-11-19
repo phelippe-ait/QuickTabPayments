@@ -3,11 +3,12 @@ import styles from "../../App.module.css";
 import { useRestaurant } from "@shared/restaurant/useRestaurant";
 import { Button } from "@shared/ui/Button";
 import { EmptyState, PageHeader } from "../../components/AdminUi";
+import { ImageCropDialog } from "../../components/ImageCropDialog";
 import { useAdminUi } from "../../hooks/AdminUiProvider";
 import { useRestaurantSettings } from "../../hooks/useRestaurantSettings";
 import {
   IMAGE_ACCEPT,
-  validateImageFile,
+  validateImageSourceFile,
   type RestaurantAssetKind,
 } from "@shared/lib/storage";
 import { isValidTimezone, percentToTaxRate, taxRateToPercent } from "./settings.utils";
@@ -70,6 +71,10 @@ export function SettingsPage() {
 
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [brandingError, setBrandingError] = useState("");
+  const [cropRequest, setCropRequest] = useState<{
+    kind: RestaurantAssetKind;
+    file: File;
+  } | null>(null);
   const [taxError, setTaxError] = useState("");
   const [slugError, setSlugError] = useState("");
   const [locationPoint, setLocationPoint] = useState<LocationPoint | null>(null);
@@ -158,7 +163,7 @@ export function SettingsPage() {
   const handleUpload = (kind: RestaurantAssetKind, file: File | undefined) => {
     if (!file) return;
     try {
-      validateImageFile(file);
+      validateImageSourceFile(file);
     } catch (error) {
       setBrandingError(
         error instanceof Error ? error.message : "Choose another image.",
@@ -166,7 +171,7 @@ export function SettingsPage() {
       return;
     }
     setBrandingError("");
-    settings.uploadBranding(kind, file);
+    setCropRequest({ kind, file });
   };
 
   const removeSavedLocation = () => {
@@ -551,13 +556,15 @@ export function SettingsPage() {
         <section className="rounded-card border border-line bg-paper p-7 shadow-card">
           <h2 className="font-serif text-2xl text-ink">Branding</h2>
           <p className="mt-1 text-xs text-muted">
-            JPG, PNG, or WebP up to 5 MB. Images are stored in Supabase Storage.
+            Any photo works — you&apos;ll crop it before upload. JPG, PNG, or
+            WebP up to 20 MB; the stored image is resized automatically.
           </p>
 
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <BrandingField
               label="Logo"
-              description="Square works best. Shown in the app header."
+              description="Square image for your restaurant branding."
+              variant="logo"
               imageUrl={source.logo_url}
               alt="Current restaurant logo"
               accept={IMAGE_ACCEPT}
@@ -566,7 +573,8 @@ export function SettingsPage() {
             />
             <BrandingField
               label="Cover image"
-              description="Wide image used on the restaurant page."
+              description="Wide 16:9 image for your restaurant branding."
+              variant="cover"
               imageUrl={source.cover_image_url}
               alt="Current restaurant cover"
               accept={IMAGE_ACCEPT}
@@ -601,6 +609,19 @@ export function SettingsPage() {
           </Button>
         </div>
       </form>
+      {cropRequest && (
+        <ImageCropDialog
+          file={cropRequest.file}
+          title={cropRequest.kind === "logo" ? "Crop logo" : "Crop cover image"}
+          aspect={cropRequest.kind === "logo" ? 1 : 16 / 9}
+          outputWidth={cropRequest.kind === "logo" ? 512 : 1600}
+          onCancel={() => setCropRequest(null)}
+          onConfirm={(cropped) => {
+            settings.uploadBranding(cropRequest.kind, cropped);
+            setCropRequest(null);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -612,6 +633,7 @@ function BrandingField({
   alt,
   accept,
   disabled,
+  variant,
   onFile,
 }: {
   label: string;
@@ -620,20 +642,37 @@ function BrandingField({
   alt: string;
   accept: string;
   disabled: boolean;
+  variant: "logo" | "cover";
   onFile: (file: File | undefined) => void;
 }) {
+  const isCover = variant === "cover";
+
   return (
     <div className="rounded-[10px] border border-line bg-white p-4">
-      <div className="grid grid-cols-[96px_1fr] items-center gap-4 max-[480px]:grid-cols-1">
+      <div
+        className={
+          isCover
+            ? "grid gap-4"
+            : "grid grid-cols-[96px_1fr] items-center gap-4 max-[480px]:grid-cols-1"
+        }
+      >
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={alt}
-            className="h-24 w-24 rounded-lg bg-sand object-cover"
+            className={
+              isCover
+                ? "aspect-video w-full rounded-lg bg-sand object-cover"
+                : "h-24 w-24 rounded-lg bg-sand object-cover"
+            }
           />
         ) : (
           <span
-            className="grid h-24 w-24 place-items-center rounded-lg border border-dashed border-line bg-cream-2 text-center text-[10px] font-bold text-muted"
+            className={
+              isCover
+                ? "grid aspect-video w-full place-items-center rounded-lg border border-dashed border-line bg-cream-2 text-center text-[10px] font-bold text-muted"
+                : "grid h-24 w-24 place-items-center rounded-lg border border-dashed border-line bg-cream-2 text-center text-[10px] font-bold text-muted"
+            }
             aria-hidden="true"
           >
             No image
@@ -650,6 +689,7 @@ function BrandingField({
               className="sr-only"
               type="file"
               accept={accept}
+              aria-label={`${imageUrl ? "Replace" : "Upload"} ${label.toLowerCase()}`}
               disabled={disabled}
               onChange={(event) => {
                 const file = event.target.files?.[0];

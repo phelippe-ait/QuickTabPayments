@@ -76,6 +76,27 @@ describe("SettingsPage", () => {
     mocks.findAddressMatches.mockReset();
     mocks.restaurant.logo_url = null;
     mocks.restaurant.cover_image_url = null;
+    Object.defineProperty(URL, "createObjectURL", {
+      writable: true,
+      value: vi.fn(() => "blob:test"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      writable: true,
+      value: vi.fn(),
+    });
+  });
+
+  it("opens the cropper instead of uploading the raw file", () => {
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/upload logo/i), {
+      target: { files: [new File(["x"], "logo.jpg", { type: "image/jpeg" })] },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: /crop logo/i }),
+    ).toBeInTheDocument();
+    expect(mocks.uploadBranding).not.toHaveBeenCalled();
   });
 
   it("renders the current restaurant values", () => {

@@ -16,6 +16,13 @@ export const IMAGE_LIMITS = {
   mimeTypes: ["image/jpeg", "image/png", "image/webp"],
 } as const;
 
+/**
+ * Source photos are cropped and downscaled before upload, so the picker can
+ * accept a normal phone photo even though the stored asset stays under the
+ * bucket's 5 MB cap.
+ */
+export const IMAGE_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
+
 export const IMAGE_ACCEPT = IMAGE_LIMITS.mimeTypes.join(",");
 
 export type RestaurantAssetKind = "logo" | "cover";
@@ -30,16 +37,28 @@ function extensionFor(file: File): string {
   return extensions[file.type as keyof typeof extensions] ?? "bin";
 }
 
-/** Throws a user-facing Error when the file is not an accepted image. */
-export function validateImageFile(file: File): void {
+function assertImageType(file: File): void {
   if (!IMAGE_LIMITS.mimeTypes.includes(file.type as never)) {
     throw new Error("Choose a JPG, PNG, or WebP image.");
   }
   if (file.size === 0) {
     throw new Error("That image is empty. Choose another file.");
   }
+}
+
+/** Final upload guard: the stored file must fit the bucket's 5 MB cap. */
+export function validateImageFile(file: File): void {
+  assertImageType(file);
   if (file.size > IMAGE_LIMITS.maxBytes) {
     throw new Error("Choose an image smaller than 5 MB.");
+  }
+}
+
+/** Pre-crop guard: accepts large originals that will be resized on confirm. */
+export function validateImageSourceFile(file: File): void {
+  assertImageType(file);
+  if (file.size > IMAGE_SOURCE_MAX_BYTES) {
+    throw new Error("Choose a photo smaller than 20 MB.");
   }
 }
 

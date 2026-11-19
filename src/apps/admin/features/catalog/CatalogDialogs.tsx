@@ -3,8 +3,9 @@ import styles from "../../App.module.css"
 import { Icon } from "@shared/ui/Icon"
 import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
+import { ImageCropDialog } from "../../components/ImageCropDialog"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
-import { uploadMenuItemImage, validateImageFile } from "@shared/lib/storage"
+import { uploadMenuItemImage, validateImageSourceFile } from "@shared/lib/storage"
 import type { TablesUpdate } from "@shared/lib/database.types"
 import type { CategoryVM, MenuItemVM } from "../../viewModels"
 import type { NewMenuItemInput } from "../../hooks/useMenu"
@@ -65,6 +66,7 @@ export function ItemModal({
   )
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl ?? null)
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const [imageError, setImageError] = useState("")
   const [formError, setFormError] = useState("")
   const [pending, setPending] = useState(false)
@@ -77,14 +79,19 @@ export function ItemModal({
   const chooseImage = (file: File | undefined) => {
     if (!file) return
     try {
-      validateImageFile(file)
+      validateImageSourceFile(file)
     } catch (error) {
       setImageError(error instanceof Error ? error.message : "Choose another image.")
       return
     }
     setImageError("")
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
+    setCropFile(file)
+  }
+
+  const acceptCroppedImage = (cropped: File) => {
+    setImageFile(cropped)
+    setImagePreview(URL.createObjectURL(cropped))
+    setCropFile(null)
   }
 
   const submit = async (event: FormEvent) => {
@@ -163,7 +170,8 @@ export function ItemModal({
   }
 
   return (
-    <AdminModal labelledBy="item-modal-title" describedBy="item-modal-description" onClose={onClose}>
+    <>
+      <AdminModal labelledBy="item-modal-title" describedBy="item-modal-description" onClose={onClose}>
       <form onSubmit={submit}>
         <p className={`${styles["modal-kicker"]}`}>Catalog</p>
         <h2 id="item-modal-title">{item ? "Edit menu item" : "Add menu item"}</h2>
@@ -182,7 +190,7 @@ export function ItemModal({
               <span className="flex min-w-0 flex-col items-start justify-center">
                 <span className="mb-1 block text-[12px] font-bold text-ink-soft">{item ? "Replace image" : "Upload an image"}</span>
                 <span className="mb-3 block text-[10px] leading-[1.5] font-normal text-muted">
-                  Use a landscape image in a 3:2 ratio, ideally 1200 × 800 px. JPG, PNG, or WebP up to 5 MB.
+                  Any photo works. You&apos;ll crop it to a square before upload; JPG, PNG, or WebP up to 20 MB.
                 </span>
                 <span className="inline-flex min-h-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-cream-3 px-3 text-[11px] font-bold text-ink-mid transition-colors hover:border-berry hover:text-berry">
                   Choose image
@@ -190,6 +198,7 @@ export function ItemModal({
                     className="sr-only"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
+                    aria-label="Choose item image"
                     onChange={(event) => {
                       const file = event.target.files?.[0]
                       event.target.value = ""
@@ -254,7 +263,18 @@ export function ItemModal({
           </button>
         </div>
       </form>
-    </AdminModal>
+      </AdminModal>
+      {cropFile && (
+        <ImageCropDialog
+          file={cropFile}
+          title="Crop item image"
+          aspect={1}
+          outputWidth={1200}
+          onCancel={() => setCropFile(null)}
+          onConfirm={acceptCroppedImage}
+        />
+      )}
+    </>
   )
 }
 

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   IMAGE_LIMITS,
+  IMAGE_SOURCE_MAX_BYTES,
   menuItemImagePath,
   restaurantAssetPath,
   validateImageFile,
+  validateImageSourceFile,
 } from "./storage";
 
 function file(name: string, type: string, size?: number): File {
@@ -39,6 +41,33 @@ describe("validateImageFile", () => {
     expect(() => validateImageFile(file("empty.png", "image/png", 0))).toThrow(
       /empty/,
     );
+  });
+});
+
+describe("validateImageSourceFile", () => {
+  it("accepts a normal phone photo larger than the bucket limit", () => {
+    expect(() =>
+      validateImageSourceFile(
+        file("photo.jpg", "image/jpeg", 10 * 1024 * 1024),
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects source photos over 20 MB", () => {
+    expect(() =>
+      validateImageSourceFile(
+        file("huge.jpg", "image/jpeg", IMAGE_SOURCE_MAX_BYTES + 1),
+      ),
+    ).toThrow(/smaller than 20 MB/);
+  });
+
+  it("still rejects unsupported and empty files", () => {
+    expect(() => validateImageSourceFile(file("logo.gif", "image/gif"))).toThrow(
+      /JPG, PNG, or WebP/,
+    );
+    expect(() =>
+      validateImageSourceFile(file("empty.png", "image/png", 0)),
+    ).toThrow(/empty/);
   });
 });
 

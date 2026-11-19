@@ -23,6 +23,20 @@ if (!("IntersectionObserver" in globalThis)) {
   });
 }
 
+// jsdom does not implement ResizeObserver (used by the image cropper).
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    writable: true,
+    configurable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 // jsdom does not implement matchMedia.
 if (typeof window !== "undefined" && !window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {

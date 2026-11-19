@@ -127,6 +127,36 @@ describe("ItemModal", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
+  it("opens the cropper when an item image is chosen", () => {
+    Object.defineProperty(URL, "createObjectURL", {
+      writable: true,
+      value: vi.fn(() => "blob:test"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      writable: true,
+      value: vi.fn(),
+    });
+
+    render(
+      <ItemModal
+        item={null}
+        categories={categories}
+        restaurantId="restaurant-1"
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => true)}
+        onUpdate={vi.fn(async () => true)}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/choose item image/i), {
+      target: { files: [new File(["x"], "item.jpg", { type: "image/jpeg" })] },
+    })
+
+    expect(
+      screen.getByRole("heading", { name: /crop item image/i }),
+    ).toBeInTheDocument()
+  })
+
   it("rejects an invalid prep time", () => {
     const onCreate = vi.fn(async () => true)
     render(
