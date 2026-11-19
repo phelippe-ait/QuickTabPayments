@@ -155,6 +155,22 @@ describe("createPaymentIntent", () => {
   });
 
   it.each([
+    ["outside_ordering_radius", /within 500 m/i],
+    ["customer_location_required", /allow location access/i],
+  ])("maps the %s geofence code onto a friendly checkout error", async (code, pattern) => {
+    mocks.fetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: code }),
+    });
+
+    await expect(createPaymentIntent(input)).rejects.toMatchObject({
+      name: "PaymentSetupError",
+      code,
+      message: expect.stringMatching(pattern),
+    });
+  });
+
+  it.each([
     ["invalid_modifier", /no longer available/i],
     ["modifier_selection_invalid", /review the options/i],
     ["modifier_required", /required options/i],

@@ -3043,6 +3043,180 @@ begin
 end $$;
 rollback;
 
+-- (bs2) 500 m ordering geofence: the server enforces the radius.
+-- Expected: NOTICE P30 geofence distance checks ok.
+begin;
+
+-- Fixture: an active table + a saved restaurant point with the check on.
+insert into public.tables (restaurant_id, table_number, qr_token, location_label, is_active)
+select id, 'RLS-GEOFENCE', 'rls-geofence-token', 'RLS fixture', true
+  from public.restaurants
+ where is_active
+ order by created_at
+ limit 1;
+
+insert into public.restaurant_locations (restaurant_id, latitude, longitude, label, geofence_enabled)
+select id, -33.8688, 151.2093, 'RLS geofence fixture', true
+  from public.restaurants
+ where is_active
+ order by created_at
+ limit 1
+on conflict (restaurant_id) do update
+   set latitude = excluded.latitude,
+       longitude = excluded.longitude,
+       label = excluded.label,
+       geofence_enabled = excluded.geofence_enabled;
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'anon')::text,
+  true
+);
+set local role anon;
+
+do $$
+declare
+  v_restaurant_id uuid;
+  v_slug       text;
+  v_item_id    uuid;
+  v_placed     jsonb;
+  v_error      text;
+begin
+  select r.id, r.slug
+    into v_restaurant_id, v_slug
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+  if v_slug is null then
+    raise exception 'no active restaurant found; run seed.sql first';
+  end if;
+
+  select m.id
+    into v_item_id
+    from public.menu_items m
+   where m.restaurant_id = v_restaurant_id
+     and m.is_available
+   order by m.created_at
+   limit 1;
+  if v_item_id is null then
+    raise exception 'no available menu item for %; seed a menu first', v_slug;
+  end if;
+
+  -- Coordinates are mandatory while the check is on.
+  begin
+    perform public.place_order(
+      v_slug,
+      'rls-geofence-token',
+      'Geofence Guest',
+      null,
+      jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+      null,
+      null
+    );
+  exception when others then v_error := sqlerrm;
+  end;
+  if v_error is distinct from 'customer_location_required' then
+    raise exception 'expected customer_location_required, got %',
+      coalesce(v_error, 'no error');
+  end if;
+  perform set_config('quicktab.geofence.missing', v_error, true);
+
+  -- ~1.0 km away is rejected before any order is written.
+  v_error := null;
+  begin
+    perform public.place_order(
+      v_slug,
+      'rls-geofence-token',
+      'Geofence Guest',
+      null,
+      jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+      -33.8598,
+      151.2093
+    );
+  exception when others then v_error := sqlerrm;
+  end;
+  if v_error is distinct from 'outside_ordering_radius' then
+    raise exception 'expected outside_ordering_radius, got %',
+      coalesce(v_error, 'no error');
+  end if;
+  perform set_config('quicktab.geofence.far', v_error, true);
+
+  -- ~100 m away is inside the 500 m area.
+  v_placed := public.place_order(
+    v_slug,
+    'rls-geofence-token',
+    'Geofence Guest',
+    null,
+    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+    -33.8697,
+    151.2093
+  );
+  if v_placed->>'order_id' is null then
+    raise exception 'order inside the 500 m area was not created';
+  end if;
+  perform set_config('quicktab.geofence.near', v_placed->>'order_number', true);
+
+  raise notice 'P30 geofence distance checks ok';
+end $$;
+
+-- With the check off, the same order goes through without coordinates.
+reset role;
+update public.restaurant_locations
+   set geofence_enabled = false
+ where restaurant_id = (
+   select id from public.restaurants where is_active order by created_at limit 1
+ );
+set local role anon;
+
+do $$
+declare
+  v_restaurant_id uuid;
+  v_slug       text;
+  v_item_id    uuid;
+  v_placed     jsonb;
+begin
+  select r.id, r.slug
+    into v_restaurant_id, v_slug
+    from public.restaurants r
+   where r.is_active
+   order by r.created_at
+   limit 1;
+
+  select m.id
+    into v_item_id
+    from public.menu_items m
+   where m.restaurant_id = v_restaurant_id
+     and m.is_available
+   order by m.created_at
+   limit 1;
+
+  v_placed := public.place_order(
+    v_slug,
+    'rls-geofence-token',
+    'Geofence Guest',
+    null,
+    jsonb_build_array(jsonb_build_object('menu_item_id', v_item_id, 'quantity', 1)),
+    null,
+    null
+  );
+  if v_placed->>'order_id' is null then
+    raise exception 'order without coordinates failed with the check off';
+  end if;
+  perform set_config('quicktab.geofence.off', v_placed->>'order_number', true);
+
+  raise notice 'P30 geofence off ignores location ok';
+end $$;
+
+-- Result row for CLIs that do not surface RAISE NOTICE.
+select
+  current_setting('quicktab.geofence.missing', true) as missing_coords,
+  current_setting('quicktab.geofence.far', true)     as one_km_away,
+  current_setting('quicktab.geofence.near', true)    as one_hundred_metres,
+  current_setting('quicktab.geofence.off', true)     as check_off;
+
+rollback;
+
 -- (bt) No client INSERT/ALL policies exist on the RPC/service-role tables.
 -- Expected: NOTICE P30 no client write policies on RPC tables ok.
 do $$
