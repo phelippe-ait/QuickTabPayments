@@ -30,7 +30,8 @@ export function useCreateRefund(orderId: string, options: Options = {}) {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: (input: StripeRefundInput) => requestStripeRefund(input),
+    mutationFn: (input: StripeRefundInput & { idempotencyKey?: string }) =>
+      requestStripeRefund(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: refundKeys.byOrder(orderId),
@@ -43,7 +44,9 @@ export function useCreateRefund(orderId: string, options: Options = {}) {
 
   return {
     isMutating: mutation.isPending,
-    createRefund: async (input: StripeRefundInput): Promise<boolean> => {
+    createRefund: async (
+      input: StripeRefundInput & { idempotencyKey?: string },
+    ): Promise<boolean> => {
       try {
         await mutation.mutateAsync(input)
         return true

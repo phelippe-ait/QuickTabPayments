@@ -55,6 +55,8 @@ const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   notify: vi.fn(),
   refunds: [] as Refund[],
+  refundsError: null as Error | null,
+  refetch: vi.fn(),
   createRefund: vi.fn(async () => true),
 }))
 
@@ -96,8 +98,8 @@ vi.mock("../../hooks/useRefunds", () => ({
   useRefunds: () => ({
     refunds: mocks.refunds,
     isLoading: false,
-    error: null,
-    refetch: vi.fn(),
+    error: mocks.refundsError,
+    refetch: mocks.refetch,
   }),
   useCreateRefund: () => ({
     isMutating: false,
@@ -125,6 +127,8 @@ describe("OrderDetailPage", () => {
     mocks.cancel.mockClear()
     mocks.confirm.mockClear()
     mocks.refunds = []
+    mocks.refundsError = null
+    mocks.refetch.mockClear()
     mocks.createRefund.mockClear()
   })
 
@@ -225,5 +229,64 @@ describe("OrderDetailPage", () => {
 
     expect(screen.getByText(/one coffee remade/i)).toBeInTheDocument()
     expect(screen.getAllByText(/4\.70/).length).toBeGreaterThan(0)
+  })
+
+  it("caps the partial stepper at the remaining line quantity", () => {
+    mocks.order = { ...order, status: "completed", refundedTotal: 4.7 }
+    mocks.refunds = [
+      {
+        id: "refund-1",
+        order_id: "order-1",
+        payment_id: "payment-1",
+        order_item_id: "line-1",
+        quantity: 1,
+        amount: 4.7,
+        reason: "Line refund",
+        status: "succeeded",
+        stripe_refund_id: null,
+        created_by: "user-1",
+        created_at: "2026-10-21T09:00:00Z",
+      },
+    ]
+    renderPage()
+
+    fireEvent.click(screen.getByRole("button", { name: /partial refund/i }))
+
+    const add = screen.getByRole("button", {
+      name: /add one flat white to refund/i,
+    })
+    expect(screen.getByText(/1 of 2 refunded/i)).toBeInTheDocument()
+    fireEvent.click(add)
+    expect(add).toBeDisabled()
+  })
+
+  it("does not offer a partial refund when the refunds query failed", () => {
+    mocks.refundsError = new Error("Could not load refunds")
+    renderPage()
+
+    expect(screen.queryByRole("button", { name: /partial refund/i })).toBeNull()
+    expect(screen.getByText(/could not load refunds/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }))
+    expect(mocks.refetch).toHaveBeenCalled()
+  })
+
+  it("sends one idempotency key per refund submission", async () => {
+    mocks.order = { ...order, status: "completed" }
+    renderPage()
+
+    fireEvent.click(screen.getByRole("button", { name: /partial refund/i }))
+    fireEvent.click(screen.getByRole("button", { name: /add one flat white to refund/i }))
+    fireEvent.click(screen.getByRole("button", { name: /confirm refund/i }))
+
+    const confirmation = mocks.confirm.mock.calls[0][0] as {
+      onConfirm: () => void
+    }
+    confirmation.onConfirm()
+
+    await waitFor(() =>
+      expect(mocks.createRefund).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    )
   })
 })

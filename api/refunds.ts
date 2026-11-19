@@ -11,6 +11,7 @@ type Body = {
   reason?: string;
   orderItemId?: string | null;
   quantity?: number | null;
+  idempotencyKey?: string;
 };
 
 type PaymentRow = {
@@ -58,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } = await admin.auth.getUser(token);
     if (authError || !user) return json(res, 401, { error: "unauthorized" });
 
-    const { orderId, paymentId, amount, reason, orderItemId, quantity } =
+    const { orderId, paymentId, amount, reason, orderItemId, quantity, idempotencyKey } =
       parseBody(req);
     if (!orderId || !paymentId || !Number.isFinite(Number(amount))) {
       return json(res, 400, { error: "invalid_request" });
@@ -140,6 +141,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return json(res, 400, { error: "invalid_quantity" });
       }
 
+      // Validate the cumulative cap here, not just per request: the DB trigger
+      // enforces it but only after Stripe has already moved the money. Refund
+      // rows are 'requested' while Stripe is still processing them, so counting
+      // them also closes the double-submit race.
+      const { data: lineRefunds, error: lineRefundsError } = await admin
+        .from("refunds")
+        .select("quantity, status")
+        .eq("order_item_id", orderItemId)
+        .in("status", ["succeeded", "requested"]);
+      if (lineRefundsError) return json(res, 500, { error: lineRefundsError.message });
+
+      const alreadyRefundedQty = (lineRefunds ?? []).reduce(
+        (sum: number, row: { quantity: number | null }) =>
+          sum + Number(row.quantity ?? 0),
+        0,
+      );
+      if (lineQuantity > lineRow.quantity - alreadyRefundedQty) {
+        return json(res, 400, { error: "quantity_exceeds_remaining" });
+      }
+
       const expected = roundMoney(Number(lineRow.unit_price_snapshot) * lineQuantity);
       if (refundAmount !== expected) {
         return json(res, 400, { error: "amount_mismatch" });
@@ -166,11 +187,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const stripe = getStripe();
-    const refund = await stripe.refunds.create({
-      payment_intent: paymentRow.stripe_payment_intent_id,
-      amount: Math.round(refundAmount * 100),
-      metadata: { orderId, paymentId, createdBy: user.id },
-    });
+    const refund = await stripe.refunds.create(
+      {
+        payment_intent: paymentRow.stripe_payment_intent_id,
+        amount: Math.round(refundAmount * 100),
+        metadata: { orderId, paymentId, createdBy: user.id },
+      },
+      {
+        idempotencyKey:
+          typeof idempotencyKey === "string" && idempotencyKey.length > 0
+            ? idempotencyKey
+            : crypto.randomUUID(),
+      },
+    );
 
     const { data: row, error: insertError } = await admin
       .from("refunds")
