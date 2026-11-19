@@ -51,7 +51,7 @@ test("add seeded item with modifier -> cart -> checkout", async ({ page }) => {
   await expect(page.getByRole("button", { name: /1 item in your cart/i })).toBeVisible();
 
   const cart = await openCart(page);
-  await expect(cart.getByText("E2E Fries")).toBeVisible();
+  await expect(cart.getByText("E2E Fries", { exact: true })).toBeVisible();
   await expect(cart.getByText("Large")).toBeVisible();
   await expect(cart.getByText(/total/i)).toBeVisible();
 
@@ -66,8 +66,11 @@ test("add seeded item with modifier -> cart -> checkout", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: /order summary/i }),
   ).toBeVisible();
-  await expect(page.getByText(/E2E Fries/)).toBeVisible();
-  await expect(page.getByText("Large")).toBeVisible();
+  // Scope item assertions to the summary: the cart's sr-only live region also
+  // announces "1 × E2E Fries added to cart", which a page-wide text match hits.
+  const orderSummary = page.getByRole("region", { name: /order summary/i });
+  await expect(orderSummary.getByText(/E2E Fries/)).toBeVisible();
+  await expect(orderSummary.getByText("Large")).toBeVisible();
 
   if (!stripeTestEnabled) {
     test

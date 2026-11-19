@@ -11,6 +11,11 @@ on:
 #   - secrets: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 #   - optional: E2E_STAFF_EMAIL/E2E_STAFF_PASSWORD (linked by the seed) and
 #     STRIPE_TEST=1 + VITE_STRIPE_PUBLISHABLE_KEY for the paid journey.
+# Both the desktop (`chromium`) and mobile (`mobile-chrome`, Pixel 7) projects
+# run here; `mobile-chrome` shares the installed chromium binary. The mobile
+# run additionally enables `mobile-audit` and `admin-responsive`;
+# `admin-responsive` needs E2E_STAFF_EMAIL/E2E_STAFF_PASSWORD and skips without
+# them (expected, not a failure).
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -22,8 +27,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Playwright (chromium)
-        run: npx playwright test --project=chromium --reporter=list,html
+      - name: Playwright (chromium + mobile-chrome)
+        run: npx playwright test --project=chromium --project=mobile-chrome --reporter=list,html
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

@@ -7,11 +7,16 @@ import { menuItemButton, openSeededMenu, restaurantSlug, tableToken } from "./su
  * axe-core is intentionally not a dependency, so these are plain DOM queries
  * against the seeded fixture. Skips without `E2E_TABLE_TOKEN`, like the other
  * specs.
+ *
+ * Viewport scoping: the "Open menu" drawer toggle is a mobile-only control —
+ * `App.module.css` hides it at >=768px, where the permanent sidebar replaces
+ * it. Its assertion therefore runs in an explicit 390px-wide viewport and must
+ * not be "fixed" by making the toggle visible on desktop.
  */
 test.describe("customer accessibility landmarks", () => {
   test.skip(!tableToken, "Set E2E_TABLE_TOKEN to a demo table token to run this spec.");
 
-  test("exposes one h1, a main landmark and a named menu toggle", async ({
+  test("exposes one h1, a main landmark and the product list", async ({
     page,
   }) => {
     const ready = await openSeededMenu(page);
@@ -19,14 +24,23 @@ test.describe("customer accessibility landmarks", () => {
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.getByRole("main")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^View E2E Burger/ }),
+    ).toBeVisible();
+  });
+
+  // Regression note: the "Open menu" drawer toggle is hidden at >=768px, where
+  // the permanent sidebar replaces it (App.module.css). It must only be
+  // asserted at a mobile viewport — do not "fix" this by making the toggle
+  // visible on desktop.
+  test("exposes a named menu toggle at mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const ready = await openSeededMenu(page);
+    test.skip(!ready, "The seeded menu is unavailable in this environment.");
 
     const menuToggle = page.getByRole("button", { name: "Open menu" });
     await expect(menuToggle).toBeVisible();
     await expect(menuToggle).toHaveAttribute("aria-expanded", "false");
-
-    await expect(
-      page.getByRole("button", { name: /^View E2E Burger/ }),
-    ).toBeVisible();
   });
 
   test("reflows at 320px without horizontal scrolling", async ({ page }) => {
