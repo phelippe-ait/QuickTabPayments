@@ -7,6 +7,7 @@ import { buttonVariants } from "@shared/ui/Button"
 import { AdminModal } from "../../components/AdminModal"
 import { EmptyState, PageHeader, SelectionBar } from "../../components/AdminUi"
 import { useRestaurant } from "@shared/restaurant/useRestaurant"
+import { countOrdersForTables } from "@shared/data/orders"
 import { useAdminUi } from "../../hooks/AdminUiProvider"
 import { useTables } from "../../hooks/useTables"
 import { buildTableQrUrl, escapeHtml } from "./tableQr.utils"
@@ -47,10 +48,28 @@ export function TablesPage() {
 
   const closeTableModal = () => setTableModal({ open: false, table: null })
 
-  const requestDelete = (table: TableVM) => {
+  const requestDelete = async (table: TableVM) => {
+    let counts: Record<string, number>
+    try {
+      counts = await countOrdersForTables([table.id])
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Could not check this table's order history.")
+      return
+    }
+
+    if ((counts[table.id] ?? 0) > 0) {
+      confirm({
+        title: `Table ${table.number} has past orders`,
+        description: "This table has past orders. Deleting it would erase their table reference. Disable it instead?",
+        actionLabel: "Disable table",
+        onConfirm: () => void tables.setActive([table.id], false),
+      })
+      return
+    }
+
     confirm({
       title: `Delete table ${table.number}?`,
-      description: "Its ordering link and QR code will no longer work. Past orders keep their table reference.",
+      description: "Its ordering link and QR code will no longer work. This table has no past orders and will be permanently deleted.",
       actionLabel: "Delete table",
       onConfirm: () => {
         void tables.deleteTable(table.id).then((ok) => {
@@ -60,10 +79,29 @@ export function TablesPage() {
     })
   }
 
-  const requestBulkDelete = () => {
+  const requestBulkDelete = async () => {
+    let counts: Record<string, number>
+    try {
+      counts = await countOrdersForTables(selected)
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Could not check these tables' order history.")
+      return
+    }
+
+    const withOrders = selected.filter((id) => (counts[id] ?? 0) > 0)
+    if (withOrders.length > 0) {
+      confirm({
+        title: `${withOrders.length} ${withOrders.length === 1 ? "table has" : "tables have"} past orders`,
+        description: "Deleting them would erase their table reference. Disable them instead?",
+        actionLabel: withOrders.length === 1 ? "Disable table" : "Disable tables",
+        onConfirm: () => void tables.setActive(selected, false),
+      })
+      return
+    }
+
     confirm({
       title: `Delete ${selected.length} tables?`,
-      description: "Their ordering links and QR codes will stop working immediately.",
+      description: "Their ordering links and QR codes will stop working immediately. None of these tables have past orders.",
       actionLabel: "Delete tables",
       onConfirm: () => {
         void tables.deleteTables(selected).then((ok) => {
@@ -127,7 +165,7 @@ export function TablesPage() {
             <SelectionBar count={selected.length} onClear={() => setSelected([])}>
               <button type="button" onClick={() => void tables.setActive(selected, true)}>Enable</button>
               <button type="button" onClick={() => void tables.setActive(selected, false)}>Disable</button>
-              <button type="button" className={`${styles["danger"]}`} onClick={requestBulkDelete}>Delete</button>
+              <button type="button" className={`${styles["danger"]}`} onClick={() => void requestBulkDelete()}>Delete</button>
             </SelectionBar>
           )}
           {visible.length === 0 ? (
@@ -149,7 +187,7 @@ export function TablesPage() {
                   </button>
                   <div className={`${styles["row-actions"]}`}>
                     <button aria-label={`Edit table ${table.number}`} onClick={() => setTableModal({ open: true, table })}><Icon name="edit" size={16} /></button>
-                    <button aria-label={`Delete table ${table.number}`} onClick={() => requestDelete(table)}><Icon name="trash" size={16} /></button>
+                    <button aria-label={`Delete table ${table.number}`} onClick={() => void requestDelete(table)}><Icon name="trash" size={16} /></button>
                   </div>
                 </div>
                 <div className={`${styles["table-card-content"]}`}>

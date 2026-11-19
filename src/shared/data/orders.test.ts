@@ -1,5 +1,49 @@
-import { describe, expect, it } from "vitest"
-import { reduceOpenOrdersByTable, sanitiseOrderSearch } from "./orders"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  countOrdersForTables,
+  reduceOpenOrdersByTable,
+  sanitiseOrderSearch,
+} from "./orders"
+
+type Response = {
+  data: unknown
+  error: { message: string } | null
+}
+
+const mocks = vi.hoisted(() => {
+  const calls: { table: string; method: string; args: unknown[] }[] = []
+  let queue: Response[] = []
+
+  function builder(table: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chain: any = {}
+    for (const method of ["select", "in"]) {
+      chain[method] = (...args: unknown[]) => {
+        calls.push({ table, method, args })
+        return chain
+      }
+    }
+    chain.then = (resolve: (value: Response) => unknown) =>
+      Promise.resolve(queue.shift() ?? { data: null, error: null }).then(resolve)
+    return chain
+  }
+
+  return {
+    calls,
+    reset: () => {
+      calls.length = 0
+      queue = []
+    },
+    enqueue: (...responses: Response[]) => {
+      queue.push(...responses)
+    },
+    client: { from: (table: string) => builder(table) },
+  }
+})
+
+vi.mock("./client", () => ({
+  requireSupabase: () => mocks.client,
+}))
 
 describe("reduceOpenOrdersByTable", () => {
   it("keeps the latest open order per table regardless of row order", () => {
@@ -52,5 +96,41 @@ describe("reduceOpenOrdersByTable", () => {
     ])
 
     expect(byTable).toEqual({})
+  })
+})
+
+describe("countOrdersForTables", () => {
+  beforeEach(() => mocks.reset())
+
+  it("counts orders per table and ignores rows without a table", async () => {
+    mocks.enqueue({
+      data: [
+        { table_id: "table-1" },
+        { table_id: "table-1" },
+        { table_id: "table-2" },
+        { table_id: null },
+      ],
+      error: null,
+    })
+
+    await expect(countOrdersForTables(["table-1", "table-2"])).resolves.toEqual({
+      "table-1": 2,
+      "table-2": 1,
+    })
+    expect(mocks.calls).toEqual([
+      { table: "orders", method: "select", args: ["table_id"] },
+      { table: "orders", method: "in", args: ["table_id", ["table-1", "table-2"]] },
+    ])
+  })
+
+  it("skips the query when no tables are supplied", async () => {
+    await expect(countOrdersForTables([])).resolves.toEqual({})
+    expect(mocks.calls).toEqual([])
+  })
+
+  it("rejects when the query fails", async () => {
+    mocks.enqueue({ data: null, error: { message: "orders unavailable" } })
+
+    await expect(countOrdersForTables(["table-1"])).rejects.toThrow("orders unavailable")
   })
 })
