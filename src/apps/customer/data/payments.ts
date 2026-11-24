@@ -22,7 +22,13 @@ export function getStripePromise(): Promise<Stripe | null> | null {
   if (!stripePromise) {
     // Loaded on demand: the SDK belongs to the checkout chunk, not the menu.
     stripePromise = import("@stripe/stripe-js").then(({ loadStripe }) =>
-      loadStripe(publishableKey),
+      loadStripe(publishableKey, {
+        // Stripe enables this helper for sandbox Elements integrations. Keep it
+        // available while developing, but never expose it to website visitors.
+        developerTools: {
+          assistant: { enabled: !import.meta.env.PROD },
+        },
+      }),
     );
   }
   return stripePromise;
